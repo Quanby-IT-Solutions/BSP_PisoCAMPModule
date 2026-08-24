@@ -41,6 +41,7 @@ dependencies:
 
   # Secure storage
   flutter_secure_storage: ^10.0.0
+  connectivity_plus: ^6.1.5
 
   # Theming
   flex_color_scheme: ^8.3.1
@@ -83,4 +84,5 @@ flutter:
   # MB-2 / F-42: `.env` is deliberately NOT bundled. A Flutter asset ships
   # inside the APK in cleartext and is readable by unzipping it, so config
   # arrives via --dart-define instead (see ApiConstants).
-  assets: []
+  assets:
+    - assets/pisocamp/home.json

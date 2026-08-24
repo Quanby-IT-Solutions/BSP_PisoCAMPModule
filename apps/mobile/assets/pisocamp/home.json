@@ -1,0 +1,14 @@
+{
+  "title": "Piso CAMP",
+  "introduction": "Explore a simple starter collection while you decide whether to create an account.",
+  "cards": [
+    {
+      "title": "Banknotes",
+      "description": "A guest-safe placeholder for banknote discoveries."
+    },
+    {
+      "title": "Coins",
+      "description": "A guest-safe placeholder for coin discoveries."
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import 'package:mobile/features/auth/presentation/screens/register_screen.dart';
 import 'package:mobile/features/home/presentation/screens/home_screen.dart';
 import 'package:mobile/features/onboarding/presentation/providers/onboarding_provider.dart';
 import 'package:mobile/features/onboarding/presentation/screens/onboarding_screen.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_home_screen.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 part 'app_router.g.dart';
@@ -20,6 +21,30 @@ class AppRoutes {
   static const login = '/login';
   static const register = '/register';
   static const home = '/';
+  static const pisoCamp = '/pisocamp';
+}
+
+String? resolveAppRedirect({
+  required bool isOnboardingDone,
+  required bool isAuthenticated,
+  required String matchedLocation,
+}) {
+  final onboarding = matchedLocation == AppRoutes.onboarding;
+  final auth =
+      matchedLocation == AppRoutes.login ||
+      matchedLocation == AppRoutes.register;
+  if (!isOnboardingDone) {
+    return onboarding ? null : AppRoutes.onboarding;
+  }
+  if (onboarding) {
+    return isAuthenticated ? AppRoutes.home : AppRoutes.login;
+  }
+  if (!isAuthenticated) {
+    return auth || matchedLocation == AppRoutes.pisoCamp
+        ? null
+        : AppRoutes.login;
+  }
+  return auth ? AppRoutes.home : null;
 }
 
 /// Provides the [GoRouter] instance configured with redirect logic
@@ -48,40 +73,16 @@ GoRouter appRouter(Ref ref) {
     // Route names become navigation breadcrumbs, so a crash report shows the
     // screens the user passed through. The list is empty in a build without
     // the Sentry defines — no observer is constructed at all.
-    observers: [
-      if (SentryConstants.isEnabled) SentryNavigatorObserver(),
-    ],
+    observers: [if (SentryConstants.isEnabled) SentryNavigatorObserver()],
     redirect: (context, state) {
       final isOnboardingDone = ref.read(hasCompletedOnboardingProvider);
       final authState = ref.read(authStateProvider);
-      final isAuthenticated =
-          !authState.isLoading && authState.value != null;
-      final isOnOnboarding = state.matchedLocation == AppRoutes.onboarding;
-      final isOnLogin = state.matchedLocation == AppRoutes.login;
-      final isOnRegister = state.matchedLocation == AppRoutes.register;
-      final isOnAuthRoute = isOnLogin || isOnRegister;
-
-      // 1. Not done with onboarding → force onboarding
-      if (!isOnboardingDone) {
-        return isOnOnboarding ? null : AppRoutes.onboarding;
-      }
-
-      // 2. Done with onboarding but still on onboarding page → go to login
-      if (isOnOnboarding) {
-        return isAuthenticated ? AppRoutes.home : AppRoutes.login;
-      }
-
-      // 3. Not authenticated → force login (except register)
-      if (!isAuthenticated) {
-        return isOnAuthRoute ? null : AppRoutes.login;
-      }
-
-      // 4. Authenticated but on auth route → go home
-      if (isOnAuthRoute) {
-        return AppRoutes.home;
-      }
-
-      return null;
+      final isAuthenticated = !authState.isLoading && authState.value != null;
+      return resolveAppRedirect(
+        isOnboardingDone: isOnboardingDone,
+        isAuthenticated: isAuthenticated,
+        matchedLocation: state.matchedLocation,
+      );
     },
     routes: [
       GoRoute(
@@ -100,12 +101,13 @@ GoRouter appRouter(Ref ref) {
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
       ),
-    ],
-    errorBuilder: (context, state) => Scaffold(
-      body: Center(
-        child: Text('Page not found: ${state.uri}'),
+      GoRoute(
+        path: AppRoutes.pisoCamp,
+        builder: (context, state) => const PisoCampHomeScreen(),
       ),
-    ),
+    ],
+    errorBuilder: (context, state) =>
+        Scaffold(body: Center(child: Text('Page not found: ${state.uri}'))),
   );
 
   ref.onDispose(() {

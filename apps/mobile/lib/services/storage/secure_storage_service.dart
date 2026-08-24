@@ -36,6 +36,16 @@ class SecureStorageService {
 
   Future<void> deleteCookie() => _storage.delete(key: _cookieKey);
 
+  /// Narrow raw operations for feature-owned secure values that are neither
+  /// session tokens nor cookies.  The wrapper remains the app's only secure
+  /// storage instance.
+  Future<String?> readValue(String key) => _storage.read(key: key);
+
+  Future<void> writeValue(String key, String value) =>
+      _storage.write(key: key, value: value);
+
+  Future<void> deleteValue(String key) => _storage.delete(key: key);
+
   // ── Bulk operations ───────────────────────────────────────────────────────
 
   Future<void> clearAll() => _storage.deleteAll();

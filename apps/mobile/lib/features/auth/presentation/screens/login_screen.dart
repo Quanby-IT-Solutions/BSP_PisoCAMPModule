@@ -32,7 +32,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _handleSignIn() async {
     if (!_formKey.currentState!.validate()) return;
 
-    await ref.read(authStateProvider.notifier).signIn(
+    await ref
+        .read(authStateProvider.notifier)
+        .signIn(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
@@ -176,6 +178,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: isLoading ? null : _handleSignIn,
                     isLoading: isLoading,
                     child: const Text('Sign In'),
+                  ),
+                  AppTextButton(
+                    onPressed: () => context.push(AppRoutes.pisoCamp),
+                    child: const Text('Explore Piso CAMP'),
                   ),
                   const SizedBox(height: 24),
                   Row(

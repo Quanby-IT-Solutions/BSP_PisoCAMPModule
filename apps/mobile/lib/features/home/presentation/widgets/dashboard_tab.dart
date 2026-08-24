@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:mobile/core/navigation/app_router.dart';
 import 'package:mobile/core/widgets/tour_item.dart';
 import 'package:mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
@@ -53,6 +55,16 @@ class DashboardTab extends ConsumerWidget {
                   ],
                 ),
               const SizedBox(height: 32),
+              AppCard(
+                child: ListTile(
+                  leading: const Icon(Icons.collections_bookmark_outlined),
+                  title: const Text('Piso CAMP'),
+                  subtitle: const Text('Explore the guest-safe collection.'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(AppRoutes.pisoCamp),
+                ),
+              ),
+              const SizedBox(height: 12),
               TourItem(
                 tabIndex: 0,
                 order: 1,

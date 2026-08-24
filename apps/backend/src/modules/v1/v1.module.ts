@@ -6,6 +6,7 @@ import { DiagnosticsModule } from "./diagnostics/diagnostics.module"
 import { ExamplesModule } from "./examples/examples.module"
 import { HealthModule } from "./health/health.module"
 import { MeModule } from "./me/me.module"
+import { PisoCampModule } from "./pisocamp/pisocamp.module"
 import { RbacAdminModule } from "./rbac/rbac.module"
 import { TicketsModule } from "./tickets/tickets.module"
 
@@ -14,6 +15,7 @@ import { TicketsModule } from "./tickets/tickets.module"
 		ExamplesModule,
 		HealthModule,
 		MeModule,
+		PisoCampModule,
 		RbacAdminModule,
 		TicketsModule,
 		// Sentry diagnostics exist ONLY in development. Conditional import rather

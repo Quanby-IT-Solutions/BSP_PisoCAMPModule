@@ -21,8 +21,10 @@ class ApiConstants {
   /// Raw compile-time value. Empty when the define was not supplied.
   static const String _baseUrl = String.fromEnvironment('API_BASE_URL');
 
-  static const String apiVersion =
-      String.fromEnvironment('API_VERSION', defaultValue: 'v1');
+  static const String apiVersion = String.fromEnvironment(
+    'API_VERSION',
+    defaultValue: 'v1',
+  );
 
   /// Base URL for the backend.
   ///
@@ -68,4 +70,7 @@ class ApiConstants {
   // Todo endpoints (NestJS - oRPC)
   static String get todos => '$versionedUrl/example/todos';
   static String todoById(int id) => '$versionedUrl/example/todos/$id';
+
+  // Public Piso CAMP configuration (no session required).
+  static String get pisoCampConfig => '$versionedUrl/pisocamp/config';
 }
