@@ -107,6 +107,10 @@ beforeAll(async () => {
 			updatedAt: now,
 		}))
 	)
+	await db
+		.insert(roles)
+		.values([{ name: "Admin" }, { name: "User" }])
+		.onConflictDoNothing()
 
 	const [admin] = await db.select().from(roles).where(eq(roles.name, "Admin"))
 	adminRoleId = admin!.id
