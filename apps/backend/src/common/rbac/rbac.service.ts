@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common"
+import { Injectable, Scope } from "@nestjs/common"
 import { ORPCError } from "@orpc/server"
 import { and, eq } from "drizzle-orm"
 
@@ -35,14 +35,25 @@ class PrivilegeGuardError extends Error {
 	}
 }
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class RbacService {
+	private readonly resolvedPermissionPromises = new Map<string, Promise<ResolvedPermissionSet>>()
+
 	constructor(
 		private readonly cacheService: RbacCacheService,
 		private readonly auditService: AuditService
 	) {}
 
-	private async resolveForUser(userId: string): Promise<ResolvedPermissionSet> {
+	private resolveForUser(userId: string): Promise<ResolvedPermissionSet> {
+		const existing = this.resolvedPermissionPromises.get(userId)
+		if (existing) return existing
+
+		const resolution = this.loadForUser(userId)
+		this.resolvedPermissionPromises.set(userId, resolution)
+		return resolution
+	}
+
+	private async loadForUser(userId: string): Promise<ResolvedPermissionSet> {
 		const cached = await this.cacheService.get(userId)
 		if (cached) return cached
 
@@ -74,8 +85,6 @@ export class RbacService {
 	private static readonly permissionCatalog = new Set<string>(PERMISSION_NAMES)
 
 	private matchPermission(set: ResolvedPermissionSet, permission: string): boolean {
-		if (set.roleNames.has(ADMIN_ROLE)) return true
-
 		// Fail-closed: unknown permissions (misspelled or non-catalog) are never granted.
 		if (!RbacService.permissionCatalog.has(permission)) return false
 

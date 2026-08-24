@@ -32,6 +32,7 @@ describe("shouldPersistQuery", () => {
 
 	it("excludes a sensitive root even when it appears inside an oRPC path segment", () => {
 		expect(shouldPersistQuery(query(orpcKey("rbac", "users", "list")))).toBe(false)
+		expect(shouldPersistQuery(query(orpcKey("pisocamp", "admin", "config", "get")))).toBe(false)
 	})
 
 	it("excludes sensitive queries in every state, not just settled ones", () => {
@@ -53,8 +54,8 @@ describe("shouldPersistQuery", () => {
 		expect(shouldPersistQuery(query([{ scope: "session" }]))).toBe(true)
 	})
 
-	it("lists both sensitive roots the audit called out", () => {
-		expect([...NON_PERSISTED_QUERY_ROOTS]).toEqual(["session", "rbac"])
+	it("lists identity, RBAC, and administrator configuration as online-only roots", () => {
+		expect([...NON_PERSISTED_QUERY_ROOTS]).toEqual(["session", "rbac", "pisocamp"])
 	})
 })
 

@@ -2,6 +2,8 @@ import { ForbiddenException, Logger, type ExecutionContext } from "@nestjs/commo
 import { Reflector } from "@nestjs/core"
 import { Test, type TestingModule } from "@nestjs/testing"
 
+import { AuditService } from "@/common/audit/audit.service"
+import { AccountAccessService } from "@/common/rbac/account-access.service"
 import { RbacService } from "@/common/rbac/rbac.service"
 import { REQUIRED_PERMISSIONS_KEY } from "@/shared/decorators/require-permissions.decorator"
 import { RbacGuard } from "@/shared/guards/rbac.guard"
@@ -56,6 +58,12 @@ jest.mock("@/common/rbac/rbac.service", () => ({
 		getMissingPermissions: jest.fn(),
 	})),
 }))
+jest.mock("@/common/rbac/account-access.service", () => ({
+	AccountAccessService: jest.fn().mockImplementation(() => ({ isActive: jest.fn() })),
+}))
+jest.mock("@/common/audit/audit.service", () => ({
+	AuditService: jest.fn().mockImplementation(() => ({ record: jest.fn() })),
+}))
 
 // ESM auth modules — stubbed so the guard's header-based session fallback is
 // deterministic (resolves no session unless the request already carries one).
@@ -79,6 +87,8 @@ const buildContext = (
 describe("TicketsController RBAC gating (AZ-1)", () => {
 	let guard: RbacGuard
 	let rbacService: { hasAllPermissions: jest.Mock; getMissingPermissions: jest.Mock }
+	let accountAccessService: { isActive: jest.Mock }
+	let auditService: { record: jest.Mock }
 	let warn: jest.SpyInstance
 	const reflector = new Reflector()
 
@@ -88,7 +98,7 @@ describe("TicketsController RBAC gating (AZ-1)", () => {
 		warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
 
 		const app: TestingModule = await Test.createTestingModule({
-			providers: [RbacGuard, Reflector, RbacService],
+			providers: [RbacGuard, Reflector, RbacService, AccountAccessService, AuditService],
 		})
 			.overrideProvider(RbacService)
 			.useValue({
@@ -97,8 +107,12 @@ describe("TicketsController RBAC gating (AZ-1)", () => {
 			})
 			.compile()
 
-		guard = app.get(RbacGuard)
+		guard = await app.resolve(RbacGuard)
 		rbacService = app.get(RbacService) as unknown as typeof rbacService
+		accountAccessService = app.get(AccountAccessService) as unknown as typeof accountAccessService
+		auditService = app.get(AuditService) as unknown as typeof auditService
+		accountAccessService.isActive.mockResolvedValue(true)
+		auditService.record.mockResolvedValue(undefined)
 	})
 
 	afterEach(() => {

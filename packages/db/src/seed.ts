@@ -16,6 +16,7 @@ import {
 
 import {
 	accounts,
+	moduleConfiguration,
 	permissions,
 	rolePermissions,
 	roles,
@@ -25,6 +26,7 @@ import {
 	userRoles,
 	users,
 } from "./schema.js"
+import { DEFAULT_MODULE_CONFIGURATION, ROLE_PERMISSION_NAMES } from "./seed-catalog.js"
 import {
 	ALLOW_REMOTE_SEED_ENV,
 	assertSeedAllowed,
@@ -181,9 +183,15 @@ async function seedDatabase() {
 	}))
 
 	const roleDescriptions: Record<RoleName, string> = {
-		Admin: "Super-administrator; full access via role-name short-circuit",
-		Manager: "Can manage posts and read users",
-		User: "Standard user with read access to posts",
+		"Guest User": "Uses Piso CAMP without registration",
+		"Registered End User": "Registered Piso CAMP participant",
+		"System Administrator": "Manages accounts, roles, configuration, audit, and integrations",
+		"Content Administrator": "Creates and maintains content and assets",
+		"Content Approver": "Approves, publishes, restores, and audits content",
+		"Reports & Analytics User": "Views dashboards and generates non-PII reports",
+		"Admin": "Protected legacy administrator role with explicit legacy permissions",
+		"Manager": "Can manage posts and read users",
+		"User": "Standard user with read access to posts",
 	}
 
 	const seedRoles: Array<typeof roles.$inferInsert> = ROLE_NAMES.map(name => ({
@@ -193,16 +201,9 @@ async function seedDatabase() {
 		updatedAt: now,
 	}))
 
-	const permissionDescriptions: Record<PermissionName, string> = {
-		"posts:read": "Read posts",
-		"posts:create": "Create posts",
-		"posts:edit": "Edit posts",
-		"posts:delete": "Delete posts",
-		"posts:*": "All actions on posts",
-		"users:read": "Read user profiles",
-		"users:read-directory": "Read user email addresses (directory PII)",
-		"users:manage": "Manage users",
-	}
+	const permissionDescriptions = Object.fromEntries(
+		PERMISSION_NAMES.map(name => [name, `Permission: ${name}`])
+	) as Record<PermissionName, string>
 
 	const seedPermissions: Array<typeof permissions.$inferInsert> = PERMISSION_NAMES.map(name => ({
 		name,
@@ -211,21 +212,10 @@ async function seedDatabase() {
 		updatedAt: now,
 	}))
 
-	// Role -> permission names. Admin omitted: granted via role-name
-	// short-circuit, which is also how it picks up `users:read-directory`
-	// without a migration — no admin loses access (AZ-5 / F-51).
-	//
-	// Manager deliberately does NOT get `users:read-directory`. That is the
-	// point of the split: it can triage tickets and see who exists, without
-	// holding the complete email directory.
-	const rolePermissionNames: Partial<Record<RoleName, PermissionName[]>> = {
-		Manager: ["posts:*", "users:read"],
-		User: ["posts:read"],
-	}
-
 	// User id -> role name.
 	const userRoleAssignments: Array<{ userId: string; roleName: RoleName }> = [
 		{ userId: "seed-user-admin", roleName: ADMIN_ROLE },
+		{ userId: "seed-user-admin", roleName: "System Administrator" },
 		{ userId: "seed-user-alex", roleName: "User" },
 		{ userId: "seed-user-sam", roleName: "User" },
 	]
@@ -310,7 +300,7 @@ async function seedDatabase() {
 			const permissionIdByName = new Map<string, number>(permissionRows.map(p => [p.name, p.id]))
 
 			const seedRolePermissions: Array<typeof rolePermissions.$inferInsert> = []
-			for (const [roleName, permNames] of Object.entries(rolePermissionNames)) {
+			for (const [roleName, permNames] of Object.entries(ROLE_PERMISSION_NAMES)) {
 				const roleId = roleIdByName.get(roleName)
 				if (roleId === undefined || !permNames) continue
 				for (const permName of permNames) {
@@ -336,6 +326,10 @@ async function seedDatabase() {
 				await tx.insert(userRoles).values(row).onConflictDoNothing()
 			}
 			userRoleCount = seedUserRoles.length
+
+			for (const [key, value] of Object.entries(DEFAULT_MODULE_CONFIGURATION)) {
+				await tx.insert(moduleConfiguration).values({ key, value }).onConflictDoNothing()
+			}
 
 			await tx.delete(todos).where(inArray(todos.authorId, seededUserIds))
 

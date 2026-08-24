@@ -75,6 +75,18 @@ export { meContract } from "./modules/v1/me/me.contract.js"
 export { MePermissionsSchema } from "./modules/v1/me/me.schema.js"
 export type { MePermissions } from "./modules/v1/me/me.schema.js"
 
+// Piso CAMP public and administrator configuration schemas
+export {
+	PisoCampPublicConfigSchema,
+	PisoCampAdminConfigSchema,
+	UpdatePisoCampAdminConfigSchema,
+} from "./modules/v1/pisocamp/pisocamp.schema.js"
+export type {
+	PisoCampPublicConfig,
+	PisoCampAdminConfig,
+	UpdatePisoCampAdminConfig,
+} from "./modules/v1/pisocamp/pisocamp.schema.js"
+
 // Future versions:
 // export { v2Contract, type V2Contract } from "./modules/v2/v2.contract.js"
 // export const v2 = { ... }

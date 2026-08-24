@@ -13,10 +13,10 @@ describe("canAccess", () => {
 		expect(canAccess(noAccess, {})).toBe(true)
 	})
 
-	it("allows the Admin role to satisfy permission requirements", () => {
+	it("does not allow the legacy Admin role to bypass explicit permissions", () => {
 		expect(
 			canAccess({ roles: ["Admin"], permissions: [] }, { requiredPermission: "users:manage" })
-		).toBe(true)
+		).toBe(false)
 	})
 
 	it("allows exact permission matches", () => {
@@ -69,6 +69,11 @@ describe("navItems", () => {
 					section: "Administration",
 					requiredPermission: ["users:read", "users:manage"],
 				}),
+				expect.objectContaining({
+					label: "Module Configuration",
+					href: "/pisocamp/config",
+					requiredPermission: "admin.config.manage",
+				}),
 			])
 		)
 	})
@@ -89,7 +94,13 @@ describe("navItems", () => {
 
 		expect(
 			getAccessibleNavItems({ roles: ["Admin"], permissions: [] }).map(item => item.label)
-		).toEqual(["Dashboard", "Submit Ticket", "Todos / Posts", "User Management"])
+		).toEqual(["Dashboard", "Submit Ticket"])
+
+		expect(
+			getAccessibleNavItems({ roles: [], permissions: ["admin.config.manage"] }).map(
+				item => item.label
+			)
+		).toContain("Module Configuration")
 	})
 
 	it("resolves mobile header titles from dashboard routes", () => {
@@ -97,6 +108,7 @@ describe("navItems", () => {
 		expect(getDashboardRouteTitle("/submit-ticket")).toBe("Submit Ticket")
 		expect(getDashboardRouteTitle("/todos")).toBe("Todos / Posts")
 		expect(getDashboardRouteTitle("/user-management")).toBe("User Management")
+		expect(getDashboardRouteTitle("/pisocamp/config")).toBe("Module Configuration")
 		expect(getDashboardRouteTitle("/account")).toBe("Account")
 	})
 })

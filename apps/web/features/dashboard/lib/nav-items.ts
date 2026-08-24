@@ -1,4 +1,5 @@
 import {
+	AccountSetting01Icon,
 	DashboardSquare01Icon,
 	Task01Icon,
 	Ticket01Icon,
@@ -44,6 +45,13 @@ export const navItems: readonly DashboardNavItem[] = [
 		icon: UserMultipleIcon,
 		section: "Administration",
 		requiredPermission: ["users:read", "users:manage"],
+	},
+	{
+		label: "Module Configuration",
+		href: "/pisocamp/config",
+		icon: AccountSetting01Icon,
+		section: "Administration",
+		requiredPermission: "admin.config.manage",
 	},
 ]
 

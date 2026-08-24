@@ -2,6 +2,7 @@ import {
 	ForbiddenException,
 	Injectable,
 	Logger,
+	Scope,
 	UnauthorizedException,
 	type CanActivate,
 	type ExecutionContext,
@@ -12,11 +13,13 @@ import { fromNodeHeaders } from "better-auth/node"
 
 import { getAuth } from "@repo/auth"
 
+import { AuditService } from "@/common/audit/audit.service"
+import { AccountAccessService } from "@/common/rbac/account-access.service"
 import { RbacService } from "@/common/rbac/rbac.service"
 import { env } from "@/config/env.config"
 import { REQUIRED_PERMISSIONS_KEY } from "@/shared/decorators/require-permissions.decorator"
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class RbacGuard implements CanActivate {
 	// Instance logger (not injected) so the guard keeps a zero-dependency
 	// constructor. `app.useLogger(nestjs-pino Logger)` in bootstrap.ts routes
@@ -26,7 +29,9 @@ export class RbacGuard implements CanActivate {
 
 	constructor(
 		private readonly reflector: Reflector,
-		private readonly rbacService: RbacService
+		private readonly rbacService: RbacService,
+		private readonly accountAccessService: AccountAccessService,
+		private readonly auditService: AuditService
 	) {}
 
 	/**
@@ -38,7 +43,7 @@ export class RbacGuard implements CanActivate {
 	 * the shape. Logs the handler identity rather than `req.url`: the URL can
 	 * carry token-bearing query parameters (see LG-1).
 	 */
-	private auditDenial(
+	private logDenial(
 		context: ExecutionContext,
 		actorId: string,
 		requiredPermissions: string[],
@@ -108,24 +113,41 @@ export class RbacGuard implements CanActivate {
 			throw new UnauthorizedException("Authentication required")
 		}
 
+		if (!(await this.accountAccessService.isActive(userId))) {
+			throw new UnauthorizedException("Account is deactivated")
+		}
+
 		const allowed = await this.rbacService.hasAllPermissions(userId, requiredPermissions)
 		if (allowed) {
 			return true
 		}
 
+		const missingPermissions = await this.rbacService.getMissingPermissions(
+			userId,
+			requiredPermissions
+		)
+		const handlerTarget = `${context.getClass().name}.${context.getHandler().name}`
+
+		await this.auditService.record({
+			domain: "rbac",
+			action: "permission_denied",
+			outcome: "denied",
+			actorId: userId,
+			targetType: "handler",
+			targetId: handlerTarget,
+			newValue: { requiredPermissions, missingPermissions },
+			reason: "missing required permissions",
+		})
+
 		// Verbose in non-production to aid debugging; HttpExceptionFilter surfaces
 		// `missingPermissions` as details. Generic message in production.
 		// Only report permissions the user actually lacks, not the full required list.
 		if (env.NODE_ENV !== "production") {
-			const missingPermissions = await this.rbacService.getMissingPermissions(
-				userId,
-				requiredPermissions
-			)
-			this.auditDenial(context, userId, requiredPermissions, missingPermissions)
+			this.logDenial(context, userId, requiredPermissions, missingPermissions)
 			throw new ForbiddenException({ message: "Forbidden", missingPermissions })
 		}
 
-		this.auditDenial(context, userId, requiredPermissions)
+		this.logDenial(context, userId, requiredPermissions, missingPermissions)
 		throw new ForbiddenException("Forbidden")
 	}
 }

@@ -6,6 +6,6 @@ process.env.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://loc
 // eslint-disable-next-line no-restricted-properties
 process.env.NEXT_PUBLIC_API_BASE_URL =
 	// eslint-disable-next-line no-restricted-properties
-	process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000"
+	process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000/api"
 // eslint-disable-next-line no-restricted-properties
 process.env.NEXT_PUBLIC_API_VERSION = process.env.NEXT_PUBLIC_API_VERSION ?? "v1"

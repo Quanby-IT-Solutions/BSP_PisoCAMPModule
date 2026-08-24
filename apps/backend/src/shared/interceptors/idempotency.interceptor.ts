@@ -10,7 +10,7 @@ import { firstValueFrom, from, type Observable } from "rxjs"
 
 import { idempotencyKeys } from "@repo/db/schema"
 
-import { db } from "@/common/database/database.client"
+import { databaseTransactionContext } from "@/common/database/database-transaction.context"
 
 import {
 	describeIdempotencyKeyProblem,
@@ -180,7 +180,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
 	 * inside an oRPC handler.
 	 */
 	private runWithIdempotency<T>(authorId: string, key: string, run: () => Promise<T>): Promise<T> {
-		return db.transaction(async tx => {
+		return databaseTransactionContext.transaction(async tx => {
 			// Locked on author AND key: keying on the key alone let one user's
 			// requests block another's whenever both picked the same value.
 			await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${authorId}:${key}`}))`)

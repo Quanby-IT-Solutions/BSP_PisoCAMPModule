@@ -18,6 +18,7 @@ jest.mock("@orpc/server", () => ({
 jest.mock("@repo/contracts", () => ({
 	ADMIN_ROLE: "Admin",
 	PERMISSION_NAMES: [
+		"admin.config.manage",
 		"posts:read",
 		"posts:create",
 		"posts:edit",
@@ -68,5 +69,52 @@ describe("RbacService", () => {
 		})
 		expect(cacheService.get).toHaveBeenCalledWith("user-1")
 		expect(cacheService.set).not.toHaveBeenCalled()
+	})
+
+	it("derives System Administrator access from explicit permission rows", async () => {
+		const cacheService = {
+			get: jest.fn(() => ({
+				roleNames: new Set(["System Administrator"]),
+				permissionNames: new Set(["admin.config.manage"]),
+			})),
+			set: jest.fn(),
+			invalidate: jest.fn(),
+		}
+		const service = new RbacService(cacheService as never, { record: jest.fn() } as never)
+
+		await expect(service.hasPermission("system-admin", "admin.config.manage")).resolves.toBe(true)
+	})
+
+	it("does not treat the legacy Admin role name as a permission bypass", async () => {
+		const cacheService = {
+			get: jest.fn(() => ({
+				roleNames: new Set(["Admin"]),
+				permissionNames: new Set<string>(),
+			})),
+			set: jest.fn(),
+			invalidate: jest.fn(),
+		}
+		const service = new RbacService(cacheService as never, { record: jest.fn() } as never)
+
+		await expect(service.hasPermission("legacy-admin", "admin.config.manage")).resolves.toBe(false)
+	})
+
+	it("reuses one resolved permission promise for repeated checks in a request", async () => {
+		const cacheService = {
+			get: jest.fn(async () => ({
+				roleNames: new Set(["System Administrator"]),
+				permissionNames: new Set(["admin.config.manage"]),
+			})),
+			set: jest.fn(),
+			invalidate: jest.fn(),
+		}
+		const service = new RbacService(cacheService as never, { record: jest.fn() } as never)
+
+		await Promise.all([
+			service.hasPermission("system-admin", "admin.config.manage"),
+			service.hasAllPermissions("system-admin", ["admin.config.manage"]),
+		])
+
+		expect(cacheService.get).toHaveBeenCalledTimes(1)
 	})
 })

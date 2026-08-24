@@ -2,6 +2,8 @@ import { ForbiddenException, UnauthorizedException, type ExecutionContext } from
 import { Reflector } from "@nestjs/core"
 import { Test, type TestingModule } from "@nestjs/testing"
 
+import { AuditService } from "@/common/audit/audit.service"
+import { AccountAccessService } from "@/common/rbac/account-access.service"
 import { RbacService } from "@/common/rbac/rbac.service"
 
 import { RbacGuard } from "./rbac.guard"
@@ -11,6 +13,12 @@ jest.mock("@/common/rbac/rbac.service", () => ({
 		hasAllPermissions: jest.fn(),
 		getMissingPermissions: jest.fn(),
 	})),
+}))
+jest.mock("@/common/rbac/account-access.service", () => ({
+	AccountAccessService: jest.fn().mockImplementation(() => ({ isActive: jest.fn() })),
+}))
+jest.mock("@/common/audit/audit.service", () => ({
+	AuditService: jest.fn().mockImplementation(() => ({ record: jest.fn() })),
 }))
 
 jest.mock("@/config/env.config", () => ({
@@ -48,6 +56,8 @@ describe("RbacGuard", () => {
 	let guard: RbacGuard
 	let reflector: { getAllAndOverride: jest.Mock }
 	let rbacService: { hasAllPermissions: jest.Mock; getMissingPermissions: jest.Mock }
+	let accountAccessService: { isActive: jest.Mock }
+	let auditService: { record: jest.Mock }
 	const env = require("@/config/env.config").env as { NODE_ENV: string }
 
 	beforeEach(async () => {
@@ -56,18 +66,22 @@ describe("RbacGuard", () => {
 		mockGetSession.mockResolvedValue(null)
 
 		const app: TestingModule = await Test.createTestingModule({
-			providers: [RbacGuard, Reflector, RbacService],
+			providers: [RbacGuard, Reflector, RbacService, AccountAccessService, AuditService],
 		})
 			.overrideProvider(Reflector)
 			.useValue({ getAllAndOverride: jest.fn() })
 			.compile()
 
-		guard = app.get(RbacGuard)
+		guard = await app.resolve(RbacGuard)
 		reflector = app.get(Reflector) as unknown as { getAllAndOverride: jest.Mock }
 		rbacService = app.get(RbacService) as unknown as {
 			hasAllPermissions: jest.Mock
 			getMissingPermissions: jest.Mock
 		}
+		accountAccessService = app.get(AccountAccessService) as unknown as { isActive: jest.Mock }
+		auditService = app.get(AuditService) as unknown as { record: jest.Mock }
+		accountAccessService.isActive.mockResolvedValue(true)
+		auditService.record.mockResolvedValue(undefined)
 	})
 
 	it("allows when no metadata present (no-op)", async () => {
@@ -99,6 +113,16 @@ describe("RbacGuard", () => {
 		await expect(guard.canActivate(buildContext(undefined, undefined))).rejects.toBeInstanceOf(
 			UnauthorizedException
 		)
+		expect(rbacService.hasAllPermissions).not.toHaveBeenCalled()
+	})
+
+	it("rejects a deactivated account before any permission lookup", async () => {
+		reflector.getAllAndOverride.mockReturnValue(["admin.config.manage"])
+		accountAccessService.isActive.mockResolvedValue(false)
+
+		await expect(
+			guard.canActivate(buildContext({ user: { id: "deactivated-user" } }))
+		).rejects.toBeInstanceOf(UnauthorizedException)
 		expect(rbacService.hasAllPermissions).not.toHaveBeenCalled()
 	})
 
@@ -137,6 +161,44 @@ describe("RbacGuard", () => {
 			ForbiddenException
 		)
 		expect(rbacService.hasAllPermissions).toHaveBeenCalledWith("u1", ["posts:create"])
+		expect(auditService.record).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: "permission_denied",
+				actorId: "u1",
+				outcome: "denied",
+			})
+		)
+	})
+
+	it("does not reject until the permission-denied audit is persisted", async () => {
+		reflector.getAllAndOverride.mockReturnValue(["posts:create"])
+		rbacService.hasAllPermissions.mockResolvedValue(false)
+		rbacService.getMissingPermissions.mockResolvedValue(["posts:create"])
+		let finishAudit: (() => void) | undefined
+		auditService.record.mockReturnValue(new Promise<void>(resolve => (finishAudit = resolve)))
+		let settled = false
+		const result = guard
+			.canActivate(buildContext({ user: { id: "u1" } }))
+			.catch(error => error)
+			.finally(() => {
+				settled = true
+			})
+
+		await Promise.resolve()
+		expect(settled).toBe(false)
+		finishAudit?.()
+		await expect(result).resolves.toBeInstanceOf(ForbiddenException)
+	})
+
+	it("fails closed when writing a denial audit fails", async () => {
+		reflector.getAllAndOverride.mockReturnValue(["posts:create"])
+		rbacService.hasAllPermissions.mockResolvedValue(false)
+		rbacService.getMissingPermissions.mockResolvedValue(["posts:create"])
+		auditService.record.mockRejectedValue(new Error("audit unavailable"))
+
+		await expect(guard.canActivate(buildContext({ user: { id: "u1" } }))).rejects.toThrow(
+			"audit unavailable"
+		)
 	})
 
 	it("allows when authenticated and has permission", async () => {

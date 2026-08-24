@@ -12,14 +12,25 @@ import { z } from "zod"
 // ---------------------------------------------------------------------------
 
 /** Canonical role names. Order is significant for display only. */
-export const ROLE_NAMES = ["Admin", "Manager", "User"] as const
+export const ROLE_NAMES = [
+	"Guest User",
+	"Registered End User",
+	"Content Administrator",
+	"Content Approver",
+	"Reports & Analytics User",
+	"System Administrator",
+	"Admin",
+	"Manager",
+	"User",
+] as const
 
 /** Zod enum validating a role name. */
 export const RoleNameSchema = z.enum(ROLE_NAMES)
 
 /**
- * The super-role. The RBAC guard short-circuits and grants access when a
- * principal holds this role, regardless of the required permission.
+ * Protected legacy role name retained for compatibility and grant/removal
+ * invariants. It has no authorization bypass; access comes only from its
+ * explicit permission rows.
  */
 export const ADMIN_ROLE = "Admin" as const
 
@@ -31,18 +42,36 @@ export type RoleName = z.infer<typeof RoleNameSchema>
 // ---------------------------------------------------------------------------
 
 /**
- * Permission naming convention: `resource:action`.
+ * Permission identifiers retain two compatibility forms:
  *
- * - `resource` is the noun being protected (e.g. `posts`, `users`).
- * - `action` is the verb performed on it (e.g. `read`, `create`).
- *
- * Wildcard semantics: `resource:*` grants all actions on that resource.
- * When checking a required permission `resource:<action>`, the guard treats a
- * granted `resource:*` as a match for any action on that resource. Example:
- * holding `posts:*` satisfies a required `posts:read`, `posts:create`,
- * `posts:edit`, or `posts:delete`.
+ * - Annex H dot-form permissions (for example `admin.config.manage`) require
+ *   exact matches; dots do not imply hierarchy or wildcard semantics.
+ * - Legacy colon-form permissions use `resource:action`. A legacy
+ *   `resource:*` grant matches any colon-form action on that resource, so
+ *   `posts:*` satisfies `posts:read`, `posts:create`, `posts:edit`, and
+ *   `posts:delete`.
  */
 export const PERMISSION_NAMES = [
+	// Domain Model dot-form permissions
+	"content.items.edit",
+	"content.assets.upload",
+	"content.items.submit",
+	"content.items.approve",
+	"content.items.publish",
+	"content.items.restore",
+	"content.items.preview",
+	"content.audit.view",
+	"surveys.triggers.configure",
+	"reports.dashboards.view",
+	"reports.reports.generate",
+	"reports.reports.export",
+	"reports.pii.view",
+	"admin.accounts.manage",
+	"admin.roles.assign",
+	"admin.config.manage",
+	"admin.audit.view",
+	"admin.notifications.send",
+	"admin.integrations.manage",
 	// Granular post actions
 	"posts:read",
 	"posts:create",

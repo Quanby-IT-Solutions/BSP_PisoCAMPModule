@@ -1,4 +1,4 @@
-import { ADMIN_ROLE, type PermissionName } from "@repo/contracts"
+import { type PermissionName } from "@repo/contracts"
 
 export interface AccessProfile {
 	roles: readonly string[]
@@ -34,10 +34,6 @@ export function canAccess(access: AccessProfile, item: AccessRequirement): boole
 	const requiredRoles = toArray(item.requiredRole)
 
 	if (requiredPermissions.length === 0 && requiredRoles.length === 0) {
-		return true
-	}
-
-	if (access.roles.includes(ADMIN_ROLE)) {
 		return true
 	}
 

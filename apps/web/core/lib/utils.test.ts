@@ -10,7 +10,7 @@ describe("getAppUrl", () => {
 
 describe("getApiUrl", () => {
 	it("returns the versioned API URL from env", () => {
-		expect(getApiUrl()).toBe("http://localhost:3000/v1")
+		expect(getApiUrl()).toBe("http://localhost:3000/api/v1")
 	})
 })
 

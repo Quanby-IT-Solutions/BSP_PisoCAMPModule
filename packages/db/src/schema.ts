@@ -1,5 +1,5 @@
-import { defineRelations } from "drizzle-orm"
-import { index, primaryKey } from "drizzle-orm/pg-core"
+import { defineRelations, sql } from "drizzle-orm"
+import { check, index, primaryKey } from "drizzle-orm/pg-core"
 
 import { createTable } from "./utils/table.js"
 
@@ -204,6 +204,34 @@ export const rolePermissions = createTable(
 )
 
 // ============================================================================
+// PISO CAMP ADMINISTRATION
+// ============================================================================
+
+export const moduleConfiguration = createTable("module_configuration", t => ({
+	key: t.text("key").primaryKey(),
+	value: t.jsonb("value").notNull().$type<unknown>(),
+	updatedBy: t.text("updated_by").references(() => users.id, { onDelete: "set null" }),
+	createdAt: t.timestamp("created_at").notNull().defaultNow(),
+	updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+}))
+
+export const pisoCampAccountState = createTable(
+	"pisocamp_account_state",
+	t => ({
+		accountId: t
+			.text("account_id")
+			.primaryKey()
+			.references(() => users.id, { onDelete: "cascade" }),
+		status: t.text("status").notNull().default("active").$type<"active" | "deactivated">(),
+		reason: t.text("reason"),
+		updatedBy: t.text("updated_by").references(() => users.id, { onDelete: "set null" }),
+		createdAt: t.timestamp("created_at").notNull().defaultNow(),
+		updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+	}),
+	t => [check("pisocamp_account_state_status_check", sql`${t.status} in ('active', 'deactivated')`)]
+)
+
+// ============================================================================
 // AUDIT LOG
 // ============================================================================
 
@@ -267,6 +295,8 @@ export const relations = defineRelations(
 		permissions,
 		userRoles,
 		rolePermissions,
+		moduleConfiguration,
+		pisoCampAccountState,
 		auditLog,
 	},
 	r => ({
@@ -274,6 +304,13 @@ export const relations = defineRelations(
 			sessions: r.many.sessions(),
 			accounts: r.many.accounts(),
 			userRoles: r.many.userRoles(),
+			moduleConfigurationsUpdated: r.many.moduleConfiguration({ alias: "configUpdater" }),
+			pisoCampAccountState: r.one.pisoCampAccountState({
+				from: r.users.id,
+				to: r.pisoCampAccountState.accountId,
+				alias: "accountStateAccount",
+			}),
+			pisoCampAccountStatesUpdated: r.many.pisoCampAccountState({ alias: "accountStateUpdater" }),
 		},
 		sessions: {
 			user: r.one.users({
@@ -332,6 +369,25 @@ export const relations = defineRelations(
 				to: r.permissions.id,
 			}),
 		},
+		moduleConfiguration: {
+			updatedByUser: r.one.users({
+				from: r.moduleConfiguration.updatedBy,
+				to: r.users.id,
+				alias: "configUpdater",
+			}),
+		},
+		pisoCampAccountState: {
+			account: r.one.users({
+				from: r.pisoCampAccountState.accountId,
+				to: r.users.id,
+				alias: "accountStateAccount",
+			}),
+			updatedByUser: r.one.users({
+				from: r.pisoCampAccountState.updatedBy,
+				to: r.users.id,
+				alias: "accountStateUpdater",
+			}),
+		},
 	})
 )
 
@@ -351,6 +407,9 @@ export const schema = Object.assign(
 		permissions,
 		userRoles,
 		rolePermissions,
+		moduleConfiguration,
+		pisoCampAccountState,
+		auditLog,
 	},
 	relations
 )
