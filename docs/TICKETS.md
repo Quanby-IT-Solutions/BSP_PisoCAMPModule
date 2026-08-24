@@ -1,663 +1,1054 @@
-# TICKETS — Turbo Template Security Remediation
+# TICKETS — Piso CAMP Module
 
-> Every ticket is a vertical slice: schema/config → enforcement → UI/client where applicable → test. One ticket = one branch = one small PR. "DoD: as standard" = *Code + tests merged · acceptance criteria pass · audit/permission checks verified · PR reviewed · docs updated.* Finding IDs (F-xx) cite the 2026-08-11 audit. Risky flows referenced by number are defined in DOMAIN-MODEL.md / the hand-off notes: **RF1** identity/cache purge · **RF2** client-IP trust chain · **RF3** fail-closed boot · **RF4** deploy secret handling · **RF5** privileged-grant transaction.
+Companion files: `PRD.md` (constraints, decisions) · `DOMAIN-MODEL.md` (entity names, permission keys, state machines). Risky flows RF-1…RF-6 are defined in §4 of this file and referenced from technical notes.
 
 ---
 
 ## 1. Epic map
 
-| Epic key | Label | Source findings | Note |
+| Epic key | Label | TOR / PRD source | Note |
 |---|---|---|---|
-| `authz` | Authorization & Data Scoping | F-01, 10, 11, 17, 30, 31, 51, 55 | Permission gates, ownership, audit trail. |
-| `auth-config` | Auth Secrets & Session Policy | F-03, 06, 18, 32, 33, 34, 35, 56, 57, 58, 59 | Better Auth config, seeds, secrets. |
-| `abuse` | Rate Limiting, Idempotency & Limits | F-02, 13, 14, 38, 39 | The throttle/idempotency spine. |
-| `webclient` | Web Client Cache & PWA | F-04, 19, 20, 48, 49, 50 | TanStack persistence + Serwist. |
-| `logging` | Log Redaction & Disclosure | F-05, 36, 37 | Three log paths + response leaks. |
-| `edge` | Security Headers, TLS & Nginx | F-12, 15, 21 | The reverse-proxy layer. |
-| `mobile` | Flutter Mobile Hardening | F-23, 24, 42, 43, 44, 45, 46, 47 | Shipped app — 30-day wave. |
-| `cicd` | Supply Chain & CI/CD | F-07, 08, 09, 16, 22, 25, 26, 27, 28, 52 | Pipeline trust. |
-| `hygiene` | Tests & Repo Hygiene | F-29, 40, 41, 53, 54, 61, 62 | Harness + batched leftovers. |
-
----
+| `foundation` | Module Shell, Identity, Consent & Permission Spine | Annex H §2, §3, §4.1, §4.3 UI-005–008, BR-006 | Cross-cutting; built just-in-time. Extends existing auth, nav, design system. |
+| `content-management` | Content Workflow & Assets | Annex H §8 CM-001–007, CE-003, BR-002 | Shared workflow engine; first slice CM-1/CM-3, reused by trivia, surveys, AR, advisories. |
+| `currency-education` | Currency Information & Special Features | Annex H §5.1 CE-001–007, BR-012 | Offline content bundle (first consumer), 3D, zoom/pan, haptic, tilt. |
+| `gamification` | Trivia, Progress & Leaderboard | Annex H §5.2 GM-001–008, BR-003–005 | Reuses content workflow for questions. |
+| `augmented-reality` | AR Experiences | Annex H §5.3 AR-001–005 | Coin + banknote AR, offline where packaged. |
+| `denomination-recognition` | Camera-Based Denomination Recognition | Annex H §5.4 DR-001–009, BR-007/008/011 | On-device model; never authenticity. |
+| `evaluation` | Surveys & Exit Advisory | Annex H §6 EV-001–005, §4.2-L | Consent-gated. |
+| `analytics-reporting` | Analytics Events, KPIs, Reports & Export | Annex H §4.2 AN-001–032, §I–M, BR-009 | Exactly-once pipeline; own event store. |
+| `admin-security` | Accounts, Roles, Config, Audit, Push, Hardening | Annex H §3.6, UM-004, §10, §11.7, AN-014 | Extends foundation spine. |
 
 ## 2. Build order
 
-**Wave 1 — release blockers (Conditional GO gate):**
-1. **CI-1** — Delete the stray `orpc` dependency (F-08)
-2. **AZ-1** — Permission-gate ticket reads + align the contract (F-01, F-55)
-3. **AB-1** — Trustworthy client IP for rate limiting (F-02)
-4. **AC-1** — Non-functional secret placeholder + strength validation (F-03)
-5. **AC-2** — Production seed guard + randomized seed credentials (F-06)
-6. **WC-1** — Cache persistence allowlist + sign-out purge (F-04)
-7. **LG-1** — Redact credentials across all three log paths (F-05)
-8. **CI-2** — Staging deploy: pinned host keys + ECR variable fix (F-07)
-9. **CI-3** — Pin the external CI workflow + scope secrets (F-09)
+**Release 1 — walking skeleton (Milestone 1 prototype)**
+1. **F1** — Piso CAMP section, optional account prompt, guest home, opens offline
+2. **F2** — Permission spine + audit log + first admin screen (Module Configuration)
+3. **F3** — Registered profile on existing account (name, gender, age, email, region, city)
+4. **F4** — Privacy notice + consent record
+5. **CM-1** — Create/edit a draft content item (currency series, denomination, description)
+6. **CM-3** — Submit → approve/reject → publish workflow
+7. **CE-1** — Published banknote/coin info delivered as an offline bundle and read in-app
+8. **AN-1** — Analytics event pipeline: client SDK, encrypted offline queue, idempotent ingestion
 
-**Wave 2 — 30-day set:**
-10. **AB-2** — Redis-backed throttler + RBAC cache (F-38)
-11. **AZ-2** — Admin-grant guard + last-Admin protection (F-10, F-31)
-12. **AZ-4** — Append-only RBAC audit trail (F-17)
-13. **AZ-3** — Ownership scoping on todos + ticket authorship (F-11, F-30)
-14. **AB-3** — Idempotency key model hardening + consistent application (F-13, F-39)
-15. **AB-4** — Request body limits + proxy timeouts (F-14)
-16. **ED-1** — Security headers at all three layers (F-12, F-21)
-17. **ED-2** — Ship TLS config + service-name upstreams (F-15)
-18. **WC-2** — Service-worker token & auth-route exclusions (F-20, F-48)
-19. **WC-3** — Bind paused mutations to the queueing identity (F-19)
-20. **AC-3** — Pin session, cookie & verification policy (F-56, F-58, F-59, F-33)
-21. **AC-4** — Sanitize the password-reset error path (F-18)
-22. **CI-4** — Re-enable validation gates: env + TypeScript (F-16, F-22)
-23. **CI-5** — Production deploy secret handling (F-25)
-24. **CI-6** — Action pinning, workflow permissions, cache scoping, postinstall (F-26, F-27, F-28)
-25. **MB-1** — Single cookie source of truth + sign-out purge (F-23, F-43)
-26. **MB-2** — Mobile transport & bundled-config hardening (F-24, F-42)
-27. **MB-3** — Mobile release hardening batch (F-44, F-45, F-46, F-47)
-28. **HY-1** — Security regression test harness (F-54)
+**Release 2 — complete human loop**
+9. **CM-2** — Upload and attach assets (image, audio, 3D, AR)
+10. **CM-5** — Preview content before publication
+11. **CM-4** — Version history and restore a prior approved version
+12. **CM-6** — Unpublish, deactivate, archive, scheduled publication
+13. **CM-7** — Content audit history view
+14. **CE-2** — Interactive 3D coin viewer
+15. **CE-3** — Zoom and pan (first-level features only)
+16. **CE-4** — Haptic simulation of tactile features
+17. **CE-5** — Tilt simulation of dynamic features
+18. **F5** — External, internal and deep links with store fallback
+19. **F6** — Accessibility baseline and orientation state preservation
+20. **GM-1** — Manage trivia questions through the content workflow
+21. **GM-2** — Random trivia prompt with skip, correct/incorrect behaviour
+22. **GM-3** — Answer tracking and progress (local + synced)
+23. **EV-1** — Manage surveys through the content workflow
+24. **EV-2** — Consent-gated pop-up survey with offline queue
+25. **EV-3** — Configurable survey triggers and frequency
+26. **EV-4** — Exit advisory on proper currency handling
+27. **AN-2** — Sessions + DAU/MAU/stickiness/session dashboard
+28. **AN-3** — Feature usage, activation and time-to-first-key-action
+29. **AN-4** — Retention, churn, lifetime, re-engagement, reactivation
+30. **AN-8** — Parameter-driven historical report with filters
+31. **AN-9** — Export to Excel, Word, PDF with generation metadata
+32. **SA-1** — Activate/deactivate accounts
+33. **SA-2** — Assign and revoke roles
+34. **SA-3** — Manage module configuration
+35. **SA-4** — Administrative audit log viewer
+36. **SA-7** — Consent withdrawal and data-subject export/delete
 
-**Wave 3 — hardening backlog (batched):**
-29. **AC-5** — Auth config hygiene batch (F-32, F-34, F-35, F-57)
-30. **LG-2** — Health & request-id disclosure hygiene (F-36, F-37)
-31. **WC-4** — PWA update flow & connectivity probe (F-49, F-50)
-32. **AZ-5** — Finer-grained directory-PII permission (F-51)
-33. **HY-2** — Repo & schema hygiene batch (F-29, F-40, F-41, F-52, F-53, F-61, F-62)
+**Release 3 — advanced experiences & depth (Milestone 2)**
+37. **GM-4** — Leaderboard (config-flagged, aliases, periods, rank movement)
+38. **GM-5** — Registered user progress view
+39. **AR-1** — AR experience skeleton for one coin (capability check, permissions, exit, fallback)
+40. **AR-2** — AR experience content admin
+41. **AR-3** — Synchronized audio, full mandatory coverage, offline packaging
+42. **DR-1** — Camera scan → on-device denomination + audio + disclaimer
+43. **DR-2** — Uncertain/failed recognition handling
+44. **DR-3** — Demonetized and foreign banknote handling
+45. **DR-4** — Recognition model versioning, threshold config, accuracy harness
+46. **AN-5** — Gamification and trivia metrics
+47. **AN-6** — Evaluation, ratings and NPS metrics
+48. **AN-7** — Technical metrics (crash, load time, API, network failures, size/battery)
+49. **AN-10** — Demographic and cohort reports with small-group suppression
+50. **AN-11** — Install volume and store ratings consolidation
+51. **SA-5** — Push notifications (opt-in, send, metrics)
+52. **SA-6** — Security hardening and observability pass
 
 ---
 
 ## 3. Full tickets
 
-### Epic: `cicd`
+### Epic: `foundation`
 
 ---
 
-**Title:** [CI-1] Delete the stray `orpc` dependency
-**Epic:** `cicd`
-**Problem / context:** F-08 (High). `packages/contracts/package.json:26` declares `"orpc": "^0.1.1"` — an abandoned 2018 package with a live caret range and dormant maintainer, pulling a deprecated Socket.IO stack (`socket.io@2.5.1`). No source file imports it. Best value-to-effort fix in the audit.
-**User story:** As a release engineer *(persona — no runtime permission governs the dependency graph)*, I want the abandoned package removed so that the supply chain carries no deprecated, maintainer-dormant transitive stack.
+**Title:** [F1] Piso CAMP section with optional account prompt and guest home, opens offline
+**Epic:** `foundation`
+**Problem / context:** Annex H UI-001/002, UM-001/002. The module must exist inside the existing Flutter app, be reachable from approved navigation, prompt for an optional account without coercion, and open in airplane mode. Whole-product walking skeleton.
+**User story:** As a Guest User, I want to open Piso CAMP from the app navigation and continue without an account so that I can start learning immediately.
 **Acceptance criteria:**
-- *Given* the dependency line is deleted, *when* `pnpm install` refreshes the lockfile, *then* `orpc@0.1.1` and every transitive it introduced (incl. `socket.io@2.5.1`) are absent from `pnpm-lock.yaml`.
-- *Given* the refreshed lockfile, *when* the full build and typecheck run, *then* they pass — proving nothing imported the package.
-- *Given* the repo post-merge, *when* grepping for `from "orpc"` / `require("orpc")`, *then* there are zero hits.
-**In scope:** Delete line 26 of `packages/contracts/package.json`; refresh `pnpm-lock.yaml`; verify build.
-**Out of scope:** Any other dependency change (F-28 postinstall → CI-6; F-53 drizzle beta → HY-2).
-**Technical notes:** Verify no lockfile drift beyond the removal (the audit's read-only constraint flagged that `pnpm` can rewrite the lockfile when manifests disagree — commit only the intended delta). The legitimate oRPC packages (`@orpc/*`) are untouched.
+- *Given* the installed app, *when* I tap the Piso CAMP navigation entry, *then* a dedicated module section opens using the existing design system.
+- *Given* first entry on this device, *when* the section opens, *then* a prompt explains that an account is optional and offers "Create Account" and "Continue as Guest" with no coercive language.
+- *Given* I choose "Continue as Guest", *when* the home screen loads, *then* a `device_pseudo_id` is generated and stored in secure storage and the prompt is not shown again on this device.
+- *Given* airplane mode, *when* I open the module, *then* the home screen renders from packaged content with an "offline" indicator and no crash.
+- *Given* I tap a connectivity-dependent action (e.g. Create Account) offline, *then* a plain-language notice explains that internet is required.
+**In scope:** Navigation entry; module route; account prompt; guest identity; connectivity indicator service; packaged placeholder home; `GET /pisocamp/config` read (public keys only).
+**Out of scope:** Registration form (F3); consent (F4); real content (CE-1); admin screens (F2).
+**Technical notes:** Flutter module package `pisocamp/` following existing app structure; `device_pseudo_id` via `flutter_secure_storage`; connectivity listener as a shared provider. Emits no analytics yet (AN-1 adds the SDK; event names `module_entry`, `account_prompt_shown`, `account_prompt_guest` reserved). RTM ids: UI-001, UI-002, UM-001, UM-002.
+**Definition of done:** Code + tests merged · acceptance criteria pass · airplane-mode test evidence attached · PR reviewed · docs updated.
+**Dependencies:** none.
+
+---
+
+**Title:** [F2] Permission spine, audit log and first admin screen (Module Configuration)
+**Epic:** `foundation`
+**Problem / context:** Annex H §3, §10 (RBAC, least privilege, admin audit logging). Every admin ticket needs a permission check and an audit write; prove both on one real screen.
+**User story:** As a user with `admin.config.manage` permission, I want to view and edit the Piso CAMP module configuration so that access control and auditing are real from the first admin screen.
+**Acceptance criteria:**
+- *Given* the seeded roles/permissions, *when* an admin assigns "System Administrator" to a user, *then* that user's resolved permissions include `admin.config.manage`.
+- *Given* a user with the permission, *when* they save a configuration value, *then* it persists and an `audit_entry` (actor, key, before, after, timestamp) is written.
+- *Given* a user without the permission, *when* they call the endpoint, *then* it returns 403 and a `permission_denied` audit entry is written.
+- *Given* a deactivated account, *when* it calls any admin endpoint, *then* it returns 401 before permission resolution.
+**In scope:** `role`, `permission`, `role_permissions`, `user_roles`, `audit_entry`, `module_configuration`; permission middleware; audit helper; seed of the six Annex H roles; admin console screen "Module Configuration" with one editable key (`session_inactivity_minutes`, default 30).
+**Out of scope:** Role assignment UI (SA-2); full config set (SA-3); audit viewer (SA-4); account activation (SA-1).
+**Technical notes:** Reuses existing admin auth. Middleware resolves user → roles → permissions, cached per request. Endpoints `GET/PUT /admin/pisocamp/config`. Permission key enforced: `admin.config.manage`. Flow **RF-4**. RTM ids: §3.6, §10.
 **Definition of done:** as standard.
 **Dependencies:** none.
 
 ---
 
-**Title:** [CI-2] Staging deploy — pinned host keys + ECR variable fix
-**Epic:** `cicd`
-**Problem / context:** F-07 (High). `deploy-staging.yml:130,138-152` expands secrets on the runner and streams them over SSH with `StrictHostKeyChecking=no` (MITM-able), and line 140 has a variable swap so staging has never actually run the web image.
-**User story:** As a release engineer *(persona — pipeline, no runtime permission)*, I want staging deploys to talk only to a verified host and deploy the correct images so that secrets can't be intercepted and staging actually mirrors production.
+**Title:** [F3] Registered profile on the existing account
+**Epic:** `foundation`
+**Problem / context:** Annex H UM-003, §3.2. Registration must capture name, gender, age, email, region and city with controlled lists, on top of the existing auth service.
+**User story:** As a Guest User, I want to create an account with my profile details so that my progress can be kept and I can join registered-only features.
 **Acceptance criteria:**
-- *Given* the workflow, *when* it opens the SSH connection, *then* the target's host key is verified against a pinned `known_hosts` entry (no `StrictHostKeyChecking=no`, no `accept-new`).
-- *Given* line 140 fixed to `ECR_REPOSITORY_WEB=$ECR_REPOSITORY_WEB`, *when* a staging deploy runs, *then* the web image is pulled and started from the correct repository.
-- *Given* a host-key mismatch, *when* the connection is attempted, *then* the deploy fails closed with a clear error rather than proceeding.
-- *Given* the workflow file, *when* reviewed, *then* no secret value is echoed or written to disk on the runner (align with the CI-5 pattern; full production-side rework is CI-5).
-**In scope:** Pinned `known_hosts` (repo-stored public key or secret); the 2-minute ECR var fix; fail-closed connection.
-**Out of scope:** Production deploy secret handling (CI-5); SHA-pinning actions (CI-6).
-**Technical notes:** Risky Flow **RF4**. Store the host public key as a repo file or Actions variable, install into `~/.ssh/known_hosts` before `ssh`/`scp`. Keep the deploy gated on `needs: ci` — unchanged.
-**Definition of done:** as standard, plus one successful staging deploy run showing the web image live.
-**Dependencies:** none.
-
----
-
-**Title:** [CI-3] Pin the external CI workflow to a SHA and scope secrets
-**Epic:** `cicd`
-**Problem / context:** F-09 (High, Medium confidence). `.github/workflows/ci.yml:13-14` delegates the entire quality gate to an external reusable workflow referenced at `@main` with `secrets: inherit`. The audit could not read that workflow — the CI gate's contents are unverifiable, and a compromise of the external repo exfiltrates every inherited secret.
-**User story:** As a release engineer *(persona)*, I want the CI gate pinned to an immutable ref with an explicit secret allowlist so that an external repository change can neither alter our gate nor read our secrets.
-**Acceptance criteria:**
-- *Given* the reusable workflow reference, *when* CI runs, *then* it targets a full commit SHA (with a version comment), not a branch ref.
-- *Given* `secrets: inherit` removed, *when* the workflow needs a secret, *then* only explicitly named secrets are passed and the run succeeds.
-- *Given* the pinned SHA, *when* the team reviews it once, *then* the referenced workflow's contents at that SHA are confirmed to run lint, typecheck, and tests (closing the audit's "cannot confirm CI runs anything" gap) and the confirmation is noted in the PR.
-**In scope:** SHA-pin the ref; enumerate passed secrets; one-time content review of the pinned workflow.
-**Out of scope:** Pinning marketplace actions and adding `permissions:` blocks across all five workflows (CI-6); replacing the external workflow with an in-repo one (future option, note in PR).
-**Technical notes:** If the external workflow at the pinned SHA does *not* run lint/typecheck/test, escalate — deploys gate on this job (`needs: ci`) and the whole remediation's DoD depends on CI being real.
+- *Given* I choose "Create Account", *when* the form opens, *then* it shows name, gender, age, email, region, city with required/optional clearly marked.
+- *Given* region and city fields, *when* I open them, *then* they are dropdowns populated from BSP-approved lists, city filtered by region.
+- *Given* a missing required field or invalid email, *when* I submit, *then* submission is blocked with an understandable message.
+- *Given* a valid submission with consent recorded (F4), *when* I submit, *then* the account is created/linked via the existing auth service and a `profile` row is stored.
+- *Given* an existing app account already logged in, *when* I enter Piso CAMP, *then* I am prompted only for the missing Piso CAMP profile fields.
+**In scope:** `profile`, `region`, `city` tables and seed; `POST /pisocamp/profile`; registration screen; linkage of `device_pseudo_id` to the new account for later progress merge.
+**Out of scope:** Consent notice (F4, dependency); account deactivation (SA-1); profile export/delete (SA-7).
+**Technical notes:** Uses existing auth SDK for account creation/login. Age stored as integer; derived age-group used by analytics (AN-10). Flow **RF-3** gate before submit. RTM ids: UM-003, §3.2.
 **Definition of done:** as standard.
-**Dependencies:** none.
+**Dependencies:** F1, F4.
 
 ---
 
-**Title:** [CI-4] Re-enable the validation gates — env validation in CI, TypeScript build errors
-**Epic:** `cicd`
-**Problem / context:** F-16 + F-22 (Medium). Env validation is skipped whenever `CI` is truthy (`env.config.ts:46`, `auth/config.ts:52`, `web/env.ts:62`) — disabled exactly where it would catch misconfiguration — and `next.config.ts:25` sets `typescript.ignoreBuildErrors: true`, so type errors in permission logic ship silently.
-**User story:** As a release engineer *(persona)*, I want validation to fail the build when config or types are wrong so that misconfiguration is caught in CI, not production.
+**Title:** [F4] Privacy notice and consent record
+**Epic:** `foundation`
+**Problem / context:** Annex H UM-005, §4.2-L, §10 (consent management). All consent-dependent collection must be preceded by the approved notice and a recorded response.
+**User story:** As a Guest User, I want to see the privacy notice and accept or decline before any personal data is collected so that my choice is respected and recorded.
 **Acceptance criteria:**
-- *Given* the three validators, *when* run in CI, *then* validation executes; it is skipped only when `SKIP_ENV_VALIDATION` is explicitly set (documented escape hatch).
-- *Given* `ignoreBuildErrors` deleted, *when* `next build` runs, *then* it fails on any TS error; all errors surfaced by the removal are fixed in this ticket.
-- *Given* a deliberately invalid env var in a CI test run, *when* the pipeline runs, *then* it fails at validation with a readable message.
-**In scope:** Replace `CI`-triggered skips with explicit `SKIP_ENV_VALIDATION` in all three files; delete the Next flag; fix surfaced type errors.
-**Out of scope:** New validation rules beyond what exists (AC-1 adds the secret rules separately).
-**Technical notes:** Risky Flow **RF3** — this is the "validation never silently skipped" leg. Coordinate with AC-1: CI must provide valid-shaped dummy values or use the escape hatch *knowingly* in build-only jobs.
-**Definition of done:** as standard.
-**Dependencies:** AC-1 (so CI sees the final validation rules once, not twice).
+- *Given* a consent-dependent action (registration first), *when* it starts, *then* the current `privacy_notice` version is shown in full before any data is collected.
+- *Given* I accept, *when* recorded, *then* a `consent_record` stores subject, notice version, timestamp, status `granted`.
+- *Given* I decline, *when* recorded, *then* a `consent_record` with status `declined` is stored, no consent-dependent data is collected, and I can continue using non-dependent features.
+- *Given* a new notice version is activated, *when* I next start a consent-dependent action, *then* I am asked again and prior consent is treated as `requires_reconsent`.
+- *Given* I am offline, *when* I accept, *then* the record is queued and synced on reconnect (guest records keyed by `device_pseudo_id`).
+**In scope:** `privacy_notice`, `consent_record`; consent service (client + `POST /pisocamp/consent`); notice screen; reusable `requireConsent(purpose)` guard.
+**Out of scope:** Withdrawal UI and data-subject actions (SA-7); survey consent use (EV-2); demographic analytics use (AN-10).
+**Technical notes:** Consent purposes enumerated: `registration`, `survey`, `demographic_analytics`. Flow **RF-3**. Notice version managed under `admin.config.manage` (SA-3). RTM ids: UM-005, §4.2-L.
+**Definition of done:** as standard, plus consent-negative test evidence.
+**Dependencies:** F1.
 
 ---
 
-**Title:** [CI-5] Production deploy secret handling — no plaintext on disk
-**Epic:** `cicd`
-**Problem / context:** F-25 (Medium). `deploy-production.yml:196-220` writes all secrets plaintext to `/tmp/deploy.env` on the runner; the `rm` is not guaranteed to run on failure; the workflow declares no `permissions:`.
-**User story:** As a release engineer *(persona)*, I want production secrets to transit without touching the runner's disk so that a failed or compromised job step cannot read them from a leftover file.
+**Title:** [F5] External, internal and deep links with store fallback
+**Epic:** `foundation`
+**Problem / context:** Annex H UI-005/006/007. Content must link to BSP web, social and other app screens; BSP web/social must deep-link into the module with store fallback when not installed.
+**User story:** As a Guest User, I want links inside Piso CAMP to open the right BSP page or app screen, and links from BSP websites to bring me into the module so that navigation is seamless.
 **Acceptance criteria:**
-- *Given* the deploy step, *when* secrets are transferred, *then* they are piped (e.g., base64 over the SSH stdin/SSM pattern) with no intermediate file on the runner.
-- *Given* any step failure mid-script, *when* the job ends, *then* no secret material remains on the runner (`set -euo pipefail` + no file to leak).
-- *Given* the workflow, *when* reviewed, *then* it declares a least-privilege `permissions:` block.
-- *Given* a normal run post-change, *when* production deploys, *then* the rolling refresh completes and concurrency semantics (never cancel in-flight production) are unchanged.
-**In scope:** Rework the secret-transfer step; `set -euo pipefail`; `permissions:` on this workflow.
-**Out of scope:** SHA-pinning and permissions on the *other* workflows (CI-6); staging equivalent (CI-2 handles its transport).
-**Technical notes:** Risky Flow **RF4**. The audit notes production Compose is already pulled from SSM at boot — extend that pattern for env rather than pushing files. Keep `${{ github.sha }}` image tagging (audit-praised, commit-traceable).
-**Definition of done:** as standard.
-**Dependencies:** CI-2 (shared SSH pattern).
+- *Given* a published content item with an external link, *when* I tap it, *then* it opens per the existing app's approved browser behaviour.
+- *Given* an internal link to another app screen, *when* I tap it, *then* the app navigates there and back navigation returns to the content.
+- *Given* the app is installed, *when* I open an approved deep link (e.g. `bsp://pisocamp/denomination/ngc-20-piso`), *then* the app opens on that screen.
+- *Given* the app is not installed, *when* I open the link, *then* it falls back to the App Store / Google Play listing or the approved BSP web page.
+- *Given* a link is tapped, *then* an analytics event `link_open` with link type is emitted.
+**In scope:** `related_link` type handling (external/internal/topic); universal links / app links configuration; route resolver; fallback page configuration.
+**Out of scope:** Link content authoring (CM-1); link analytics reports (AN-3).
+**Technical notes:** Reuse existing deep-link config if present; add route table for module screens. Emits via AN-1 SDK. RTM ids: UI-005, UI-006, UI-007.
+**Definition of done:** as standard, plus deep-link test on both stores.
+**Dependencies:** F1, CM-1, AN-1.
 
 ---
 
-**Title:** [CI-6] Supply-chain pinning batch — action SHAs, workflow permissions, cache scoping, postinstall
-**Epic:** `cicd`
-**Problem / context:** F-26 + F-27 + F-28 (Medium). No action is SHA-pinned and CI + both deploys declare no `permissions:`; buildx `restore-keys` are broad enough to restore caches across refs; `package.json:30-31` `postinstall` shells out to `pnpm dlx sherif@latest` — unpinned remote code execution on every install.
-**User story:** As a release engineer *(persona)*, I want every executable pulled by the pipeline pinned and least-privileged so that neither a tag hijack, a poisoned cache, nor a package publish can inject code.
+**Title:** [F6] Accessibility baseline and orientation state preservation
+**Epic:** `foundation`
+**Problem / context:** Annex H UI-008, §11.8, BR-006. Module screens must honour the existing app's accessibility practices and survive rotation without losing state.
+**User story:** As a Guest User who relies on font scaling or a screen reader, I want every Piso CAMP screen to be readable and operable, and to keep my place when I rotate the device, so that the module is usable for me.
 **Acceptance criteria:**
-- *Given* all five workflows, *when* reviewed, *then* every `uses:` targets a full commit SHA with a version comment, and each workflow declares a least-privilege `permissions:` block (`contents: read` baseline).
-- *Given* the buildx cache config, *when* a build runs on a different ref, *then* it cannot restore another ref's cache (content-hash keys, narrowed `restore-keys`).
-- *Given* `postinstall` cleaned, *when* `pnpm install` runs, *then* no network-fetched code executes; `sherif` is a pinned devDependency invoked by an explicit script/CI step.
-**In scope:** SHA-pin all `uses:` across the five workflows; `permissions:` blocks on all; cache-key narrowing in both deploy workflows; sherif pin + postinstall removal.
-**Out of scope:** The external reusable CI workflow ref (already pinned in CI-3).
-**Technical notes:** Do CI-3 first so this batch doesn't touch the same line. Renovate/Dependabot comment-pinning convention (`# vX.Y.Z`) keeps updates reviewable.
-**Definition of done:** as standard.
-**Dependencies:** CI-3.
+- *Given* system font scaling at the largest supported size, *when* I view any Release 1–2 screen, *then* no text is clipped and all actions remain reachable.
+- *Given* a screen reader, *when* I navigate a screen, *then* every interactive element has a label and focus order is logical.
+- *Given* a screen with state (scroll position, selected denomination, open trivia prompt), *when* I rotate the device, *then* state is preserved.
+- *Given* reduced-motion is enabled, *when* animated content plays, *then* a reduced or static alternative is used where supported.
+- *Given* an accessibility audit run per the approved test plan, *then* contrast, touch-target and non-colour-indicator checks pass.
+**In scope:** Semantics labels; scaling-safe layouts; state restoration; reduced-motion hook; accessibility test checklist automated where possible.
+**Out of scope:** Fixed-orientation exceptions for AR/recognition (AR-1, DR-1 declare their own).
+**Technical notes:** Uses Flutter `Semantics`, `MediaQuery.textScaler`, `RestorationMixin`. Establishes the checklist every later UI ticket must pass. RTM ids: UI-008, §11.8, BR-006.
+**Definition of done:** as standard, plus accessibility checklist evidence.
+**Dependencies:** F1, CE-1.
 
 ---
 
-### Epic: `authz`
+### Epic: `content-management`
 
 ---
 
-**Title:** [AZ-1] Permission-gate the support-ticket read endpoints and align the contract
-**Epic:** `authz`
-**Problem / context:** F-01 (High — the audit's #1 risk) + F-55 (Info, "decide alongside F-01"). Both ticket read handlers carry only `@Implement`; `RbacGuard` passes when no permission metadata is present, so any self-registered user can `GET /api/v1/tickets` and read every reporter's name, email, subject, and concern. The contract additionally declares `security: []`, misleading integrators.
-**User story:** As a user with `users:read` permission, I want ticket reads gated on that permission so that reporter PII is visible only to authorized staff, never to any registrant.
+**Title:** [CM-1] Create and edit a draft content item
+**Epic:** `content-management`
+**Problem / context:** Annex H CM-001, CE-003, §3.3. Module walking skeleton for content: a Content Administrator can create a draft currency item in the admin console and see it listed. Establishes the generic `content_item` model all other content types reuse.
+**User story:** As a user with `content.items.edit` permission, I want to create and edit a draft content item (series, denomination, descriptions, related links) so that BSP content can be prepared for review.
 **Acceptance criteria:**
-- *Given* a user holding `users:read`, *when* they call `listTickets` or `getTicket`, *then* the request succeeds.
-- *Given* an authenticated user **without** `users:read`, *when* they call either endpoint, *then* they receive 403 and the denial is auditable.
-- *Given* the oRPC contract, *when* regenerated/reviewed, *then* `tickets.contract.ts` no longer declares `security: []` — the spec matches the runtime session + permission requirement (F-55).
-- *Given* the regression test (F-54 pairing), *when* CI runs, *then* an e2e/integration test asserts both the permitted and the 403 paths.
-**In scope:** `@RequirePermissions("users:read")` on `tickets.controller.ts:14,21`; contract security alignment; permitted/denied test.
-**Out of scope:** A finer-grained ticket permission (AZ-5 / F-51); recording ticket authorship (AZ-3 / F-30); the mock submit form (HY-2 / F-62).
-**Technical notes:** Permission key enforced: **`users:read`** (existing; see DOMAIN-MODEL.md for the deliberate coarse-now/fine-later call). Root cause to keep in review checklists: `RbacGuard` pass-through when metadata is absent — every non-anonymous PII read must carry explicit metadata.
+- *Given* the admin console, *when* I create an item with `content_type` (banknote, coin, security_feature, advisory, link), currency series, denomination and text fields, *then* it saves with status `draft` and appears in the content list.
+- *Given* a `draft` item, *when* I edit fields, *then* changes persist and `last_editor` / `date_modified` update.
+- *Given* a missing required field for the type, *when* I save, *then* it is blocked with a validation message.
+- *Given* a user without `content.items.edit`, *when* they call create/edit, *then* 403 and a `permission_denied` audit entry.
+- *Given* any create/edit, *then* an `audit_entry` is written.
+**In scope:** `content_item`, `content_version` (draft version), `related_link`; `POST/PUT/GET /admin/pisocamp/content`; list + form screens; type-specific required-field rules.
+**Out of scope:** Assets (CM-2); workflow transitions (CM-3); preview (CM-5); end-user visibility (CE-1).
+**Technical notes:** Model per DOMAIN-MODEL §4a; status column owned here. Permission key enforced: `content.items.edit`. Reuses F2 spine. Design the version table so CM-3/CM-4 add transitions without schema rewrite. RTM ids: CM-001, CM-003 (creator fields), CE-003.
 **Definition of done:** as standard.
-**Dependencies:** none.
+**Dependencies:** F2.
 
 ---
 
-**Title:** [AZ-2] Admin-grant guard + last-Admin protection in one transaction
-**Epic:** `authz`
-**Problem / context:** F-10 (Medium — privilege tier collapse: any `users:manage` holder can grant *themselves* Admin via `rbac.controller.ts:78-85`) + F-31 (Low — no last-Admin protection on role removal, with a TOCTOU on concurrent removals in `rbac.service.ts:106-118`). Same service, same transaction — one slice.
-**User story:** As a user with `users:manage` permission, I want privileged grants checked against my own privilege tier and the system's Admin count so that role management can neither self-escalate nor lock everyone out.
+**Title:** [CM-2] Upload and attach assets to a content version
+**Epic:** `content-management`
+**Problem / context:** Annex H CM-001, CE-002 (images/textures/3D), CE-003, §3.3. Content needs images, audio, 3D models and AR animations attached with integrity checks.
+**User story:** As a user with `content.assets.upload` permission, I want to upload approved images, audio and 3D/AR files and attach them to a draft content item so that end-user experiences have their assets.
 **Acceptance criteria:**
-- *Given* a caller with `users:manage` but not Admin, *when* they attempt to grant the Admin role (to anyone, including themselves), *then* the grant is rejected with 403 and the attempt is audited.
-- *Given* a caller who holds Admin, *when* they grant Admin, *then* it succeeds and is audited.
-- *Given* a removal that would leave zero Admin holders, *when* attempted, *then* it is rejected with 409, with the count taken **inside the same transaction** as the removal.
-- *Given* two concurrent removals of the last two Admins, *when* both run, *then* at most one succeeds (TOCTOU closed).
-- *Given* the regression tests, *when* CI runs, *then* self-escalation and last-Admin cases are covered.
-**In scope:** Tier check on Admin grants; in-transaction Admin count guard; audited denials; concurrency test.
-**Out of scope:** The audit-trail table itself (AZ-4 — this ticket calls its helper once it exists, or logs via Pino until then); idempotency on RBAC writes (AB-3).
-**Technical notes:** Risky Flow **RF5** — the state machine in DOMAIN-MODEL.md is normative: both guards inside `BEGIN…COMMIT`, cache invalidation after commit. Permission key enforced: **`users:manage`** (with the Admin-tier refinement). Use `SELECT … FOR UPDATE`/serializable count for the last-Admin check.
+- *Given* a `draft` item, *when* I upload a file of an allowed type (png/jpg/webp, mp3/aac, glb/gltf, approved AR formats) within size limits, *then* an `asset` row stores checksum, mime type, size, version and it is attached to the draft version.
+- *Given* a disallowed type or oversize file, *when* uploaded, *then* it is rejected with a message.
+- *Given* an asset referenced by a published version, *when* deletion is attempted, *then* it is blocked.
+- *Given* a user without the permission, *when* uploading, *then* 403 + audit.
+- *Given* an upload, *then* it is audited.
+**In scope:** `asset`, `version_asset`; object storage integration per existing backend; `POST /admin/pisocamp/assets`; attach/detach UI with role (obverse, reverse, edge, texture, audio, animation).
+**Out of scope:** Bundle delivery of assets (CE-1/AR-3); 3D rendering (CE-2).
+**Technical notes:** Server-side checksum (sha256) used later by bundle manifest (RF-6). Permission key: `content.assets.upload`. RTM ids: CM-001, CM-007 (asset references remain valid).
 **Definition of done:** as standard.
-**Dependencies:** AZ-4 preferred first (write real audit entries); hard dependency: none.
+**Dependencies:** CM-1.
 
 ---
 
-**Title:** [AZ-3] Ownership scoping on todo mutations + ticket authorship
-**Epic:** `authz`
-**Problem / context:** F-11 (Medium — `todos.service.ts:44-63` filters update/delete on `id` only: any authenticated user can mutate any todo) + F-30 (Low — `ticket.submit` never records `authorId` despite requiring auth, so tickets are unattributable). Both are the "ownership thread" — the reference pattern later resources copy.
-**User story:** As an authenticated user *(persona — ownership is identity-scoped, not permission-scoped: any signed-in user owns their own rows)*, I want my todos mutable only by me and my submitted tickets attributed to me so that identity, not mere authentication, bounds writes.
+**Title:** [CM-3] Submit → approve/reject → publish workflow
+**Epic:** `content-management`
+**Problem / context:** Annex H CM-002/003/006/007, §3.3–3.4, BR-002. The core governance rule: unapproved content is never visible. First slice of the shared workflow engine reused by trivia, surveys, AR, advisories.
+**User story:** As a user with `content.items.approve` and `content.items.publish` permission, I want to review submitted content, approve or reject it with comments, and publish approved content so that only BSP-approved content reaches the public.
 **Acceptance criteria:**
-- *Given* a todo owned by user A, *when* user B attempts update or delete, *then* the query matches zero rows and the API returns 404/403 — data unchanged.
-- *Given* a todo owned by A, *when* A updates or deletes it, *then* it succeeds.
-- *Given* a ticket submission by an authenticated user, *when* it persists, *then* `authorId = session.user.id` is stored (additive migration).
-- *Given* the ownership regression tests (F-54 pairing), *when* CI runs, *then* cross-user mutation attempts are covered for todos.
-**In scope:** `eq(todos.authorId, session.user.id)` on update/delete; additive `tickets.authorId` migration + threading; tests.
-**Out of scope:** Owner-scoped ticket *reads* for reporters (future feature — reads stay staff-gated per AZ-1); todo idempotency (already applied; AB-3 hardens the model).
-**Technical notes:** Migration is additive (nullable/backfill-later `authorId`). This ticket's Drizzle `where` pattern is the template's canonical ownership check — reference it from HY-1's test docs.
-**Definition of done:** as standard.
-**Dependencies:** none.
+- *Given* a `draft` item, *when* a user with `content.items.submit` submits it, *then* status becomes `submitted_for_review`, a version snapshot is created and the item appears in the review queue.
+- *Given* a submitted item, *when* an approver approves with comments, *then* status becomes `approved`, approver and approval date are recorded; when rejected, status returns to `draft` with rejection comments.
+- *Given* an `approved` item, *when* an approver publishes, *then* status becomes `published`, the version is marked `current_published`, publication date recorded, and a bundle rebuild is triggered.
+- *Given* a user holding only `content.items.edit`/`submit`, *when* they call approve or publish, *then* 403 + audit (a Content Administrator cannot publish).
+- *Given* any transition, *then* an `audit_entry` with actor, from-state, to-state and comments is written.
+- *Given* a `draft` or `submitted` item, *when* the bundle is built, *then* it is not included.
+**In scope:** Transition service with allowed-transition table; `POST /admin/pisocamp/content/{id}/{submit|approve|reject|publish}`; review queue screen; comments.
+**Out of scope:** Assets (CM-2); restore (CM-4); preview (CM-5); unpublish/schedule (CM-6); bundle build itself (CE-1 — this ticket only enqueues the trigger).
+**Technical notes:** State machine DOMAIN-MODEL §4a. Permission keys enforced: `content.items.submit`, `content.items.approve`, `content.items.publish`. Flow **RF-1** (publish ordering). Transition service is the single entry point; other epics must call it. RTM ids: CM-002, CM-003, CM-006, CM-007, BR-002.
+**Definition of done:** as standard, plus negative test that a submitted item never appears in a bundle.
+**Dependencies:** CM-1.
 
 ---
 
-**Title:** [AZ-4] Append-only RBAC audit trail, written in-transaction
-**Epic:** `authz`
-**Problem / context:** F-17 (Medium). RBAC mutations (`rbac-admin.service.ts:71-197`) leave no audit trail, though the template's own docs specify one. Grants and removals of privilege must be attributable and tamper-evident.
-**User story:** As a user with `users:manage` permission, I want every role mutation recorded immutably with actor, target, and old→new state so that privilege changes are always attributable.
+**Title:** [CM-4] Version history and restore a prior approved version
+**Epic:** `content-management`
+**Problem / context:** Annex H CM-005, §3.4. Approvers must be able to see versions and roll back to a previously approved one.
+**User story:** As a user with `content.items.restore` permission, I want to view an item's version history and restore a prior approved version so that a bad publication can be reverted quickly.
 **Acceptance criteria:**
-- *Given* any RBAC mutation (grant, removal, role create/update), *when* it commits, *then* an `audit_log` row (actor, action, target, old→new, timestamp) is written **in the same transaction** — a failed insert rolls back the mutation.
-- *Given* a denied privileged attempt (e.g., AZ-2's self-escalation), *when* rejected, *then* a denial entry is recorded.
-- *Given* the `audit_log` table, *when* inspected, *then* the application exposes no UPDATE or DELETE path to it.
-- *Given* an admin with `users:read`, *when* they view the audit list endpoint/screen, *then* entries are readable in reverse-chronological order.
-**In scope:** `audit_log` schema (additive migration) + write-helper; hooks in all RBAC mutation paths; minimal read endpoint/list view; in-transaction test.
-**Out of scope:** Auditing non-RBAC domains (future consumers call the helper — see DOMAIN-MODEL.md ownership rule); log shipping/SIEM.
-**Technical notes:** Cross-epic ownership: `authz` owns schema + helper; **no other epic inserts directly**. Read endpoint carries `@RequirePermissions("users:read")`. Keep the helper signature generic (domain, action, target) so auth events can adopt it later without schema change.
+- *Given* an item with multiple versions, *when* I open history, *then* each version shows number, creator, date, approver, status and a field-level diff to the current version.
+- *Given* a prior `approved`/`published` version, *when* I restore it, *then* a new version is created as a copy in state `approved` and can be published via CM-3 (published state is not bypassed).
+- *Given* a user without the permission, *when* restoring, *then* 403 + audit.
+- *Given* a restore, *then* it is audited with source version id.
+**In scope:** History screen; diff; `POST /admin/pisocamp/content/{id}/versions/{v}/restore`.
+**Out of scope:** Asset re-upload (assets are referenced by version, so restore reuses them).
+**Technical notes:** Restore goes through CM-3 transition service. Permission key: `content.items.restore`. Flow **RF-1**. RTM ids: CM-005, CM-007 (rollback works).
 **Definition of done:** as standard.
-**Dependencies:** none.
+**Dependencies:** CM-3.
 
 ---
 
-**Title:** [AZ-5] Finer-grained directory-PII permission
-**Epic:** `authz`
-**Problem / context:** F-51 (Low). `users:read` yields the complete email directory (`rbac.schema.ts:63-68`); after AZ-1 it also gates ticket reads. Support staff who triage tickets shouldn't automatically hold the full directory.
-**User story:** As a user with `users:read` permission, I want directory PII split from operational reads so that granting ticket triage no longer grants the full email directory.
+**Title:** [CM-5] Preview content before publication
+**Epic:** `content-management`
+**Problem / context:** Annex H CM-004. Authorised users must see how a draft/approved version renders before it goes live.
+**User story:** As a user with `content.items.preview` permission, I want to preview a content version as end users will see it so that errors are caught before publication.
 **Acceptance criteria:**
-- *Given* a new finer key (e.g., `users:read-directory`) in the permission catalog, *when* the directory endpoint is called without it, *then* the response omits emails or returns 403 (design call documented in the PR).
-- *Given* existing Admin roles, *when* the seed/migration runs, *then* they receive the new key — no admin loses access.
-- *Given* ticket triage via `users:read` alone, *when* exercised, *then* it still works (AZ-1 unaffected).
-**In scope:** New permission key + seed grant; directory endpoint gating/field-level trim; contract update.
-**Out of scope:** Re-keying ticket reads (they stay on `users:read`).
-**Technical notes:** Permission keys enforced: **`users:read`**, **`users:read-directory`** (new — add to DOMAIN-MODEL.md table on merge). Coordinate with WC-1: the `["rbac","users"]` query shape may change; cache allowlist already excludes it.
+- *Given* a draft or approved version, *when* I open preview, *then* the admin console renders it with the module's layout, images and audio player.
+- *Given* a preview, *when* generated, *then* no `published` flag changes and the version is not added to any bundle.
+- *Given* a user without the permission, *when* previewing, *then* 403 + audit.
+- *Given* the mobile app in a BSP-approved "preview build", *when* an admin scans a preview code, *then* the app renders that version once without caching it as published.
+**In scope:** Web preview renderer; signed short-lived preview token; mobile preview mode (internal builds only).
+**Out of scope:** Publishing (CM-3).
+**Technical notes:** Preview endpoint `GET /admin/pisocamp/content/{id}/versions/{v}/preview`. Permission key: `content.items.preview`. RTM id: CM-004.
 **Definition of done:** as standard.
-**Dependencies:** AZ-1, AZ-4 (audit the new denials).
+**Dependencies:** CM-2, CM-3.
 
 ---
 
-### Epic: `auth-config`
-
----
-
-**Title:** [AC-1] Non-functional secret placeholder + strength validation
-**Epic:** `auth-config`
-**Problem / context:** F-03 (High — audit risk #2). `.env.example:21` ships a **working** `BETTER_AUTH_SECRET`; both validators (`auth/config.ts:26`, `env.config.ts:38`) check presence only. An operator who follows setup and misses one line enables session forgery for any account, including Admin.
-**User story:** As a platform operator *(persona — boot-time config, no runtime permission)*, I want the app to refuse to boot with a missing, short, or template-default secret so that session forgery via a known secret is impossible by construction.
+**Title:** [CM-6] Unpublish, deactivate, archive and scheduled publication
+**Epic:** `content-management`
+**Problem / context:** Annex H CM-002 (unpublished/deactivated/archived states), §3.3 (deactivate obsolete content), §3.4 (schedule publication).
+**User story:** As a user with `content.items.publish` permission, I want to unpublish, deactivate, archive or schedule content so that obsolete content leaves the app and new content goes live at the approved time.
 **Acceptance criteria:**
-- *Given* the example value or any secret starting with the known default prefix, *when* the app boots, *then* it exits non-zero with a message pointing at `openssl rand -base64 32`.
-- *Given* a secret shorter than 32 characters, *when* the app boots, *then* validation rejects it in **both** schemas (`packages/auth` and backend env config).
-- *Given* a 32+ char random secret, *when* the app boots, *then* startup succeeds.
-- *Given* `.env.example`, *when* read, *then* line 21 is a non-functional placeholder with the generation command in a comment.
-**In scope:** `.min(32)` + known-default `.refine` in both validators; placeholder in `.env.example`; boot tests for both branches.
-**Out of scope:** Secret rotation tooling; other example-file credentials (HY-2 / F-41).
-**Technical notes:** Risky Flow **RF3**. README already documents the generation command at :415 — link it in the error message. Keep both validators in lockstep (they guard different processes).
+- *Given* a `published` item, *when* I unpublish it, *then* status becomes `unpublished`, it is removed at the next bundle build, and the change is audited.
+- *Given* an `unpublished` or `published` item, *when* I deactivate it, *then* status becomes `deactivated` and it is never presented to end users (including trivia selection).
+- *Given* a `deactivated` item, *when* archived, *then* it is read-only and hidden from default lists but retained per BR-001.
+- *Given* an `approved` item with `publish_at`, *when* the time passes, *then* a scheduled job publishes it through the transition service.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Transitions added to CM-3's table; scheduler job; `publish_at` field and UI.
+**Out of scope:** Bundle build (CE-1 handles removal).
+**Technical notes:** Permission key: `content.items.publish`. Scheduler idempotent (re-run safe). RTM ids: CM-002, CM-007 (deactivated not displayed).
 **Definition of done:** as standard.
-**Dependencies:** none.
+**Dependencies:** CM-3, CE-1.
 
 ---
 
-**Title:** [AC-2] Production seed guard + randomized seed credentials
-**Epic:** `auth-config`
-**Problem / context:** F-06 (High). `packages/db/src/seed.ts` provisions a pre-verified Admin with `password123`, prints it, resets it on every re-run, and has no environment guard — a known-credential Admin one command away from any database, including production.
-**User story:** As a platform operator *(persona)*, I want seeding to refuse production and never use a fixed password so that no environment can end up with a publicly known Admin credential.
+**Title:** [CM-7] Content audit history view
+**Epic:** `content-management`
+**Problem / context:** Annex H CM-003, §3.4 (complete content audit history).
+**User story:** As a user with `content.audit.view` permission, I want to see the full change and approval history of a content item so that governance is verifiable.
 **Acceptance criteria:**
-- *Given* `NODE_ENV === "production"` (or a production-shaped `DATABASE_URL`), *when* the seed runs, *then* it refuses with a non-zero exit before any write.
-- *Given* a non-production run, *when* the Admin is created, *then* its password comes from `SEED_ADMIN_PASSWORD` or `randomBytes`, printed **only** when generated.
-- *Given* a re-run against a database where the Admin exists, *when* seeding, *then* the existing password is **not** reset unless an explicit `--force-password` flag is passed.
-- *Given* the guard test, *when* CI runs, *then* the production-refusal branch is covered.
-**In scope:** Env guard at top of `seed.ts`; env/random password sourcing; no-reset-by-default; test.
-**Out of scope:** Seed data content changes; the `.env.example` DB credential (HY-2 / F-41).
-**Technical notes:** Risky Flow **RF3**. Audit confidence was Medium only because reaching production requires operator action — the guard removes that dependence on operator perfection.
+- *Given* an item, *when* I open its audit tab, *then* I see every workflow transition and edit with actor, timestamp, from/to state and comments.
+- *Given* filters (actor, action, date range), *when* applied, *then* results narrow.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Read view over `audit_entry` filtered by target; filters; pagination.
+**Out of scope:** System-wide audit viewer (SA-4).
+**Technical notes:** Permission key: `content.audit.view`. RTM id: CM-003, CM-007 (audit records complete).
 **Definition of done:** as standard.
-**Dependencies:** none.
+**Dependencies:** CM-3.
 
 ---
 
-**Title:** [AC-3] Pin session, cookie & verification policy explicitly
-**Epic:** `auth-config`
-**Problem / context:** F-56 + F-58 + F-59 + F-33 (Info/Low, all in `packages/auth/src/config.ts`). Session `expiresIn`/rotation/revocation ride unpinned library defaults; email verification is not required and account-linking is unconfigured; the SameSite/CSRF posture is unresolvable from tracked files (this gates F-21's true severity); and *any* value for `BETTER_AUTH_COOKIE_DOMAIN` silently enables cross-subdomain cookies. Business decision recorded in PRD: **verification required.**
-**User story:** As a platform operator *(persona)*, I want every session and cookie attribute stated explicitly in config so that the security posture is readable from the repo and survives library upgrades.
+### Epic: `currency-education`
+
+---
+
+**Title:** [CE-1] Published banknote/coin information delivered offline via content bundle
+**Epic:** `currency-education` · **Also touches:** `content-management`
+**Problem / context:** Annex H CE-001/002 (descriptions), UM-001 (offline), §2 (offline content storage and secure sync). First consumer of the content bundle sync service; closes the Release 1 loop from admin publish to end-user reading offline.
+**User story:** As a Guest User, I want to browse published banknote and coin information, including security-feature descriptions, even without internet so that I can learn anywhere.
 **Acceptance criteria:**
-- *Given* the Better Auth config, *when* reviewed, *then* `expiresIn`, rotation/refresh, SameSite, `Secure`, `HttpOnly`, and cookie `path` are explicitly set with a comment stating the chosen posture (resolving F-59 — answer this **first**, per the audit, since it gates F-21).
-- *Given* a new registration, *when* the user has not verified their email, *then* sign-in is refused until verification completes; account-linking behavior is explicitly configured.
-- *Given* `BETTER_AUTH_COOKIE_DOMAIN` set, *when* validated, *then* only a well-formed hostname is accepted; unset by default (no cross-subdomain scope unless deliberate).
-- *Given* the pinned config, *when* the web and mobile clients sign in/out, *then* flows still pass e2e (mobile relies on cookies — coordinate with MB-1).
-**In scope:** Explicit session/cookie config; require-verification + account-linking; cookie-domain validation; e2e smoke on both clients.
-**Out of scope:** CSRF *middleware* additions if SameSite resolution shows a gap (file a follow-up if so); reset-path errors (AC-4).
-**Technical notes:** Findings F-58/F-59 held at Low confidence because library internals were unreadable — verify actual cookie attributes in an integration test (inspect `Set-Cookie`), don't trust config alone. ED-1's `frame-ancestors` and this ticket's SameSite jointly close the F-21 clickjacking path.
-**Definition of done:** as standard.
-**Dependencies:** AC-1.
+- *Given* items are `published`, *when* the bundle job runs, *then* a new `bundle` with incremented version, manifest and checksums containing only published versions is produced.
+- *Given* the app is online, *when* the module opens, *then* it checks the manifest, downloads changed entries to a staging directory, verifies checksums and atomically swaps to the new bundle.
+- *Given* a download is interrupted, *when* connectivity returns, *then* download resumes and the previously live bundle remains usable meanwhile.
+- *Given* airplane mode, *when* I open Banknotes or Coins, *then* the last synced content lists series and denominations and shows each item's approved descriptions and images.
+- *Given* an item was unpublished, *when* the next bundle syncs, *then* it no longer appears.
+- *Given* the module opens, *then* a `content_view` analytics event is emitted per item opened (via AN-1 when present).
+**In scope:** Bundle builder job; `GET /pisocamp/bundle/manifest`, asset download; client bundle store; Currency Education list/detail screens for banknotes, coins, security features; first-run packaged seed bundle.
+**Out of scope:** 3D (CE-2); zoom/pan (CE-3); haptic/tilt (CE-4/5); on-demand large assets (AR-3).
+**Technical notes:** Flows **RF-1** (build only from published) and **RF-6** (interrupted download). Bundle version monotonic; manifest signed. Local store under app documents dir; large 3D/AR assets flagged `on_demand`. RTM ids: CE-001, CE-002 (descriptions), UM-001, UM-006 (airplane mode).
+**Definition of done:** as standard, plus interrupted-download test evidence.
+**Dependencies:** F1, CM-3.
 
 ---
 
-**Title:** [AC-4] Sanitize the password-reset error path
-**Epic:** `auth-config`
-**Problem / context:** F-18 (Medium). The reset path (`config.ts:150-162`) lacks the try/catch + `APIError` sanitizing the verification path (`:127-144`) already has — raw SMTP errors disclose infrastructure detail and the differing responses form an account-enumeration oracle (`forgot-password.hooks.ts:26-28`).
-**User story:** As a platform operator *(persona)*, I want the reset endpoint to return one uniform response regardless of account existence or mail failure so that it can't be used to enumerate accounts or probe SMTP.
+**Title:** [CE-2] Interactive 3D coin viewer
+**Epic:** `currency-education`
+**Problem / context:** Annex H CE-002 — rotate, obverse/reverse/edge, inspect angles, zoom in/out, reset — for all 14 mandatory coins (NGC 7, BSP Coin Series 7).
+**User story:** As a Guest User, I want to rotate and zoom a 3D model of each coin so that I can inspect its design from every angle.
 **Acceptance criteria:**
-- *Given* a reset request for an existing account, a non-existent account, or an SMTP failure, *when* the endpoint responds, *then* the status and body are identical in all three cases (generic "if the account exists…" response).
-- *Given* an SMTP failure, *when* it occurs, *then* the real error is logged server-side through Pino (post-LG-1 redaction) — never returned.
-- *Given* the web hook, *when* it renders the outcome, *then* it shows only the generic message.
-**In scope:** Mirror the verification path's try/catch + `APIError` onto reset; align the web hook; enumeration test asserting response equality.
-**Out of scope:** SMTP fail-closed boot behavior (LG-1); mail templates.
-**Technical notes:** Test with a deliberately broken SMTP config to assert both the generic response and the server-side log.
-**Definition of done:** as standard.
-**Dependencies:** LG-1 (so the server-side log lands redacted).
+- *Given* a coin item with an attached approved 3D model, *when* I open the 3D view, *then* the model renders and I can rotate it freely by drag.
+- *Given* the viewer, *when* I tap Obverse, Reverse or Edge, *then* the camera animates to that face.
+- *Given* the viewer, *when* I pinch or use +/−, *then* the model zooms within limits; Reset returns the default view.
+- *Given* the model is packaged/downloaded, *when* offline, *then* the viewer works.
+- *Given* a device that cannot render the model, *when* opened, *then* a clear notice and the static images are shown.
+- *Given* every mandatory coin, *then* each has a working model (checked by an automated coverage test against the bundle).
+**In scope:** 3D viewer widget (glb/gltf); face presets; zoom/reset; coverage test; `feature_use{feature:3d_coin}` event.
+**Out of scope:** AR (AR-1); banknote 3D (not required).
+**Technical notes:** Renderer per existing app approvals (e.g. `model_viewer_plus` / Flutter 3D plugin); reduced-motion respected (F6). RTM ids: CE-002, CE-007.
+**Definition of done:** as standard, plus 14-coin coverage evidence.
+**Dependencies:** CE-1, CM-2.
 
 ---
 
-**Title:** [AC-5] Auth config hygiene batch
-**Epic:** `auth-config`
-**Problem / context:** F-34 + F-35 + F-57 + F-32 (Low), all in `packages/auth/src/config.ts` (+ `app.config.ts:29`). The openAPI `/reference` plugin registers unconditionally; the Google provider always registers with `as string` laundering `undefined`; the auth-path bypass matches on `startsWith` so any `/api/v1/auth*` path is swallowed; origin allowlists split without `.trim()/.filter(Boolean)`.
-**User story:** As a platform operator *(persona)*, I want auth wiring to be conditional, boundary-exact, and whitespace-safe so that no debug surface or malformed config widens the auth perimeter.
+**Title:** [CE-3] Zoom and pan for banknote and coin design elements
+**Epic:** `currency-education`
+**Problem / context:** Annex H CE-006, BR-012 — detailed inspection of first-level security features only; second-level features excluded.
+**User story:** As a Guest User, I want to zoom and pan high-resolution images of banknote and coin design elements so that I can see first-level security features clearly.
 **Acceptance criteria:**
-- *Given* the docs flag unset, *when* the app boots, *then* `/reference` is not registered; set, it is.
-- *Given* Google credentials with either var missing, *when* the app boots, *then* the provider is not registered and no `as string` cast remains.
-- *Given* a request to `/api/v1/authx/...`, *when* the bypass match runs, *then* it does **not** match (prefix-boundary: `/api/v1/auth/` or exact).
-- *Given* an origin list with spaces/empty entries, *when* parsed, *then* entries are trimmed and empties dropped in both files.
-**In scope:** All four fixes + unit tests for the path-boundary and origin parsing.
-**Out of scope:** Session policy (AC-3, already merged by now).
-**Technical notes:** One file dominates — one PR reviews coherently. The `startsWith` fix touches `auth.config.ts:25-35` in the backend.
+- *Given* a banknote or coin item, *when* I open an image, *then* I can pinch-zoom and pan without pixelation at the approved zoom limit.
+- *Given* security-feature hotspots, *when* I tap one, *then* its approved description appears; only items tagged `feature_level = first` are shown.
+- *Given* a content item tagged `feature_level = second`, *when* the bundle is built, *then* it is excluded and a build warning is logged.
+- *Given* offline, *then* zoom/pan works on downloaded images.
+**In scope:** Zoomable image widget; hotspot overlay; `feature_level` field on security features (CM-1 extension); build-time guard.
+**Out of scope:** Tilt effects (CE-5).
+**Technical notes:** `InteractiveViewer`; images delivered as tiled or high-res in bundle. RTM ids: CE-006, BR-012, CE-007 (no second-level disclosure).
 **Definition of done:** as standard.
-**Dependencies:** AC-3.
+**Dependencies:** CE-1.
 
 ---
 
-### Epic: `abuse`
-
----
-
-**Title:** [AB-1] Trustworthy client IP for rate limiting
-**Epic:** `abuse`
-**Problem / context:** F-02 (High — audit risk #3). `throttler-proxy.guard.ts:15` keys the throttler on the **leftmost** `X-Forwarded-For` entry — fully client-controlled — and `nginx.conf:28,39` *appends* to XFF rather than overwriting. One header defeats the only abuse control on mutation endpoints, amplifying four other findings.
-**User story:** As a platform operator *(persona — infrastructure control; no user-facing permission)*, I want the throttle key derived only from the trusted proxy hop so that a client cannot mint fresh rate-limit buckets per request.
+**Title:** [CE-4] Haptic simulation of tactile banknote features
+**Epic:** `currency-education`
+**Problem / context:** Annex H CE-004 — simulate embossed prints, tactile marks and tactile dots for FPP (4), eNGC (5), NGC (6) notes using device haptics, with a visual alternative and clear "simulation" labelling.
+**User story:** As a Guest User, I want to feel a haptic simulation of a banknote's tactile features when I touch them on screen so that I learn what to feel for on a real note.
 **Acceptance criteria:**
-- *Given* Nginx config updated, *when* a request passes through, *then* `X-Forwarded-For` is **set** to `$remote_addr` (overwrite), not appended.
-- *Given* the guard updated, *when* it derives the key, *then* it uses the rightmost-untrusted entry of `req.ips` under an Express `trust proxy` setting matching exactly one hop.
-- *Given* a request with a forged `X-Forwarded-For: 1.2.3.4, 5.6.7.8`, *when* rate limiting applies, *then* the key is the real peer address — repeated forged requests exhaust **one** bucket.
-- *Given* the regression test, *when* CI runs, *then* the forged-header case is covered.
-**In scope:** Guard fix; Nginx directive at both locations; `trust proxy` alignment; forged-header test.
-**Out of scope:** Shared throttle storage (AB-2 — re-evaluate F-38 immediately after this lands, per the audit); request limits (AB-4).
-**Technical notes:** Risky Flow **RF2** — the trust chain in DOMAIN-MODEL.md is normative. Beware the deploy topology note (F-60): if any environment fronts the backend without Nginx, `trust proxy` must match that topology; document the assumption in the config comment.
-**Definition of done:** as standard.
-**Dependencies:** none.
+- *Given* a banknote with an approved tactile-feature map, *when* I touch a mapped region, *then* the device plays the mapped haptic pattern and the region highlights.
+- *Given* the feature opens, *then* a notice states it is a simulation.
+- *Given* a device without haptics or with vibration disabled in accessibility settings, *when* I touch a region, *then* a visual-only alternative plays.
+- *Given* continuous touch, *then* vibration is pattern-limited (no continuous vibration beyond the approved pattern length).
+- *Given* every mandatory banknote, *then* each has a tactile map (coverage test).
+**In scope:** `tactile_map` JSON on banknote content version (regions → pattern id); haptic engine; accessibility fallback; coverage test; `feature_use{feature:haptic}` event.
+**Out of scope:** Tilt (CE-5).
+**Technical notes:** `HapticFeedback` / platform haptics; pattern catalog approved by BSP stored in config. RTM ids: CE-004, CE-007.
+**Definition of done:** as standard, plus device-matrix haptic test evidence.
+**Dependencies:** CE-3.
 
 ---
 
-**Title:** [AB-2] Redis-backed throttler and RBAC cache
-**Epic:** `abuse`
-**Problem / context:** F-38 (Low on paper, promoted per PRD decision 3). `app.module.ts:40-41` and `rbac-cache.service.ts:14-18` keep the throttler and RBAC permission cache in process memory; in the ASG topology, limits multiply by instance count and permission revocation only takes effect per-instance. The audit says to re-evaluate immediately after F-02 — F-02 was masking it.
-**User story:** As a platform operator *(persona)*, I want throttle counters and permission cache shared across instances so that rate limits hold cluster-wide and a revoked permission dies everywhere at once.
+**Title:** [CE-5] Tilt simulation of dynamic security features
+**Epic:** `currency-education`
+**Problem / context:** Annex H CE-005 — motion-sensor-driven simulation of dynamic features for the same 15 banknotes, with an on-screen alternative and "educational simulation" labelling.
+**User story:** As a Guest User, I want to tilt my phone and see a banknote's dynamic security feature change as it would in real life so that I can recognise it.
 **Acceptance criteria:**
-- *Given* Redis configured, *when* two app instances receive requests from one client, *then* they decrement a **single** shared throttle bucket.
-- *Given* a role removed on instance A, *when* the affected user hits instance B, *then* the stale permission is not honored beyond the cache TTL / invalidation event.
-- *Given* Redis unavailable, *when* requests arrive, *then* the app degrades along a documented, deliberate path (fail-closed for RBAC cache → recompute from DB; throttler behavior stated in config comment) rather than crashing.
-- *Given* Compose/deploy config, *when* provisioned, *then* Redis is declared with auth and no public port binding.
-**In scope:** Redis service in deploy config; `@nestjs/throttler` Redis storage; RBAC cache moved to Redis with invalidation on RBAC mutations (hook AZ-2/AZ-4 paths); degradation tests.
-**Out of scope:** Any other Redis use (sessions stay in Better Auth's store); idempotency persistence (AB-3 — stays in Postgres).
-**Technical notes:** Risky Flow **RF2** tail. New approved infra dependency — update PRD/README setup docs. Invalidation call sits after the AZ-2 transaction commit (see RF5 diagram).
+- *Given* a banknote with an approved tilt effect asset, *when* I tilt the device, *then* the effect responds to orientation direction within the approved range.
+- *Given* the feature opens, *then* it is labelled an educational simulation.
+- *Given* no gyroscope/accelerometer or reduced-motion enabled, *when* I open it, *then* an on-screen slider drives the same effect.
+- *Given* offline, *then* the simulation works from bundle assets.
+- *Given* every mandatory banknote, *then* each has a tilt effect (coverage test).
+**In scope:** Sensor listener; effect renderer (shader/sprite sequence per approved asset); slider fallback; coverage test; `feature_use{feature:tilt}` event.
+**Out of scope:** AR (AR-1).
+**Technical notes:** `sensors_plus`; sample rate throttled for battery (AN-025). RTM ids: CE-005, CE-007.
 **Definition of done:** as standard.
-**Dependencies:** AB-1; AZ-2 (invalidation hook point).
+**Dependencies:** CE-3.
+
+### Epic: `gamification`
 
 ---
 
-**Title:** [AB-3] Idempotency key model hardening + consistent application
-**Epic:** `abuse`
-**Problem / context:** F-13 (Medium) + F-39 (Low). Idempotency keys (`schema.ts:122-127`, `idempotency.interceptor.ts`) are **globally** unique — user A can squat user B's key — plus unvalidated, unbounded in length, and never expired. And RBAC writes don't apply the interceptor at all, unlike every todo write.
-**User story:** As an authenticated user *(persona — idempotency is identity-scoped by design)*, I want my idempotency keys private to me, bounded, and expiring so that replays are safe and no one can poison my keyspace.
+**Title:** [GM-1] Manage trivia questions through the content workflow
+**Epic:** `gamification` · **Also touches:** `content-management`
+**Problem / context:** Annex H GM-003, CE-003, BR-002. Questions are content: created, submitted, approved and published through CM-3, with question-specific fields.
+**User story:** As a user with `content.items.edit` permission, I want to create and edit trivia questions with choices, correct answer, explanation, related topic, category and difficulty so that an approved question pool exists.
 **Acceptance criteria:**
-- *Given* the migrated schema, *when* users A and B send the same key, *then* both succeed independently (composite `(authorId, key)` PK).
-- *Given* a key longer than the cap (e.g., 128 chars) or malformed, *when* submitted, *then* the request is rejected with 400 before any write.
-- *Given* a stored key past its TTL, *when* cleanup runs, *then* the row is removed; a replay after expiry executes fresh.
-- *Given* RBAC mutation endpoints, *when* called with an idempotency key, *then* the interceptor applies exactly as on todo writes.
-- *Given* the idempotency regression tests (F-54 pairing), *when* CI runs, *then* cross-user squatting and replay-after-expiry are covered.
-**In scope:** Composite-PK migration; length/format validation; `expiresAt` + scheduled cleanup; interceptor on RBAC controllers; tests.
-**Out of scope:** Paused-mutation replay on the web client (WC-3 — the client-side sibling of this server-side model).
-**Technical notes:** Migration must handle existing rows (backfill `authorId` where derivable, else truncate the table — it's a cache). Cleanup job can share the scheduler HY-2 adds for `verifications` (F-40).
+- *Given* the admin console, *when* I create a question (`content_type = trivia_question`) with 2–6 choices, exactly one correct, explanation, optional related-topic link, category, difficulty, *then* it saves as `draft`.
+- *Given* a question, *when* I toggle `active`, *then* inactive questions are excluded from selection even if published.
+- *Given* a draft question, *when* submitted/approved/published, *then* it follows CM-3 exactly and only `published` + `active` questions enter the bundle.
+- *Given* a user without `content.items.edit`, *then* 403 + audit.
+**In scope:** `trivia_question_detail` child table keyed by `content_version_id`; question form; list with category/difficulty filters.
+**Out of scope:** Presentation (GM-2); tracking (GM-3).
+**Technical notes:** Uses CM-3 transition service — no separate workflow. Permission keys: `content.items.edit` (+ CM-3 keys for workflow). RTM ids: GM-003, GM-008 (only approved published; deactivated not presented).
 **Definition of done:** as standard.
-**Dependencies:** AZ-3 (establishes the `authorId` conventions this reuses).
+**Dependencies:** CM-3, CE-1.
 
 ---
 
-**Title:** [AB-4] Request body limits and proxy timeouts
-**Epic:** `abuse`
-**Problem / context:** F-14 (Medium). No explicit body-size limit on either parser (`app.config.ts:15-16`) and no `client_max_body_size` or proxy timeouts in Nginx — memory-exhaustion and slow-request exposure on every mutation endpoint.
-**User story:** As a platform operator *(persona)*, I want request size and duration bounded at both layers so that oversized or dawdling requests can't exhaust the backend.
+**Title:** [GM-2] Random trivia prompt with skip, correct and incorrect behaviour
+**Epic:** `gamification`
+**Problem / context:** Annex H GM-001/002/005/006, BR-003/004/005. Random selection from the active approved pool, skippable, five-second auto-close on correct, explanation + topic link on incorrect.
+**User story:** As a Guest User, I want to be offered random trivia questions I can answer or skip so that learning is engaging without being forced.
 **Acceptance criteria:**
-- *Given* both parsers configured with `{ limit: "100kb" }`, *when* a larger JSON body arrives, *then* the app rejects it with 413.
-- *Given* `client_max_body_size 1m;` in Nginx, *when* an oversized request arrives, *then* Nginx rejects it before it reaches the app.
-- *Given* proxy read/send/connect timeouts set, *when* an upstream stalls, *then* Nginx terminates the request within the configured window.
-- *Given* the largest legitimate payload in the app (audit as part of this ticket), *when* submitted, *then* it passes — limits don't break real flows.
-**In scope:** Parser limits; Nginx size + timeout directives; a boundary test.
-**Out of scope:** Per-field schema caps (F-29 → HY-2); TLS/upstreams (ED-2).
-**Technical notes:** Coordinate with ED-2 — same `nginx.conf`, land this first or rebase. Note the 100kb/1m gap is deliberate headroom for headers/multibyte.
+- *Given* an active published pool in the bundle, *when* a prompt trigger fires (module home visit, topic completion), *then* a question is chosen at random excluding any shown within the configured repeat window (default 7 days) when enough questions exist.
+- *Given* a prompt, *when* I dismiss or skip, *then* it closes and the module remains fully usable.
+- *Given* I answer correctly, *then* a congratulatory message shows, score/progress is recorded (GM-3), and the prompt auto-closes after 5 seconds unless the accessibility "keep result" setting is on.
+- *Given* I answer incorrectly, *then* the app shows "incorrect", the correct answer/explanation, and a link to the related topic I may choose to open.
+- *Given* offline, *then* prompts work from locally stored questions.
+- *Given* any presentation, then `trivia_prompt_shown/answered/skipped` events are emitted.
+**In scope:** Selection service with local seen-history; prompt widget; timers; accessibility setting; config keys `trivia_repeat_days`.
+**Out of scope:** Question admin (GM-1); persistence/sync of responses (GM-3); leaderboard (GM-4).
+**Technical notes:** Randomization documented in SDD. Config via F2 service. RTM ids: GM-001, GM-002, GM-005, GM-006, BR-003–005, GM-008.
 **Definition of done:** as standard.
-**Dependencies:** none.
+**Dependencies:** GM-1, AN-1.
 
 ---
 
-### Epic: `webclient`
-
----
-
-**Title:** [WC-1] Cache persistence allowlist + sign-out purge
-**Epic:** `webclient`
-**Problem / context:** F-04 (High — audit risk #4). The TanStack persister uses one shared, user-agnostic IndexedDB key with no `maxAge`/buster; `shouldDehydrateQuery` persists **everything** — session identity, the full `["rbac","users"]` email directory, todos — for 24h. Sign-out invalidates only `["session"]`; the next person on the browser profile gets the previous user's data restored at mount, readable even without authenticating via DevTools.
-**User story:** As an authenticated user *(persona — cache isolation protects every signed-in user; no single permission governs it)*, I want nothing sensitive persisted and everything purged at sign-out so that a shared browser never hands my data to the next person.
+**Title:** [GM-3] Answer tracking and progress (local for guests, synced for registered)
+**Epic:** `gamification`
+**Problem / context:** Annex H GM-004, §3.2 (synchronize eligible progress), UM-001 (queued offline data). Records each presentation and outcome subject to account/consent rules.
+**User story:** As a Registered End User, I want my trivia answers and points kept and synced across devices so that my progress is not lost.
 **Acceptance criteria:**
-- *Given* the dehydration allowlist, *when* queries persist, *then* `session` and `rbac` roots are **never** written to IndexedDB (exclusion, the audit's stronger control).
-- *Given* sign-out, *when* it completes, *then* `queryClient.clear()` runs **and** the persister entry is removed from IndexedDB (`removeClient()`/`del()`), in that order.
-- *Given* the persister config, *when* constructed, *then* it has an explicit key incorporating the user identity, a `maxAge` well under 24h, and a cache `buster`.
-- *Given* the audit's own verification script — sign in as admin, open `/user-management`, sign out — *when* IndexedDB is inspected, *then* no residual emails exist; this check is automated as the cache-isolation test (F-54 pairing).
-- *Given* offline-first reads of *allowed* keys (e.g., todos), *when* the same user returns, *then* offline behavior still works — the PWA capability survives the fix.
-**In scope:** `shouldDehydrateQuery` allowlist in `query-client.ts`; purge in `session.hooks.ts` sign-out; per-identity key + `maxAge` + buster in `provider.tsx`; automated isolation test.
-**Out of scope:** Paused-mutation identity binding (WC-3); SW caching of token URLs (WC-2); the mobile analog (MB-1).
-**Technical notes:** Risky Flow **RF1** — order is memory → disk → done; a purge that throws must not leave the disk copy (wrap + retry). The only existing cache-clearing code is gated to non-production (`serwist-provider.tsx:20-22`) — do **not** reuse that path.
+- *Given* any user answers or skips, *when* recorded, *then* a `trivia_response` (question, response, correct flag, timestamp, category, skipped flag, link-opened flag, points) is stored locally.
+- *Given* a registered active user online, *when* responses exist, *then* they sync to the server idempotently (client `response_id`).
+- *Given* a guest who later registers, *when* the account is created, *then* local responses are merged to the account once.
+- *Given* a deactivated account, *when* sync is attempted, *then* it is rejected and local data retained.
+- *Given* offline responses, *when* connectivity returns, *then* they upload without duplicates.
+**In scope:** `trivia_response` table; local store; `POST /pisocamp/trivia/responses` batch; merge on registration.
+**Out of scope:** Leaderboard ranking (GM-4); progress UI (GM-5).
+**Technical notes:** Same idempotency pattern as **RF-2**. RTM ids: GM-004, GM-008 (correct answers recorded accurately).
 **Definition of done:** as standard.
-**Dependencies:** none.
+**Dependencies:** GM-2, F3.
 
 ---
 
-**Title:** [WC-2] Service-worker token & authenticated-route exclusions
-**Epic:** `webclient`
-**Problem / context:** F-20 (Medium) + F-48 (Low), both in `app/sw.ts`. Reset/verification tokens travel in URLs that the service worker can cache (`:35,40-49`) and that leak via referrer; and the offline fallback is served for authenticated navigations, masking auth state.
-**User story:** As an authenticated user *(persona)*, I want single-use token URLs never cached and authenticated pages never faked from cache so that tokens stay single-use and auth state stays honest.
+**Title:** [GM-4] Leaderboard with config flag, aliases, periods and rank movement
+**Epic:** `gamification`
+**Problem / context:** Annex H GM-007, AN-028/029. Registered-only, BSP-approved scoring, enable/disable switch, privacy-preserving display.
+**User story:** As a Registered End User, I want to see my rank and score on a leaderboard for the current period so that I am motivated to keep learning.
 **Acceptance criteria:**
-- *Given* a navigation to `/reset-password?token=…` or a verification URL, *when* the SW routes it, *then* a NetworkOnly matcher applies — nothing enters any cache.
-- *Given* an authenticated route while offline, *when* navigated, *then* the SW does not serve the generic offline fallback as if it were the page (excluded from the fallback matcher).
-- *Given* the SW cache storage after a reset flow, *when* inspected in the test, *then* no URL containing a token parameter exists in any cache.
-**In scope:** NetworkOnly matchers for token routes; fallback exclusion for authenticated route groups; cache-inspection test.
-**Out of scope:** `Referrer-Policy` header (ED-1 closes the referrer half of F-20); SW update lifecycle (WC-4).
-**Technical notes:** Enumerate token-bearing routes from the auth config (reset, verify email) so new ones get added in one place. ED-1 + this ticket jointly retire F-20.
-**Definition of done:** as standard.
-**Dependencies:** ED-1 (for the referrer half — can land in either order, note in both PRs).
+- *Given* `leaderboard_enabled = true`, *when* a registered user opens Leaderboard, *then* they see their rank, score and the top N by alias for the selected period (weekly, monthly, all-time).
+- *Given* a guest, *when* they open Leaderboard, *then* a clear notice explains registration is required.
+- *Given* `leaderboard_enabled = false`, *then* the entry point is hidden and the API returns 404.
+- *Given* a period rollover, *when* the ranking job runs, *then* `leaderboard_entry` stores rank and rank movement vs the prior interval.
+- *Given* display names, *then* only the user's chosen alias (or a generated one) is shown; no email or real name.
+- *Given* an admin without `admin.config.manage`, *when* toggling the flag, *then* 403 + audit.
+**In scope:** `leaderboard_entry`; scoring job; `GET /pisocamp/leaderboard`; alias field on profile; screen; config key.
+**Out of scope:** Leaderboard KPIs (AN-5).
+**Technical notes:** Scoring method documented in SRD; job idempotent per period. Permission key (admin side): `admin.config.manage`. RTM ids: GM-007, GM-008 (calculations reconcile).
+**Definition of done:** as standard, plus reconciliation test between `trivia_response` and `leaderboard_entry`.
+**Dependencies:** GM-3, F2.
 
 ---
 
-**Title:** [WC-3] Bind paused mutations to the queueing identity
-**Epic:** `webclient`
-**Problem / context:** F-19 (Medium). Offline-queued (paused) mutations (`provider.tsx:93-96`, `query-client.ts:34-36`, `todos.hooks.ts:207`) replay under **whichever session is active at reconnect** — user B can unknowingly fire user A's queued writes.
-**User story:** As an authenticated user *(persona)*, I want my offline-queued writes to replay only under my own session so that a device handover can't execute my actions as someone else.
+**Title:** [GM-5] Registered user progress view
+**Epic:** `gamification`
+**Problem / context:** Annex H §3.2 (view learning/activity progress). Read view over synced responses and content views.
+**User story:** As a Registered End User, I want to see my learning progress (topics viewed, questions answered, accuracy, points) so that I know what to explore next.
 **Acceptance criteria:**
-- *Given* a mutation queued while user A is signed in, *when* it is enqueued, *then* A's user id is recorded with it.
-- *Given* reconnect with user B active, *when* replay begins, *then* A's mutations are aborted (not sent) and surfaced as discarded — never executed under B.
-- *Given* reconnect with A still active, *when* replay runs, *then* the mutations execute normally.
-- *Given* sign-out (WC-1 purge), *when* it runs, *then* the paused-mutation queue is cleared with the rest of the client state.
-**In scope:** Identity stamping at enqueue; identity check at replay; discard UX (toast/log); test simulating the user swap.
-**Out of scope:** Server-side idempotency model (AB-3 — the server-side sibling); conflict resolution.
-**Technical notes:** Risky Flow **RF1**. TanStack's `onSuccess`/resume hooks in the provider are the interception point; the recorded id compares against the *current* `["session"]` before `resumePausedMutations()`.
+- *Given* synced data, *when* I open Progress, *then* I see topics completed, questions answered, correct %, points, and last activity.
+- *Given* no activity, *then* zeros are shown without error.
+- *Given* offline, *then* the last synced summary is shown with an offline indicator.
+**In scope:** Progress summary endpoint and screen.
+**Out of scope:** Cross-user analytics (AN-5).
+**Technical notes:** Computed server-side from `trivia_response` and `analytics_event content_view`. RTM id: §3.2.
 **Definition of done:** as standard.
-**Dependencies:** WC-1.
+**Dependencies:** GM-3, AN-1.
 
 ---
 
-**Title:** [WC-4] PWA update flow & connectivity probe hygiene
-**Epic:** `webclient`
-**Problem / context:** F-49 + F-50 (Low). `skipWaiting`+`clientsClaim` performs a mid-session SW takeover with a dev-only unregister path — no production recovery from a bad SW; and the online-status hook probes `gstatic.com` every 15s, leaking IP + session duration to a third party.
-**User story:** As an authenticated user *(persona)*, I want app updates to apply predictably and connectivity checks to stay first-party so that a bad deploy is recoverable and no third party observes my usage.
+### Epic: `augmented-reality`
+
+---
+
+**Title:** [AR-1] AR experience skeleton for one coin
+**Epic:** `augmented-reality`
+**Problem / context:** Annex H AR-001 — permissions explained before OS prompt, loading, instructions, exit, unsupported-device fallback. Module walking skeleton using one seeded NGC 20 Piso asset.
+**User story:** As a Guest User, I want to place an animated 3D coin in my surroundings through the camera so that I can explore its design in augmented reality.
 **Acceptance criteria:**
-- *Given* a new SW version, *when* detected mid-session, *then* the user is prompted to reload (or update applies on next navigation) instead of silent takeover — documented choice in the PR.
-- *Given* a broken SW in production, *when* the recovery path is triggered, *then* unregistration + cache reset works with `NODE_ENV === "production"` (the current path returns early there).
-- *Given* the online-status hook, *when* it probes, *then* it targets `/api/v1/health` — zero third-party requests.
-**In scope:** Prompted/deferred update strategy; production recovery path; probe retarget in `use-online-status.ts`.
-**Out of scope:** Health endpoint response content (LG-2 / F-36 — merge order note below).
-**Technical notes:** Probe lands **after** LG-2 genericizes the health response, or accept version disclosure to the probe in the interim (first-party, low risk). Health is `@AllowAnonymous` — probe works signed-out.
-**Definition of done:** as standard.
-**Dependencies:** WC-2; LG-2 (soft — see note).
+- *Given* a supported device, *when* I open the AR experience, *then* a screen explains why camera/motion access is needed before the OS permission prompt.
+- *Given* permission granted, *when* the session starts, *then* a loading indicator shows, on-screen instructions appear, the approved 3D animation plays, and an Exit control returns cleanly to the previous screen.
+- *Given* an unsupported device or denied permission, *then* a clear fallback message and the 3D viewer (CE-2) are offered.
+- *Given* 10 consecutive open/close cycles, *then* no crash and no memory growth beyond the approved limit.
+- *Given* the experience starts/ends, then `ar_start`/`ar_end` events are emitted.
+**In scope:** ARKit/ARCore capability check; permission flow; AR view; exit; fallback; one seeded experience.
+**Out of scope:** Content admin (AR-2); audio and full coverage (AR-3).
+**Technical notes:** Flutter AR plugin approved by BSP (e.g. `ar_flutter_plugin` / platform views); fixed portrait orientation approved for AR (BR-006 exception). RTM ids: AR-001, AR-005.
+**Definition of done:** as standard, plus device-matrix test evidence.
+**Dependencies:** CE-2, AN-1.
 
 ---
 
-### Epic: `logging`
-
----
-
-**Title:** [LG-1] Redact credentials across all three log paths
-**Epic:** `logging`
-**Problem / context:** F-05 (High — three independent paths). **Mobile:** `auth_repository.dart` interpolates full response bodies — including session tokens — into `developer.log` with no `kDebugMode` guard, and `dart:developer` log() isn't stripped from release builds. **SMTP:** `SMTP_HOST` unset silently falls back to `jsonTransport`, and `send-mail.ts:34` writes the whole message — including reset links — to stdout via `console.log`, bypassing Pino redaction. **Pino:** redaction misses `body.token`, `body.newPassword`, `body.email`, and logs `req.url`, carrying query-string tokens into logs.
-**User story:** As a platform operator *(persona — log sinks, no runtime permission)*, I want tokens, reset links, and PII unable to reach any log sink so that logs can be shipped and retained without becoming a credential store.
+**Title:** [AR-2] AR experience content admin
+**Epic:** `augmented-reality` · **Also touches:** `content-management`
+**Problem / context:** Annex H AR-004 — every AR experience has series, denomination, 3D assets, animation, audio, description, device requirements, asset version, approval and publication status.
+**User story:** As a user with `content.items.edit` permission, I want to define an AR experience per denomination with its assets and device requirements so that approvers can review and publish it.
 **Acceptance criteria:**
-- *Given* the three mobile `developer.log` calls, *when* built in release mode, *then* they are gated on `kDebugMode` and no longer include `response.data` even in debug.
-- *Given* `SMTP_HOST` unset in production, *when* the app boots, *then* it **refuses to start** (fail closed) — the silent `jsonTransport` fallback is removed; in development, the fallback is explicit and its output redacts the message body/links.
-- *Given* Pino config, *when* requests log, *then* `body.token`, `body.newPassword`, `body.email` are redacted and `req.url` is sanitized of token-bearing query parameters.
-- *Given* a full auth cycle (sign-up, sign-in, reset request) in a test, *when* captured logs are scanned, *then* no token, reset link, or password appears — automated as a log-scan test.
-**In scope:** All three paths + the boot guard + log-scan test.
-**Out of scope:** Mobile error-message mapping (MB-3 / F-45); health/request-id leaks (LG-2).
-**Technical notes:** Risky Flow **RF3** (the SMTP boot guard). The URL sanitizer must whitelist-strip (`token`, `code`, …) rather than blacklist paths. Mobile half touches `auth_repository.dart:52-57,81-86,115-120` — coordinate with MB-1 (same file family) to avoid conflicts.
+- *Given* the admin console, *when* I create an item of type `ar_experience` linked to a denomination with 3D, animation and audio assets, description and minimum device capability, *then* it saves as `draft`.
+- *Given* a missing mandatory asset, *when* submitting for review, *then* submission is blocked with a message.
+- *Given* workflow transitions, *then* CM-3 rules apply unchanged.
+- *Given* a user without `content.items.edit` or `content.assets.upload`, *then* 403 + audit.
+**In scope:** `ar_experience_detail` child table; form; validation.
+**Out of scope:** Rendering (AR-1/3).
+**Technical notes:** Permission keys: `content.items.edit`, `content.assets.upload`. RTM id: AR-004.
 **Definition of done:** as standard.
-**Dependencies:** none.
+**Dependencies:** CM-2, CM-3.
 
 ---
 
-**Title:** [LG-2] Health & request-id disclosure hygiene
-**Epic:** `logging`
-**Problem / context:** F-36 + F-37 (Low). The unauthenticated health endpoint leaks env, version, uptime, and **raw DB error text** (`health.service.ts:16-17,43`); inbound `X-Request-Id` is accepted verbatim — unbounded, logged, and reflected (`pino-logger.config.ts:53-63`), a log-injection and cache-poisoning vector.
-**User story:** As a platform operator *(persona)*, I want the health surface generic and correlation ids validated so that an anonymous probe learns nothing and log lines can't be forged via headers.
+**Title:** [AR-3] Synchronized audio, full mandatory coverage and offline packaging
+**Epic:** `augmented-reality`
+**Problem / context:** Annex H AR-001 (synchronized audio), AR-002/003 (14 coins + 10 banknotes), AR-005 (offline where downloaded).
+**User story:** As a Guest User, I want every listed coin and banknote to have an AR experience with narration in sync, available offline once downloaded, so that the full currency set is covered.
 **Acceptance criteria:**
-- *Given* a DB failure, *when* `/api/v1/health` responds, *then* the body says only "database check failed" and the real error goes to server logs.
-- *Given* the health response, *when* unauthenticated, *then* env/version/uptime metadata is omitted (or gated behind a permissioned variant).
-- *Given* an inbound `X-Request-Id`, *when* processed, *then* it is accepted only if it matches a UUID (or ≤64-char safe charset); otherwise a fresh id is generated.
-- *Given* WC-4's probe, *when* it polls health, *then* the generic response still satisfies it.
-**In scope:** Health response genericizing; request-id validation; tests for both.
-**Out of scope:** F-60 topology confirmation (PRD residual risk).
-**Technical notes:** Health stays `@AllowAnonymous` (deploy healthchecks and the WC-4 probe rely on it). Keep the response shape the Compose healthchecks expect.
-**Definition of done:** as standard.
-**Dependencies:** LG-1.
+- *Given* a published AR experience, *when* it plays, *then* audio starts and ends in sync with the animation timeline (±100 ms in test).
+- *Given* audio controls, *when* I mute or replay, *then* they work and captions/text alternative is shown.
+- *Given* AR assets flagged `on_demand`, *when* I open the AR section online, *then* I can download all or per-item with progress; downloaded items work in airplane mode.
+- *Given* the bundle, *then* an automated coverage test confirms all 24 mandatory items have published experiences.
+- *Given* download interruption, then resume works (RF-6).
+**In scope:** Audio sync engine; download manager UI; coverage test; captions.
+**Out of scope:** Additional currencies (BR-010 change control).
+**Technical notes:** Flow **RF-6**. RTM ids: AR-001, AR-002, AR-003, AR-005.
+**Definition of done:** as standard, plus coverage and sync evidence.
+**Dependencies:** AR-1, AR-2.
 
 ---
 
-### Epic: `edge`
+### Epic: `denomination-recognition`
 
 ---
 
-**Title:** [ED-1] Security headers at all three layers
-**Epic:** `edge`
-**Problem / context:** F-12 (Medium) + F-21 (Medium). No CSP, HSTS, `X-Frame-Options`, `X-Content-Type-Options`, or `Referrer-Policy` at Next.js, NestJS, or Nginx; consequently the RBAC admin UI is framable and framed clicks reach role assignment (clickjacking onto F-10's surface).
-**User story:** As an authenticated user *(persona — headers protect all users; enforcement is infrastructural)*, I want browser-level defenses declared at every layer so that framing, sniffing, and referrer leakage are cut off regardless of which layer serves a response.
+**Title:** [DR-1] Camera scan → on-device denomination with audio and authenticity disclaimer
+**Epic:** `denomination-recognition`
+**Problem / context:** Annex H DR-001/002/003/007, BR-011. Identify FPP/NGC/eNGC denominations on-device, speak and show the result, always with the disclaimer; no image storage or upload.
+**User story:** As a Guest User, I want to point my camera at a banknote and hear and see its denomination so that I can identify notes, while understanding this is not an authenticity check.
 **Acceptance criteria:**
-- *Given* any page from the web app, *when* headers are inspected, *then* CSP (including `frame-ancestors 'none'`), HSTS, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: strict-origin-when-cross-origin` (or stricter) are present via `next.config.ts` `headers()`.
-- *Given* any backend API response, *when* inspected, *then* helmet-applied headers are present from NestJS bootstrap.
-- *Given* responses via Nginx, *when* inspected, *then* `add_header` directives apply the same set consistently (no conflicting duplicates between layers).
-- *Given* `/user-management` loaded inside an iframe, *when* rendered, *then* the browser blocks it — verified by test (retires the F-21 attack path).
-- *Given* the CSP, *when* the app runs its normal flows, *then* nothing legitimate is blocked (start with report-only in the PR if needed, ship enforcing).
-**In scope:** `headers()` in Next config; `helmet()` in bootstrap; Nginx `add_header`; framing test; CSP tuning.
-**Out of scope:** TLS termination and upstreams (ED-2); SW token caching (WC-2 — but this ticket's Referrer-Policy closes F-20's referrer half).
-**Technical notes:** Beware header duplication when Nginx fronts Next — decide one owner per header and comment it in `nginx.conf`. HSTS only once TLS (ED-2) is live in the target env — gate with a config flag if ED-2 hasn't shipped.
-**Definition of done:** as standard.
-**Dependencies:** none hard; ED-2 for HSTS activation.
+- *Given* camera permission explained and granted, *when* I point at a supported note and confidence ≥ threshold, *then* the denomination is displayed as text and spoken.
+- *Given* any result, *then* the disclaimer "does not verify authenticity; if in doubt submit to an authorized agent bank or BSP" is shown and spoken; no wording implies authentication.
+- *Given* a scan, *then* frames are processed in memory only — no image written to disk or sent over network (verified by test and network log).
+- *Given* audio is unavailable/muted, *then* the visual result suffices; audio controls are present.
+- *Given* the model file is missing or corrupt, *then* the feature shows "unavailable" and never guesses.
+- *Given* a scan completes, then `recognition_result{outcome}` event (no image data) is emitted.
+**In scope:** Camera view; TFLite (or approved) inference; class→denomination mapping; TTS/pre-recorded audio; disclaimer; `recognition_model` loading from bundle.
+**Out of scope:** Uncertain handling (DR-2); demonetized/foreign (DR-3); model versioning/thresholds/harness (DR-4).
+**Technical notes:** Flow **RF-5**. Fixed orientation approved. Only camera permission requested. RTM ids: DR-001, DR-002, DR-003, DR-007, BR-011.
+**Definition of done:** as standard, plus privacy test evidence (no storage/upload).
+**Dependencies:** CE-1, AN-1.
 
 ---
 
-**Title:** [ED-2] Ship the TLS config and fix upstream addressing
-**Epic:** `edge`
-**Problem / context:** F-15 (Medium). The entire TLS block in `nginx.conf:51-86` is commented out, and upstreams point at `host.docker.internal` instead of Compose service names — the shipped proxy config neither terminates TLS nor works in the deployed topology as written.
-**User story:** As a platform operator *(persona)*, I want the shipped Nginx config to be the working, TLS-terminating one so that an adopter deploying the template gets HTTPS and correct routing by default.
+**Title:** [DR-2] Uncertain or failed recognition handling
+**Epic:** `denomination-recognition`
+**Problem / context:** Annex H DR-006 — below-threshold results must never produce a denomination claim; guide the user to improve the scan.
+**User story:** As a Guest User, I want clear guidance when a note cannot be recognised so that I can retry successfully or exit.
 **Acceptance criteria:**
-- *Given* the config, *when* deployed with certificates present, *then* TLS terminates at Nginx with a modern protocol/cipher baseline (TLS 1.2+, no legacy ciphers) and HTTP redirects to HTTPS.
-- *Given* the upstream blocks, *when* running under Compose, *then* they resolve backend/web by **service name**, not `host.docker.internal`.
-- *Given* certificate paths, *when* absent (local dev), *then* a documented dev override exists rather than commented-out production config.
-- *Given* the deployed stack, *when* smoke-tested, *then* web and API routes both serve over HTTPS through the proxy.
-**In scope:** Working TLS server block; upstream service names; dev/prod split; smoke test.
-**Out of scope:** Certificate issuance automation (ops); security headers (ED-1); body limits/timeouts (AB-4 — rebase over it).
-**Technical notes:** Coordinate the file with AB-4 and ED-1 (same `nginx.conf`) — land AB-4 → ED-1 → ED-2 or rebase carefully. After this, enable HSTS per ED-1's flag.
+- *Given* confidence < threshold for the approved dwell time, *then* the app says the note could not be recognised and shows tips on lighting, distance, orientation and visibility.
+- *Given* the unrecognised state, *when* I choose Retry, *then* scanning resumes; *when* I choose Exit, *then* I return to the previous screen.
+- *Given* an unrecognised state, *then* no denomination text or audio is produced.
+- *Given* unrecognised, then `recognition_result{outcome:unrecognized}` is emitted.
+**In scope:** Threshold/dwell logic; guidance UI; retry/exit.
+**Out of scope:** Threshold values (DR-4 config).
+**Technical notes:** Flow **RF-5**. RTM ids: DR-006, DR-009 (no false claims).
 **Definition of done:** as standard.
-**Dependencies:** AB-4, ED-1 (file-ordering only).
+**Dependencies:** DR-1.
 
 ---
 
-### Epic: `mobile`
-
----
-
-**Title:** [MB-1] Single cookie source of truth + sign-out purge
-**Epic:** `mobile`
-**Problem / context:** F-23 (Medium) + F-43 (Low). `api_client.dart:47-65` duplicates the session cookie into secure storage via a manual interceptor that re-serializes it malformed, unscoped, and overwriting `CookieManager`; and sign-out (`auth_repository.dart:98-105`) clears secure storage but the `PersistCookieJar` is unreachable from there and never purged — the session cookie survives sign-out on disk.
-**User story:** As a mobile app user *(persona — client credential storage, no server permission involved)*, I want exactly one cookie store that is fully purged at sign-out so that my session can't linger on the device or be corrupted by duplication.
+**Title:** [DR-3] Demonetized and foreign banknote handling
+**Epic:** `denomination-recognition`
+**Problem / context:** Annex H DR-004/005, BR-007/008. Distinguish circulating legal tender from demonetized Philippine notes and from foreign currency.
+**User story:** As a Guest User, I want the app to tell me when a note is demonetized or not Philippine currency so that I am not misled about its status.
 **Acceptance criteria:**
-- *Given* the manual cookie interceptor deleted, *when* authenticated requests run, *then* `CookieManager` + `PersistCookieJar` alone handle cookies and auth flows still pass.
-- *Given* the cookie jar exposed via a provider, *when* sign-out runs, *then* `cookieJar.deleteAll()` executes alongside the secure-storage clear.
-- *Given* the device storage after sign-out, *when* inspected in an integration test, *then* no session cookie remains in the jar's persistence directory.
-- *Given* a fresh sign-in after purge, *when* performed, *then* the session works normally.
-**In scope:** Delete the interceptor; provider-expose the jar; purge on sign-out; storage-inspection test.
-**Out of scope:** Log redaction in the same files (LG-1 — merge that first); cookie attributes server-side (AC-3).
-**Technical notes:** Risky Flow **RF1** (mobile leg). Depends on AC-3's pinned cookie attributes being compatible with Dio's jar — verify in the integration test. Same file family as LG-1's mobile half: sequence LG-1 → MB-1.
+- *Given* a supported demonetized Philippine note is detected, *then* audio and text state it belongs to a demonetized/non-circulating series and that recognition is for circulating legal tender.
+- *Given* a foreign note is detected, *then* audio and text state it is not Philippine currency, without naming the currency.
+- *Given* either case, *then* the authenticity disclaimer still plays.
+- *Given* the class list in `recognition_model`, *then* demonetized and foreign classes map to these outcomes, never to a denomination.
+**In scope:** Outcome mapping; messages/audio; tests against approved dataset classes.
+**Out of scope:** Foreign denomination identification (§17 exclusion).
+**Technical notes:** Flow **RF-5**. RTM ids: DR-004, DR-005, BR-007, BR-008.
 **Definition of done:** as standard.
-**Dependencies:** LG-1, AC-3.
+**Dependencies:** DR-1.
 
 ---
 
-**Title:** [MB-2] Mobile transport & bundled-config hardening
-**Epic:** `mobile`
-**Problem / context:** F-24 (Medium) + F-42 (Low). `usesCleartextTraffic="true"` sits in the **release** manifest and `api_constants.dart:7` carries a non-TLS fallback URL — production traffic can go plaintext; and `.env` is bundled as a Flutter asset (`pubspec.yaml:78-79`), shipping config cleartext inside every APK.
-**User story:** As a mobile app user *(persona)*, I want release builds to refuse cleartext transport and carry no bundled env file so that my traffic is always TLS and no packaged secret rides in the APK.
+**Title:** [DR-4] Recognition model versioning, threshold configuration and accuracy harness
+**Epic:** `denomination-recognition` · **Also touches:** `admin-security`
+**Problem / context:** Annex H DR-008/009, §9 (model versions), §11.2. UAT cannot start until thresholds are approved; the model must be versioned and measurable against the controlled dataset.
+**User story:** As a user with `admin.config.manage` permission, I want to publish a versioned recognition model with approved confidence thresholds and run the accuracy harness so that UAT thresholds are demonstrably met.
 **Acceptance criteria:**
-- *Given* the manifests, *when* built, *then* `usesCleartextTraffic="true"` exists only in `src/debug/AndroidManifest.xml`; the release manifest denies cleartext.
-- *Given* the API base URL, *when* unset at build time, *then* the release build **fails** (no non-TLS fallback constant); config arrives via `--dart-define`.
-- *Given* `.env` removed from Flutter assets, *when* the APK is unpacked in a test, *then* no env file exists inside it; `.env.example` for mobile carries a warning comment.
-- *Given* a debug build, *when* run against a local HTTP backend, *then* development still works (cleartext allowed in debug only).
-**In scope:** Manifest split; `--dart-define` config path; fallback removal; APK-inspection check.
-**Out of scope:** Release signing (MB-3); certificate pinning (future hardening).
-**Technical notes:** Update mobile README build instructions (`flutter build apk --dart-define=API_BASE_URL=…`). CI builds (if any) must pass the define.
-**Definition of done:** as standard.
-**Dependencies:** none.
+- *Given* a new model file, *when* uploaded with version, class list and thresholds, *then* it is stored as `recognition_model` and delivered to devices via the bundle; devices report which version they run.
+- *Given* the approved test dataset (every series/denomination, demonetized, foreign, negatives, lighting/distance/orientation/wear variants), *when* the harness runs on the device matrix, *then* it outputs recognition accuracy, classification accuracy, p50/p95 response time and failure rate per class.
+- *Given* threshold edits, *then* they are audited and take effect on next bundle sync.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Model upload endpoint; bundle delivery; harness CLI + report; threshold config keys.
+**Out of scope:** Model training itself (ML specialist deliverable, tracked in RTM as DR-008 dataset approval).
+**Technical notes:** Permission keys: `admin.config.manage`, `admin.integrations.manage`. Harness results attach to TCP. RTM ids: DR-008, DR-009, §9.
+**Definition of done:** as standard, plus harness report attached to TCP.
+**Dependencies:** DR-1, DR-3, F2.
 
 ---
 
-**Title:** [MB-3] Mobile release hardening batch
-**Epic:** `mobile`
-**Problem / context:** F-44 + F-45 + F-46 + F-47 (Low). Release builds are signed with the **debug keystore** under `com.example.mobile`; non-Dio exceptions render `error.toString()` and Dio messages embed host/port; the login screen enforces a 6-char password minimum vs the server's 8; the manifest requests unused `SCHEDULE_EXACT_ALARM`/`RECEIVE_BOOT_COMPLETED` permissions and leaves `allowBackup` defaulting to true.
-**User story:** As a mobile app user *(persona)*, I want the released app properly signed, minimally permissioned, and honest in its errors so that it is updatable, un-impersonatable, and leaks nothing through messages or backups.
+### Epic: `evaluation`
+
+---
+
+**Title:** [EV-1] Manage surveys through the content workflow
+**Epic:** `evaluation` · **Also touches:** `content-management`
+**Problem / context:** Annex H EV-001, §3.3 (manage surveys), BR-002. Surveys are content items with purpose and questions.
+**User story:** As a user with `content.items.edit` permission, I want to create surveys (topic, satisfaction, feature, application, NPS, usefulness) with rating, NPS and text questions so that approved evaluations can be presented.
 **Acceptance criteria:**
-- *Given* `build.gradle.kts`, *when* a release is built, *then* it uses a real signing config (keys via env/local properties, never committed) and a unique application id — with a documented note that the id **cannot change after first store publish**.
-- *Given* an error on the login screen, *when* rendered, *then* the user sees a mapped, fixed string — never `toString()` output or host/port detail.
-- *Given* the login form, *when* validating, *then* the password minimum matches the server schema (8), sourced from a shared constant where feasible.
-- *Given* the manifest, *when* reviewed, *then* the two unused permissions are gone and `android:allowBackup="false"` is set.
-**In scope:** Signing config scaffold + docs; error mapping; validation alignment; manifest cleanup.
-**Out of scope:** iOS (untracked — PRD non-goal); Play Store publishing.
-**Technical notes:** Keystore material must never enter the repo — `key.properties` pattern, gitignored, documented. F-46's server minimum lives in `register.schema.ts:6`.
+- *Given* the admin console, *when* I create an item of type `survey` with purpose, questions (rating 1–5, NPS 0–10, text) and optional topic/feature link, *then* it saves as `draft`.
+- *Given* an NPS question, *then* wording and grouping (promoter 9–10, passive 7–8, detractor 0–6) are stored per SRD.
+- *Given* workflow, *then* CM-3 applies; only published surveys enter the bundle.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** `survey_detail`, `survey_question` child tables; form.
+**Out of scope:** Triggers (EV-3); presentation (EV-2).
+**Technical notes:** Permission key: `content.items.edit`. RTM ids: EV-001, AN-019 (wording documented).
 **Definition of done:** as standard.
-**Dependencies:** MB-2.
+**Dependencies:** CM-3.
 
 ---
 
-### Epic: `hygiene`
-
----
-
-**Title:** [HY-1] Security regression test harness
-**Epic:** `hygiene`
-**Problem / context:** F-54 (Low, flagged by the audit for early attention). There are **no** ownership, idempotency, or cache-isolation tests, and the e2e spec targets a non-existent path (`app.e2e-spec.ts:32`) — every Wave-1/2 fix would ship without regression protection. Wave-1 tickets each carried a minimal paired test; this ticket builds the shared harness and fills the gaps.
-**User story:** As a developer on the team *(persona — CI infrastructure)*, I want a working security test suite in CI so that the fixes for F-01, F-04, F-11, and F-13 cannot silently regress.
+**Title:** [EV-2] Consent-gated pop-up survey with offline queue
+**Epic:** `evaluation`
+**Problem / context:** Annex H EV-001/003/005, §4.2-L, UM-005. Responses only after notice + consent; declining never blocks; offline queue.
+**User story:** As a Guest User, I want to optionally answer a short survey after giving consent so that I can share feedback without being forced.
 **Acceptance criteria:**
-- *Given* the e2e config, *when* tests run, *then* the broken path is fixed and the suite executes in CI (via the CI-3-pinned gate).
-- *Given* the harness, *when* CI runs, *then* it includes at minimum: permission-gate tests (AZ-1 paths), ownership tests (AZ-3), idempotency tests incl. cross-user keys (AB-3), and the cache-isolation check (WC-1's IndexedDB scan).
-- *Given* shared fixtures, *when* a new security test is written, *then* multi-user session setup (user A / user B / admin) is a one-line helper.
-- *Given* any of the four covered fixes reverted locally, *when* the suite runs, *then* at least one test fails (mutation check on the suite itself, spot-verified in the PR).
-**In scope:** e2e path fix; multi-user fixtures; consolidation of Wave-1 paired tests into one suite; CI wiring.
-**Out of scope:** Full coverage targets; load/perf tests.
-**Technical notes:** Backend tests via the Nest testing module with a real Postgres (Compose service in CI); the web cache-isolation check via Playwright + IndexedDB inspection. Reference AZ-3's ownership pattern as the canonical example in the test README.
-**Definition of done:** as standard.
-**Dependencies:** AZ-1, AZ-3, AB-3, WC-1, CI-3.
+- *Given* a survey trigger fires (EV-3; a simple "after topic completion" trigger seeded here), *when* the pop-up appears, *then* I can Decline and continue normally.
+- *Given* I choose to answer and have no valid `survey` consent, *then* the privacy notice is shown first; on decline nothing is collected.
+- *Given* valid consent, *when* I submit, *then* a `survey_response` is stored with consent reference, survey version and timestamp.
+- *Given* offline, *when* I submit, *then* the response is queued encrypted and uploaded once, idempotently.
+- *Given* submission, then `survey_shown/declined/submitted` events are emitted.
+**In scope:** Pop-up widget; consent guard reuse (F4); local queue; `POST /pisocamp/surveys/responses`.
+**Out of scope:** Trigger config (EV-3); survey reports (AN-6).
+**Technical notes:** Flows **RF-2** (queue) and **RF-3** (consent). RTM ids: EV-001, EV-003, EV-005, §4.2-L.
+**Definition of done:** as standard, plus consent-negative test.
+**Dependencies:** EV-1, F4, AN-1.
 
 ---
 
-**Title:** [HY-2] Repo & schema hygiene batch
-**Epic:** `hygiene`
-**Problem / context:** F-29, F-40, F-41, F-52, F-53, F-61, F-62 (Low/Info). The only unbounded string in the schema set (`concern`, no `.max()`); `verifications` rows never cleaned and unindexed on `expires_at`; a working `postgres:password` credential in `packages/db/.env.example`; an unused root Dockerfile shipping full source + dev deps; drizzle beta in production runtime (track only); credential-shaped README placeholders that will trip secret scanners; and a submit-ticket form that discards input and reports success — a functional trap for adopters.
-**User story:** As a developer adopting the template *(persona)*, I want the repo free of footguns, dead weight, and false signals so that nothing checked in misleads a scanner, an operator, or a user.
+**Title:** [EV-3] Configurable survey triggers and frequency
+**Epic:** `evaluation`
+**Problem / context:** Annex H EV-002 — triggers on page depth, activity completion, topic completion, module exit, app exit; rules and frequency configurable by BSP.
+**User story:** As a user with `surveys.triggers.configure` permission, I want to set when and how often each survey appears so that users are not over-surveyed.
 **Acceptance criteria:**
-- *Given* `tickets.schema.ts:15`, *when* a `concern` over 5000 chars is submitted, *then* validation rejects it (`.max(5000)`).
-- *Given* the scheduled cleanup, *when* it runs, *then* expired `verifications` rows are deleted; an index on `expires_at` exists (additive migration).
-- *Given* `packages/db/.env.example:6` and the README examples at :335,405,411,414, *when* scanned, *then* only `<angle-bracket>` placeholders appear, with dev-only comments where relevant.
-- *Given* the root Dockerfile, *when* the repo is reviewed, *then* it is deleted (or explicitly header-marked as an unused example — decide in PR, prefer delete).
-- *Given* `submit-ticket/page.tsx:62-65`, *when* the form is submitted, *then* it calls the real ticket endpoint (per AZ-3, recording `authorId`) — the silent-success mock is gone.
-- *Given* `drizzle-orm`/`drizzle-kit` beta pinning, *when* reviewed, *then* a tracking issue for the 1.0 upgrade is filed and linked (no code change here).
-**In scope:** All six code/docs fixes + the tracking issue; cleanup job shares AB-3's scheduler.
-**Out of scope:** F-60 (ops confirmation — PRD residual risk); new ticket features beyond wiring the existing form.
-**Technical notes:** The form wire-up is the one user-visible change — smoke-test the submit flow end to end (it exercises AZ-1's gate from the anonymous-submit side: submission stays open, reads stay gated).
+- *Given* a published survey, *when* I set trigger type, parameters (e.g. page depth = 5), frequency cap (e.g. once per 30 days) and priority, *then* the rules save and sync to devices via config.
+- *Given* multiple eligible surveys, *when* a trigger fires, *then* only the highest-priority one shows and the frequency cap is enforced locally.
+- *Given* a user without the permission, *then* 403 + audit.
+- *Given* rule changes, then they are audited.
+**In scope:** `survey_trigger_rule` table; admin UI; client trigger engine.
+**Out of scope:** Exit advisory (EV-4).
+**Technical notes:** Permission key: `surveys.triggers.configure`. RTM ids: EV-002, EV-005 (triggers work as configured).
 **Definition of done:** as standard.
-**Dependencies:** AZ-3 (authorId), AB-3 (scheduler).
+**Dependencies:** EV-2, F2.
 
 ---
 
-*End of ticket set. 33 tickets · 9 epics · 3 waves. Wave 1 clears the audit's Conditional-GO gate; Wave 2 clears the 30-day list (with F-38, F-54, F-58 promoted per PRD decisions); Wave 3 closes the batched backlog. F-60 remains an ops confirmation tracked in PRD.md.*
+**Title:** [EV-4] Exit advisory on proper currency handling
+**Epic:** `evaluation`
+**Problem / context:** Annex H EV-004, §1 (proper currency handling advisories). Approved advisory shown before module/app exit.
+**User story:** As a Guest User, I want a brief approved advisory on handling currency properly when I leave Piso CAMP so that I take good practice with me.
+**Acceptance criteria:**
+- *Given* a published `advisory` item, *when* I exit the module (back from home or app background at the approved point), *then* the advisory (text/images/audio/links) is displayed once per configured interval.
+- *Given* the advisory, *when* I dismiss it, *then* exit proceeds.
+- *Given* offline, *then* the advisory renders from the bundle.
+- *Given* display, then an `advisory_shown` event is emitted.
+**In scope:** Exit hook; advisory widget; interval config key.
+**Out of scope:** Advisory authoring (CM-1 type `advisory`).
+**Technical notes:** RTM ids: EV-004, EV-005.
+**Definition of done:** as standard.
+**Dependencies:** CE-1, EV-3.
+
+---
+
+### Epic: `analytics-reporting`
+
+---
+
+**Title:** [AN-1] Analytics event pipeline: client SDK, encrypted offline queue, idempotent ingestion
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H §4.2-J (minimal event schema), §4.2-M (once and only once; offline sync without duplication), §11.3. Module walking skeleton for analytics using `module_entry` and `content_view`.
+**User story:** As a user with `reports.dashboards.view` permission, I want every module action recorded exactly once, even when users are offline, so that KPIs are trustworthy.
+**Acceptance criteria:**
+- *Given* the client SDK, *when* a feature emits an event, *then* it is written to an encrypted local queue with a UUID `event_id`, timestamp, pseudonymous subject id, session id, account type, screen/feature, app/OS version, device category, network state, status.
+- *Given* connectivity, *when* the queue uploads in batches, *then* the server inserts on unique `event_id` and returns acked ids; the client deletes acked rows.
+- *Given* an upload that timed out after server commit, *when* the client resends, *then* no duplicate rows exist (verified by test).
+- *Given* an event payload containing an email, name or raw image, *when* emitted, *then* the SDK rejects it (schema validation) and logs a dev error.
+- *Given* a registered dashboard user, *when* they open the first dashboard tile, *then* it shows count of `module_entry` today.
+**In scope:** `analytics_event` table; `POST /pisocamp/events`; client SDK with event catalog; first dashboard tile; permission gate.
+**Out of scope:** Sessions/KPIs (AN-2+); PII-scoped reports (AN-10).
+**Technical notes:** Flow **RF-2**. Event catalog in `docs/analytics-events.md`; feature tickets register names there. Permission key: `reports.dashboards.view`. RTM ids: §4.2-J, §4.2-M, §11.3.
+**Definition of done:** as standard, plus duplicate-resend test evidence.
+**Dependencies:** F1, F2.
+
+---
+
+**Title:** [AN-2] Sessions and DAU/MAU/stickiness/session dashboard
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H AN-005–012. Session definition and inactivity timeout documented; engagement KPIs computed from events.
+**User story:** As a user with `reports.dashboards.view` permission, I want DAU, MAU, DAU/MAU ratio, concurrent users, peak hours, sessions per user, average session duration and screen views per session so that engagement is measurable.
+**Acceptance criteria:**
+- *Given* events, *when* the sessioniser runs, *then* a `session` groups events with gaps < `session_inactivity_minutes` (Asia/Manila days).
+- *Given* a date range, *when* the dashboard loads, *then* DAU, MAU (rolling 30 days), DAU/MAU %, sessions per user, average duration, screen views per session, peak hours and concurrent sessions per 5-minute interval display.
+- *Given* a sample of raw events, *when* recomputed by hand in the test suite, *then* KPI values reconcile exactly.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** `session` table + job; KPI queries; dashboard page.
+**Out of scope:** Feature usage (AN-3); retention (AN-4); exports (AN-9).
+**Technical notes:** Formulas per SRD (AN-005–012). Permission key: `reports.dashboards.view`. RTM ids: AN-005–AN-012.
+**Definition of done:** as standard, plus reconciliation test.
+**Dependencies:** AN-1.
+
+---
+
+**Title:** [AN-3] Feature usage, activation and time-to-first-key-action
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H AN-002/003/004/013. Account creation rate, key-action timing, first-day activation, per-feature usage.
+**User story:** As a user with `reports.dashboards.view` permission, I want feature usage counts and onboarding KPIs so that I can see what users adopt.
+**Acceptance criteria:**
+- *Given* `account_prompt_shown` and `profile_created` events, *then* Account Creation Rate = unique registered ÷ unique prompted × 100.
+- *Given* the approved key-action list (config), *then* Time to First Key Action (median, p95) and First-Day Activation Rate (within 24 h of first entry) display.
+- *Given* `feature_use` events, *then* usage is shown separately for each feature in AN-013 (currency education, banknotes, coins, 3D, haptic, tilt, zoom/pan, trivia, leaderboard, AR, recognition, surveys, advisory, external/internal links).
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** KPI queries; dashboard widgets; key-action config key.
+**Out of scope:** Cohorts (AN-10).
+**Technical notes:** Permission key: `reports.dashboards.view`. RTM ids: AN-002, AN-003, AN-004, AN-013.
+**Definition of done:** as standard, plus reconciliation test.
+**Dependencies:** AN-2, F3.
+
+---
+
+**Title:** [AN-4] Retention, churn, lifetime, re-engagement and reactivation
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H AN-015/016/017/026/027.
+**User story:** As a user with `reports.dashboards.view` permission, I want Day 1/7/30 retention, churn, user lifetime, re-engagement and reactivation rates so that I understand whether users come back.
+**Acceptance criteria:**
+- *Given* cohorts by first-activity date, *then* D1/D7/D30 retention percentages display per cohort.
+- *Given* the configured inactivity period (default 30 days), *then* churn rate, re-engagement rate and reactivation rate compute per SRD definitions.
+- *Given* a user, *then* lifetime duration = last qualifying activity − first, up to churn or report end.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Cohort tables/materialised views; dashboard widgets; config keys.
+**Out of scope:** Demographic cuts (AN-10).
+**Technical notes:** Permission key: `reports.dashboards.view`. RTM ids: AN-015, AN-016, AN-017, AN-026, AN-027.
+**Definition of done:** as standard, plus reconciliation test.
+**Dependencies:** AN-2.
+
+---
+
+**Title:** [AN-5] Gamification and trivia metrics
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H AN-028–032.
+**User story:** As a user with `reports.dashboards.view` permission, I want leaderboard participation, rank movement, top-performer retention, trivia participation and learning re-engagement so that gamification effectiveness is visible.
+**Acceptance criteria:**
+- *Given* `leaderboard_entry`, *then* participation rate = participating registered ÷ eligible registered, and rank movement between intervals displays.
+- *Given* the configured top group (e.g. top 10%), *then* retention of that group displays.
+- *Given* trivia events/responses, *then* viewed, answered, skipped, correct, incorrect, completion rate and repeat participation display.
+- *Given* `content_view` after a trivia event, related-link open or engagement prompt, *then* re-engagement in learning modules displays.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** KPI queries; widgets.
+**Out of scope:** —
+**Technical notes:** Permission key: `reports.dashboards.view`. RTM ids: AN-028–AN-032, GM-008 (required analytics events generated).
+**Definition of done:** as standard, plus reconciliation with `trivia_response`.
+**Dependencies:** AN-2, GM-4.
+
+---
+
+**Title:** [AN-6] Evaluation, ratings and NPS metrics
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H AN-018/019/020, EV-005 (reports reconcile with responses).
+**User story:** As a user with `reports.dashboards.view` permission, I want survey results (response count, completion rate, average and distribution, topic and satisfaction ratings, NPS, consent status, period) so that user satisfaction is measured.
+**Acceptance criteria:**
+- *Given* `survey_response` rows, *then* per survey and period the listed metrics display; NPS = %promoters − %detractors.
+- *Given* only consented responses exist, *then* counts match stored responses exactly.
+- *Given* in-app feedback ratings, *then* they are consolidated with store ratings when AN-11 is present.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** KPI queries; widgets.
+**Out of scope:** Store ratings import (AN-11).
+**Technical notes:** Permission key: `reports.dashboards.view`. RTM ids: AN-018, AN-019, AN-020, EV-005.
+**Definition of done:** as standard.
+**Dependencies:** AN-2, EV-2.
+
+---
+
+**Title:** [AN-7] Technical metrics: crash, load time, API, network failures, size/battery
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H AN-021–025, §11.7. Crash and API data from the existing monitoring tool; load time and network failures from module events; size/battery from performance test results.
+**User story:** As a user with `reports.dashboards.view` permission, I want crash rate, load-time percentiles, API latency/error/timeout/auth-failure counts and network failure counts so that technical health is visible.
+**Acceptance criteria:**
+- *Given* the monitoring integration, *then* crash count, affected users/sessions, crashes per session and crash-free session rate display for the period.
+- *Given* `module_load` timing events, *then* p50, p95 and max display.
+- *Given* API gateway logs/metrics for module endpoints, *then* request count, latency, error rate, timeouts and auth failures display per endpoint.
+- *Given* `network_failure{type}` events (timeout, no connectivity, failed sync/download/report/upload), *then* counts by type display.
+- *Given* the performance test run, *then* app size, module size increase, downloaded asset size, local storage and battery impact are recorded as a report entry.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Monitoring-tool connector; timing and failure events in SDK; widgets; manual entry form for AN-025 test results.
+**Out of scope:** Alerting (existing ops tooling).
+**Technical notes:** Interface documented per §12. Permission key: `reports.dashboards.view`. RTM ids: AN-021–AN-025, §11.7.
+**Definition of done:** as standard.
+**Dependencies:** AN-2.
+
+---
+
+**Title:** [AN-8] Parameter-driven historical report with filters
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H §4.2-K — historical, parameter-driven reports filterable by date range, app version, feature, user type, age group, gender, region, city, device, OS, activity type, survey type, content topic, currency series, denomination; generation audited.
+**User story:** As a user with `reports.reports.generate` permission, I want to run any KPI report for a past period with filters so that I can answer specific questions over time.
+**Acceptance criteria:**
+- *Given* a report definition, *when* I set parameters and filters from the approved list, *then* the report generates showing generation date, parameters, data period and data source.
+- *Given* a historical period, *then* results reflect data as retained under BR-001, unchanged by later events.
+- *Given* the report framework, *when* a new KPI is added, *then* it registers as a new `report_definition` without changing the framework.
+- *Given* generation, *then* a `report_run` and an `audit_entry` are written.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** `report_definition`, `report_run`; parameter UI; filter engine; report registry.
+**Out of scope:** Exports (AN-9); demographic filters require AN-10's consent scoping to return non-suppressed values.
+**Technical notes:** Permission key: `reports.reports.generate`. RTM ids: §4.2-K, BR-001.
+**Definition of done:** as standard.
+**Dependencies:** AN-2, AN-3.
+
+---
+
+**Title:** [AN-9] Export reports to Excel, Word and PDF with generation metadata
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H §4.2-K (export), BR-009, §10 (prevention of unauthorized export).
+**User story:** As a user with `reports.reports.export` permission, I want to export a generated report to Excel, Word or PDF so that it can be shared per BSP templates.
+**Acceptance criteria:**
+- *Given* a generated report, *when* I export in each format, *then* the file opens in Excel/Word/a PDF reader with data, generation date, parameters, period and source.
+- *Given* an export, *then* it is audited with format and user.
+- *Given* a user with `reports.reports.generate` but not `export`, *then* 403 + audit.
+- *Given* BSP report templates, *then* exports use the approved template layout.
+**In scope:** Export service (xlsx/docx/pdf libs per backend stack); template mapping; download endpoint.
+**Out of scope:** Scheduled email delivery.
+**Technical notes:** Permission key: `reports.reports.export`. RTM ids: §4.2-K, BR-009, §4.2-M (exports open).
+**Definition of done:** as standard, plus opened-file evidence for all three formats.
+**Dependencies:** AN-8.
+
+---
+
+**Title:** [AN-10] Demographic and cohort reports with small-group suppression
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H §4.2-I (age, gender, region, city distributions and cuts), §4.2-J (no PII), §3.5 (PII only where explicitly authorised), UM-005.
+**User story:** As a user with `reports.dashboards.view` permission, I want aggregate demographic breakdowns of usage and retention with privacy suppression so that I can analyse cohorts lawfully.
+**Acceptance criteria:**
+- *Given* profiles with `demographic_analytics` consent, *then* age-group, gender, region and city distributions, DAU by gender, session duration by gender, retention by age/gender/region/city and churn by region/city display.
+- *Given* any group below the configured minimum (default 10), *then* its value is suppressed and marked.
+- *Given* users without consent, *then* their data is excluded from demographic cuts (but not from non-demographic KPIs).
+- *Given* a user holding `reports.pii.view`, *when* they open the PII drill-down, *then* it is shown and audited; without it, no row-level data is reachable.
+- *Given* a user without `reports.dashboards.view`, *then* 403 + audit.
+**In scope:** Consent-scoped joins; suppression rule; widgets; PII drill-down gate.
+**Out of scope:** —
+**Technical notes:** Flow **RF-3** (consent scoping). Permission keys: `reports.dashboards.view`, `reports.pii.view`. Age-group buckets in config. RTM ids: §4.2-I, §4.2-J, §4.2-M (PII not exposed).
+**Definition of done:** as standard, plus suppression test.
+**Dependencies:** AN-4, F3, F4.
+
+---
+
+**Title:** [AN-11] Install volume and store ratings consolidation
+**Epic:** `analytics-reporting`
+**Problem / context:** Annex H AN-001, AN-018 (store reports).
+**User story:** As a user with `reports.dashboards.view` permission, I want download/install/first-open counts and store ratings consolidated with in-app feedback so that acquisition and satisfaction are complete.
+**Acceptance criteria:**
+- *Given* `first_open` events and store report imports (CSV/API per BSP access), *then* install volume displays with data source labelled and double-counting avoided where feasible.
+- *Given* store ratings, *then* average and count display alongside in-app ratings.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Import job/upload form; widgets.
+**Out of scope:** —
+**Technical notes:** Interface documented per §12. Permission key: `reports.dashboards.view`. RTM ids: AN-001, AN-018.
+**Definition of done:** as standard.
+**Dependencies:** AN-6.
+
+---
+
+### Epic: `admin-security`
+
+---
+
+**Title:** [SA-1] Activate and deactivate accounts
+**Epic:** `admin-security`
+**Problem / context:** Annex H UM-004, §3.6. Deactivated accounts cannot authenticate to registered-only functions; history retained.
+**User story:** As a user with `admin.accounts.manage` permission, I want to activate or deactivate a user account so that access can be controlled without deleting history.
+**Acceptance criteria:**
+- *Given* an active account, *when* I deactivate it with a reason, *then* status becomes `deactivated`, sessions are invalidated, and the change is audited.
+- *Given* a deactivated account, *when* it attempts login or a registered-only API call, *then* it is refused with a clear message; guest features remain usable.
+- *Given* a deactivated account, *then* its historical data is retained.
+- *Given* reactivation, *then* access resumes and is audited.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Account list/search; status toggle; existing auth service integration for session invalidation.
+**Out of scope:** Data deletion (SA-7).
+**Technical notes:** Permission key: `admin.accounts.manage`. Flow **RF-4** (deactivated short-circuit). RTM ids: UM-004, UM-006.
+**Definition of done:** as standard.
+**Dependencies:** F2, F3.
+
+---
+
+**Title:** [SA-2] Assign and revoke roles
+**Epic:** `admin-security`
+**Problem / context:** Annex H §3.6 (assign approved roles, revoke access), §10 least privilege.
+**User story:** As a user with `admin.roles.assign` permission, I want to assign and revoke roles on users and view each role's permission keys so that least privilege is maintained.
+**Acceptance criteria:**
+- *Given* a user, *when* I assign a role, *then* their permissions update immediately and the change is audited.
+- *Given* a role, *when* I revoke it, *then* affected permissions are removed on the next request.
+- *Given* the role list, *then* each role shows its permission keys read-only (bundle editing is a later CAF).
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Role assignment UI; `PUT /admin/pisocamp/users/{id}/roles`.
+**Out of scope:** Custom role editing.
+**Technical notes:** Permission key: `admin.roles.assign`. RTM ids: §3.6, §10.
+**Definition of done:** as standard.
+**Dependencies:** F2.
+
+---
+
+**Title:** [SA-3] Manage module configuration
+**Epic:** `admin-security`
+**Problem / context:** Annex H §3.6 (manage module configurations), GM-001 (repeat window), AN-010 (session timeout), UM-005 (notice version), GM-007 (leaderboard flag).
+**User story:** As a user with `admin.config.manage` permission, I want to edit all Piso CAMP configuration keys with validation so that behaviour is tunable without a release.
+**Acceptance criteria:**
+- *Given* the config screen, *when* I edit a key (session timeout, trivia repeat days, leaderboard flag, advisory interval, key-action list, age buckets, suppression minimum, active notice version, recognition thresholds), *then* it validates by type/range, saves and is audited with before/after.
+- *Given* a saved change, *when* devices next sync, *then* the public subset is delivered via `GET /pisocamp/config`.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Key registry with defaults and validators; UI.
+**Out of scope:** Integration credentials (SA-5/DR-4 under `admin.integrations.manage`).
+**Technical notes:** Extends F2. Permission key: `admin.config.manage`. RTM id: §3.6.
+**Definition of done:** as standard.
+**Dependencies:** F2.
+
+---
+
+**Title:** [SA-4] Administrative audit log viewer
+**Epic:** `admin-security`
+**Problem / context:** Annex H §3.6 (view administrative audit logs), §10 (audit logging for administrative activity), §4.2-K (report generation audit).
+**User story:** As a user with `admin.audit.view` permission, I want to browse and filter all administrative audit entries so that I can review who did what and when.
+**Acceptance criteria:**
+- *Given* the viewer, *then* entries show actor, action, target, before/after, timestamp, including `permission_denied` and report generation entries.
+- *Given* filters (actor, action, target type, date range), *then* results narrow; results are paginated.
+- *Given* an export request, *then* it goes through AN-9 and is itself audited.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Viewer; filters; pagination.
+**Out of scope:** SIEM forwarding.
+**Technical notes:** Permission key: `admin.audit.view`. RTM ids: §3.6, §10.
+**Definition of done:** as standard.
+**Dependencies:** F2.
+
+---
+
+**Title:** [SA-5] Push notifications: opt-in, send approved notification, metrics
+**Epic:** `admin-security` · **Also touches:** `analytics-reporting`
+**Problem / context:** Annex H §3.2 (opt-in push), AN-014, §12 (existing push service).
+**User story:** As a user with `admin.notifications.send` permission, I want to send a BSP-approved notification to opted-in registered users and see delivery metrics so that re-engagement can be measured.
+**Acceptance criteria:**
+- *Given* a registered user, *when* they opt in from settings, *then* a `push_subscription` is stored; opt-out removes it.
+- *Given* an approved notification text and deep link, *when* I send, *then* it is dispatched via the existing push service and audited.
+- *Given* sends, *then* opt-in rate, delivery rate, open rate, click rate, failed delivery rate and re-engagement attributable (opens leading to a qualifying activity within 24 h) display on the dashboard.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Subscription; send UI; delivery/open/click events; widgets.
+**Out of scope:** Scheduling/segmentation beyond "all opted-in".
+**Technical notes:** Permission keys: `admin.notifications.send`, `admin.integrations.manage` (service config). Interface documented per §12. RTM ids: §3.2, AN-014.
+**Definition of done:** as standard.
+**Dependencies:** F3, AN-2, F5.
+
+---
+
+**Title:** [SA-6] Security hardening and observability pass
+**Epic:** `admin-security`
+**Problem / context:** Annex H §10, §11.6, §11.7, §13.2 (security testing, vulnerability scanning), Milestone 2 (Critical/High remediated before production).
+**User story:** As a user with `admin.audit.view` permission, I want evidence that the module meets the minimum security and observability controls so that production Go-Live conditions are satisfied.
+**Acceptance criteria:**
+- *Given* the mobile module, *then* tokens and queues use secure storage/encryption at rest, no hard-coded credentials exist (scan passes), input validation and output encoding are applied on all endpoints.
+- *Given* dependency and third-party inventory, *then* it is generated from lockfiles and attached to release docs.
+- *Given* vulnerability scans (mobile, API, admin), *then* no Critical/High remains open.
+- *Given* logs, *then* app, API, sync, publication, auth, report, recognition and AR failures are logged with correlation ids and contain no PII, credentials or images.
+- *Given* an audit of the checklist, *then* results are attached to the security documentation.
+**In scope:** Hardening fixes; log review; inventory scripts; scan evidence.
+**Out of scope:** Penetration testing scheduling (BSP-led).
+**Technical notes:** Cross-cutting; runs before UAT. RTM ids: §10, §11.6, §11.7.
+**Definition of done:** as standard, plus scan reports attached.
+**Dependencies:** all Release 1–2 tickets.
+
+---
+
+**Title:** [SA-7] Consent withdrawal and data-subject export/delete
+**Epic:** `admin-security`
+**Problem / context:** Annex H UM-005 (withdrawal/modification of consent), Part A §XIX–XX (data subject requests, secure deletion), §10 (secure deletion).
+**User story:** As a Registered End User, I want to withdraw consent and request a copy or deletion of my Piso CAMP data so that my privacy rights are honoured.
+**Acceptance criteria:**
+- *Given* settings, *when* I withdraw a consent purpose, *then* a `withdrawn` `consent_record` is written and consent-dependent collection stops immediately.
+- *Given* an export request, *then* a readable, documented file of my profile, consents, responses and progress is produced per BSP process.
+- *Given* a deletion request approved by BSP process, *when* executed by a user with `admin.accounts.manage`, *then* personal data is securely deleted or pseudonymised per retention policy, analytics aggregates are preserved, and the action is audited.
+- *Given* a user without the permission, *then* 403 + audit.
+**In scope:** Settings screen; export job; deletion job; admin trigger.
+**Out of scope:** Automated request intake (BSP process).
+**Technical notes:** Flow **RF-3**. Permission key: `admin.accounts.manage`. RTM ids: UM-005, §XIX, §XX.
+**Definition of done:** as standard.
+**Dependencies:** F4, SA-1.
+
+---
+
+## 4. Risky-path flows (referenced above)
+
+**RF-1 Content publish → bundle → client visibility.** Approver publishes → server checks `content.items.publish` and state `approved` → status `published`, new immutable version `current_published` → audit → bundle job builds from `published` only, increments `bundle_version`, writes checksums → client compares manifest, downloads diff to staging, verifies, atomic swap. *Failure:* bundle build fails → item flagged `bundle_pending`, next build retries; client never sees a partial bundle. *Risk:* CM-006 and rollback correctness depend on ordering and immutability.
+
+**RF-2 Offline queue → exactly-once ingestion.** Client generates UUID `event_id` → encrypted local queue → batch upload → server upsert on unique key → acked ids → client deletes. *Failure:* timeout after commit → resend → duplicates rejected and acked. *Risk:* §4.2-M; naive retry double-counts.
+
+**RF-3 Consent gate.** Consent-dependent action → check latest `consent_record` for the active notice version → none/withdrawn/outdated → show notice → accept (record) or decline (record, skip collection, feature usable) → collect only after `granted`. *Failure:* notice version bumped → `requires_reconsent`; collection stops. *Risk:* UM-005, §4.2-L are legal obligations.
+
+**RF-4 Admin permission enforcement.** Request → existing auth → account `deactivated` → 401 → roles → permissions → key present → proceed + audit; absent → 403 + `permission_denied` audit. *Risk:* security-critical prerequisite for every admin ticket.
+
+**RF-5 Recognition decision.** Frame → on-device inference → confidence < threshold → `unrecognized` (guidance, retry/exit) → class foreign → "not Philippine currency" → class demonetized → demonetized notice → else denomination (visual + audio); disclaimer on every result; frames discarded, never stored/uploaded. *Failure:* model missing/corrupt → "unavailable", never guess. *Risk:* BR-011, DR-006, DR-007.
+
+**RF-6 Bundle download with interruption.** Manifest → version compare → staged download with resume → per-asset checksum → atomic rename → record version. *Failure:* connectivity lost → staging kept, resume later, live content untouched. *Risk:* §11.3/11.4 corruption on interrupted sync.
+
+Standard create-and-view screens (question list, survey list, report list, account list, config forms) need no flow; their acceptance criteria suffice.
+
+---
+
+## How a developer uses this package
+1. Open your assigned ticket in this file → create a branch `<KEY>-short-name` from the issue.
+2. Build from the acceptance criteria; run the referenced risky-flow (RF-n) checks and the Definition of Done before opening the PR.
+3. When unsure, consult `DOMAIN-MODEL.md` for entity names, state machines and permission keys, and `PRD.md` for constraints, non-goals and decisions.
