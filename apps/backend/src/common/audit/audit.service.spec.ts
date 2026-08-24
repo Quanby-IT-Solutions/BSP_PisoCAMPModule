@@ -90,6 +90,7 @@ beforeAll(async () => {
 		},
 	])
 	await db.insert(roles).values({ name: TEST_ROLE, description: "AZ-4 fixture" })
+	await db.insert(roles).values({ name: "Admin" }).onConflictDoNothing()
 })
 
 afterAll(async () => {

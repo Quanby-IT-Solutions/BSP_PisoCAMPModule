@@ -10,6 +10,7 @@ export default defineConfig({
 	plugins: [react()],
 	test: {
 		environment: "jsdom",
+		execArgv: ["--no-experimental-webstorage"],
 		setupFiles: ["./vitest.setup.ts"],
 		globals: true,
 		passWithNoTests: true,
