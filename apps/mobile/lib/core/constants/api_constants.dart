@@ -73,4 +73,9 @@ class ApiConstants {
 
   // Public Piso CAMP configuration (no session required).
   static String get pisoCampConfig => '$versionedUrl/pisocamp/config';
+
+  // Public Piso CAMP privacy notice and consent recording.
+  static String pisoCampConsentStatus(String purpose) =>
+      '$versionedUrl/pisocamp/consent/$purpose';
+  static String get pisoCampConsent => '$versionedUrl/pisocamp/consent';
 }

@@ -157,6 +157,7 @@ describe("PINO_REDACT_PATHS", () => {
 		expect([...PINO_REDACT_PATHS]).toEqual([
 			"req.headers.authorization",
 			"req.headers.cookie",
+			"req.headers['x-device-pseudo-id']",
 			"res.headers['set-cookie']",
 			"req.body.password",
 			"req.body.*.password",

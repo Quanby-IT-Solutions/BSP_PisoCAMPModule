@@ -2,7 +2,13 @@ import { getTableColumns, getTableName } from "drizzle-orm"
 import { getTableConfig } from "drizzle-orm/pg-core"
 import { describe, expect, it } from "vitest"
 
-import { moduleConfiguration, pisoCampAccountState, schema } from "./schema.js"
+import {
+	consentRecords,
+	moduleConfiguration,
+	pisoCampAccountState,
+	privacyNotices,
+	schema,
+} from "./schema.js"
 
 describe("F2 database schema", () => {
 	it("defines module_configuration with its persisted value and audit columns", () => {
@@ -29,5 +35,53 @@ describe("F2 database schema", () => {
 		expect(getTableConfig(pisoCampAccountState).checks.map(check => check.name)).toContain(
 			"pisocamp_account_state_status_check"
 		)
+	})
+})
+
+describe("F4 consent database schema", () => {
+	it("defines immutable privacy notice versions with approved-body metadata", () => {
+		expect(getTableName(privacyNotices)).toBe("privacy_notice")
+		expect(Object.keys(getTableColumns(privacyNotices))).toEqual([
+			"id",
+			"version",
+			"title",
+			"body",
+			"sourceUrl",
+			"contentSha256",
+			"effectiveAt",
+			"createdAt",
+		])
+		expect(schema.privacyNotices.table).toBe(privacyNotices)
+	})
+
+	it("defines append-only consent evidence with database checks and subject indexes", () => {
+		expect(getTableName(consentRecords)).toBe("consent_record")
+		expect(Object.keys(getTableColumns(consentRecords))).toEqual([
+			"id",
+			"accountId",
+			"devicePseudoId",
+			"purpose",
+			"noticeId",
+			"noticeVersion",
+			"status",
+			"respondedAt",
+			"recordedAt",
+		])
+		const config = getTableConfig(consentRecords)
+		expect(config.checks.map(item => item.name)).toEqual(
+			expect.arrayContaining([
+				"consent_record_subject_xor_check",
+				"consent_record_device_pseudo_id_check",
+				"consent_record_purpose_check",
+				"consent_record_status_check",
+			])
+		)
+		expect(config.indexes.map(item => item.config.name)).toEqual(
+			expect.arrayContaining([
+				"consent_record_account_purpose_recorded_idx",
+				"consent_record_device_purpose_recorded_idx",
+			])
+		)
+		expect(schema.consentRecords.table).toBe(consentRecords)
 	})
 })

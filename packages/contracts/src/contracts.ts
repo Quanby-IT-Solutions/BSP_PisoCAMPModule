@@ -77,13 +77,32 @@ export type { MePermissions } from "./modules/v1/me/me.schema.js"
 
 // Piso CAMP public and administrator configuration schemas
 export {
+	CONSENT_DECISIONS,
+	CONSENT_PURPOSES,
+	CONSENT_STATES,
+	ConsentDecisionSchema,
+	ConsentPurposeSchema,
+	ConsentStateSchema,
+	DevicePseudoIdSchema,
+	GetPisoCampConsentInputSchema,
+	PisoCampConsentStatusSchema,
+	PisoCampPrivacyNoticeSchema,
 	PisoCampPublicConfigSchema,
 	PisoCampAdminConfigSchema,
+	RecordPisoCampConsentInputSchema,
+	RecordedPisoCampConsentSchema,
 	UpdatePisoCampAdminConfigSchema,
 } from "./modules/v1/pisocamp/pisocamp.schema.js"
 export type {
+	ConsentDecision,
+	ConsentPurpose,
+	ConsentState,
+	PisoCampConsentStatus,
+	PisoCampPrivacyNotice,
 	PisoCampPublicConfig,
 	PisoCampAdminConfig,
+	RecordPisoCampConsentInput,
+	RecordedPisoCampConsent,
 	UpdatePisoCampAdminConfig,
 } from "./modules/v1/pisocamp/pisocamp.schema.js"
 

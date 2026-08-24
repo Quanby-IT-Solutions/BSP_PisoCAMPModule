@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing"
 
+import { AccountAccessService } from "@/common/rbac/account-access.service"
 import type { V1Outputs } from "@/config/contract-types"
 
 import { TodosController } from "./todos.controller"
@@ -122,7 +123,13 @@ describe("TodosController (v1)", () => {
 
 		app = await Test.createTestingModule({
 			controllers: [TodosController],
-			providers: [TodosService],
+			providers: [
+				TodosService,
+				{
+					provide: AccountAccessService,
+					useValue: { isActive: jest.fn().mockResolvedValue(true) },
+				},
+			],
 		}).compile()
 
 		controller = app.get<TodosController>(TodosController)

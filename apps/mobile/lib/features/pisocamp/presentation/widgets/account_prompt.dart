@@ -7,7 +7,7 @@ class AccountPrompt extends StatelessWidget {
     required this.onCreateAccount,
     required this.onContinueAsGuest,
   });
-  final VoidCallback onCreateAccount;
+  final VoidCallback? onCreateAccount;
   final VoidCallback onContinueAsGuest;
 
   @override

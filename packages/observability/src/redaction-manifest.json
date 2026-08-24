@@ -2,6 +2,7 @@
 	"fieldNames": [
 		"authorization",
 		"cookie",
+		"x-device-pseudo-id",
 		"set-cookie",
 		"password",
 		"token",

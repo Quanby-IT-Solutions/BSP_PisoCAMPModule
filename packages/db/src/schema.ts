@@ -1,5 +1,5 @@
 import { defineRelations, sql } from "drizzle-orm"
-import { check, index, primaryKey } from "drizzle-orm/pg-core"
+import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core"
 
 import { createTable } from "./utils/table.js"
 
@@ -232,6 +232,74 @@ export const pisoCampAccountState = createTable(
 )
 
 // ============================================================================
+// PISO CAMP PRIVACY NOTICE AND CONSENT
+// ============================================================================
+
+/** Approved, immutable notice versions. F4 exposes no UPDATE or DELETE path. */
+export const privacyNotices = createTable(
+	"privacy_notice",
+	t => ({
+		id: t.uuid("id").primaryKey(),
+		version: t.text("version").notNull().unique(),
+		title: t.text("title").notNull(),
+		body: t.text("body").notNull(),
+		sourceUrl: t.text("source_url").notNull(),
+		contentSha256: t.text("content_sha256").notNull(),
+		effectiveAt: t.timestamp("effective_at", { withTimezone: true }).notNull(),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("privacy_notice_id_version_unique").on(t.id, t.version),
+		check("privacy_notice_content_sha256_check", sql`${t.contentSha256} ~ '^[a-f0-9]{64}$'`),
+	]
+)
+
+/** Append-only consent evidence. Current/reconsent state is derived, never updated here. */
+export const consentRecords = createTable(
+	"consent_record",
+	t => ({
+		id: t.uuid("id").primaryKey(),
+		accountId: t.text("account_id").references(() => users.id, { onDelete: "restrict" }),
+		devicePseudoId: t.text("device_pseudo_id"),
+		purpose: t
+			.text("purpose")
+			.notNull()
+			.$type<"registration" | "survey" | "demographic_analytics">(),
+		noticeId: t.uuid("notice_id").notNull(),
+		noticeVersion: t.text("notice_version").notNull(),
+		status: t.text("status").notNull().$type<"granted" | "declined" | "withdrawn">(),
+		respondedAt: t.timestamp("responded_at", { withTimezone: true }).notNull(),
+		recordedAt: t.timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		foreignKey({
+			columns: [t.noticeId, t.noticeVersion],
+			foreignColumns: [privacyNotices.id, privacyNotices.version],
+			name: "consent_record_notice_id_version_fkey",
+		}).onDelete("restrict"),
+		check(
+			"consent_record_subject_xor_check",
+			sql`(${t.accountId} is not null) <> (${t.devicePseudoId} is not null)`
+		),
+		check(
+			"consent_record_device_pseudo_id_check",
+			sql`${t.devicePseudoId} is null or ${t.devicePseudoId} ~ '^[A-Za-z0-9_-]{22}$'`
+		),
+		check(
+			"consent_record_purpose_check",
+			sql`${t.purpose} in ('registration', 'survey', 'demographic_analytics')`
+		),
+		check("consent_record_status_check", sql`${t.status} in ('granted', 'declined', 'withdrawn')`),
+		index("consent_record_account_purpose_recorded_idx")
+			.on(t.accountId, t.purpose, t.recordedAt.desc())
+			.where(sql`${t.accountId} is not null`),
+		index("consent_record_device_purpose_recorded_idx")
+			.on(t.devicePseudoId, t.purpose, t.recordedAt.desc())
+			.where(sql`${t.devicePseudoId} is not null`),
+	]
+)
+
+// ============================================================================
 // AUDIT LOG
 // ============================================================================
 
@@ -297,6 +365,8 @@ export const relations = defineRelations(
 		rolePermissions,
 		moduleConfiguration,
 		pisoCampAccountState,
+		privacyNotices,
+		consentRecords,
 		auditLog,
 	},
 	r => ({
@@ -311,6 +381,7 @@ export const relations = defineRelations(
 				alias: "accountStateAccount",
 			}),
 			pisoCampAccountStatesUpdated: r.many.pisoCampAccountState({ alias: "accountStateUpdater" }),
+			consentRecords: r.many.consentRecords(),
 		},
 		sessions: {
 			user: r.one.users({
@@ -388,6 +459,19 @@ export const relations = defineRelations(
 				alias: "accountStateUpdater",
 			}),
 		},
+		privacyNotices: {
+			consentRecords: r.many.consentRecords(),
+		},
+		consentRecords: {
+			account: r.one.users({
+				from: r.consentRecords.accountId,
+				to: r.users.id,
+			}),
+			notice: r.one.privacyNotices({
+				from: [r.consentRecords.noticeId, r.consentRecords.noticeVersion],
+				to: [r.privacyNotices.id, r.privacyNotices.version],
+			}),
+		},
 	})
 )
 
@@ -409,6 +493,8 @@ export const schema = Object.assign(
 		rolePermissions,
 		moduleConfiguration,
 		pisoCampAccountState,
+		privacyNotices,
+		consentRecords,
 		auditLog,
 	},
 	relations

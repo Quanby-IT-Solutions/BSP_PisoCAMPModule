@@ -2,6 +2,16 @@ import type { PermissionName, RoleName } from "@repo/contracts"
 
 export const DEFAULT_MODULE_CONFIGURATION = Object.freeze({
 	session_inactivity_minutes: 30,
+	active_privacy_notice_version: "2024-12-26",
+})
+
+/** Authoritative metadata only. The approved legal body enters through the import seam. */
+export const BSP_PRIVACY_NOTICE_METADATA = Object.freeze({
+	id: "1cca6b9c-b217-5e59-b679-c9368763274d",
+	version: "2024-12-26",
+	title: "BSP Mobile App Privacy Notice",
+	sourceUrl: "https://www.bsp.gov.ph/Pages/AboutTheBank/MobileAppPrivacyNotice.aspx",
+	effectiveAt: new Date("2024-12-26T00:00:00.000Z"),
 })
 
 /** Canonical idempotent seed bundles. Explicit grants are the only authorization source. */

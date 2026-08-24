@@ -56,6 +56,8 @@ export type RedactedFieldPlacement = "request-header" | "response-header" | "bod
 const REDACTED_FIELDS = [
 	{ name: "authorization", placement: "request-header" },
 	{ name: "cookie", placement: "request-header" },
+	// F4 guest subject identifier: pseudonymous, but still correlates activity.
+	{ name: "x-device-pseudo-id", placement: "request-header" },
 	{ name: "set-cookie", placement: "response-header" },
 	{ name: "password", placement: "body" },
 	// Single-use credentials from the verification and reset flows.

@@ -13,6 +13,16 @@ import type { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.i
 
 import type { PisoCampAdminConfigService } from "./pisocamp-admin-config.service"
 
+jest.mock("@orpc/server", () => ({
+	ORPCError: class ORPCError extends Error {
+		readonly code: string
+		constructor(code: string, options?: { message?: string }) {
+			super(options?.message)
+			this.code = code
+		}
+	},
+}))
+
 const USER_ID = "f2-atomic-user"
 const FAILURE_KEY = "f2-atomic-failure-001"
 const REPLAY_KEY = "f2-atomic-replay-0001"
@@ -70,6 +80,10 @@ async function execute(
 async function removeFailureTrigger() {
 	await db.execute(sql.raw(`drop trigger if exists "${TRIGGER_NAME}" on "idempotency_keys"`))
 	await db.execute(sql.raw(`drop function if exists "${FUNCTION_NAME}"()`))
+}
+
+function createInterceptor() {
+	return new InterceptorConstructor({ isActive: async () => true } as never)
 }
 
 async function resetEvidence() {
@@ -177,7 +191,7 @@ describe("Piso CAMP idempotent transaction boundary", () => {
 		)
 
 		const service = new ServiceConstructor(new AuditServiceConstructor())
-		await expect(execute(new InterceptorConstructor(), service, FAILURE_KEY, 60)).rejects.toThrow()
+		await expect(execute(createInterceptor(), service, FAILURE_KEY, 60)).rejects.toThrow()
 
 		const [config] = await db
 			.select({ value: moduleConfiguration.value })
@@ -190,7 +204,7 @@ describe("Piso CAMP idempotent transaction boundary", () => {
 
 	it("replays a same-key retry without duplicating its success audit", async () => {
 		const service = new ServiceConstructor(new AuditServiceConstructor())
-		const interceptor = new InterceptorConstructor()
+		const interceptor = createInterceptor()
 		const first = await execute(interceptor, service, REPLAY_KEY, 60)
 		const replay = await execute(interceptor, service, REPLAY_KEY, 90)
 

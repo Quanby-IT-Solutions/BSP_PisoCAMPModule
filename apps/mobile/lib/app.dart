@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:toastification/toastification.dart';
 import 'package:mobile/core/navigation/app_router.dart';
 import 'package:mobile/core/theme/theme_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
 
 /// Root widget for the application.
 ///
@@ -14,6 +15,7 @@ class App extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(consentSyncControllerProvider);
     final mode = ref.watch(themeModeProvider);
     final light = ref.watch(lightThemeProvider);
     final dark = ref.watch(darkThemeProvider);

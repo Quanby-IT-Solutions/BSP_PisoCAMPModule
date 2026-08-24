@@ -1,5 +1,4 @@
 import {
-	BadRequestException,
 	Injectable,
 	type CallHandler,
 	type ExecutionContext,
@@ -11,6 +10,12 @@ import { firstValueFrom, from, type Observable } from "rxjs"
 import { idempotencyKeys } from "@repo/db/schema"
 
 import { databaseTransactionContext } from "@/common/database/database-transaction.context"
+import { AccountAccessService } from "@/common/rbac/account-access.service"
+import { isDevicePseudoId } from "@/shared/identity/device-pseudo-id"
+import {
+	resolveVerifiedAccountId,
+	type VerifiedSessionRequest,
+} from "@/shared/identity/verified-session"
 
 import {
 	describeIdempotencyKeyProblem,
@@ -41,6 +46,14 @@ function isOrpcProcedure(value: unknown): value is OrpcProcedure {
 	)
 }
 
+async function throwOrpcError(
+	code: "BAD_REQUEST" | "UNAUTHORIZED",
+	message: string
+): Promise<never> {
+	const { ORPCError } = await import("@orpc/server")
+	throw new ORPCError(code, { message })
+}
+
 /**
  * Idempotency for mutating endpoints (AB-3 / F-13, F-39).
  *
@@ -69,7 +82,8 @@ function isOrpcProcedure(value: unknown): value is OrpcProcedure {
  *
  * ## Behaviour
  *
- *   - No `Idempotency-Key` header   → bypass, handle normally.
+ *   - No `Idempotency-Key` header   → bypass, except the consent POST where
+ *                                      the key is mandatory.
  *   - Invalid key                   → 400 before the handler runs.
  *   - No resolvable author id       → bypass (auth guard already rejected, or
  *                                      the route is anonymous).
@@ -101,39 +115,35 @@ function isOrpcProcedure(value: unknown): value is OrpcProcedure {
  */
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
+	constructor(private readonly accountAccessService: AccountAccessService) {}
+
 	async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
-		const request = context.switchToHttp().getRequest<{
-			headers: Record<string, string | string[] | undefined>
-			session?: { user?: { id?: string } }
-			user?: { id?: string }
-		}>()
+		const request = context.switchToHttp().getRequest<VerifiedSessionRequest>()
 
 		const rawKey = request.headers["idempotency-key"]
 		const key = Array.isArray(rawKey) ? rawKey[0] : rawKey
 
 		// No idempotency key → normal handling.
 		if (!key) {
-			return next.handle()
-		}
-
-		// Validate first: the value becomes half a primary key and is fed to
-		// hashtext() for the advisory lock, so an unbounded or exotic header must
-		// reach neither. Rejecting here also satisfies "400 before any write" —
-		// nothing has run yet.
-		const problem = validateIdempotencyKey(key)
-		if (problem) {
-			throw new BadRequestException(describeIdempotencyKeyProblem(problem))
+			return from(this.dispatch(next, undefined, undefined, undefined))
 		}
 
 		// Mirror RbacGuard's resolution: session first, direct user reference as fallback.
-		const authorId = request.session?.user?.id ?? request.user?.id
+		const authenticatedAuthorId = await resolveVerifiedAccountId(request)
+		const rawDevicePseudoId = request.headers["x-device-pseudo-id"]
+		const devicePseudoId = Array.isArray(rawDevicePseudoId)
+			? rawDevicePseudoId[0]
+			: rawDevicePseudoId
+		const authorId =
+			authenticatedAuthorId ??
+			(isDevicePseudoId(devicePseudoId) ? `guest:${devicePseudoId}` : undefined)
 
-		// No authenticated user → bypass; the auth guard handles rejection.
+		// No account or valid guest subject → bypass; the route's identity layer handles rejection.
 		if (!authorId) {
-			return next.handle()
+			return from(this.dispatch(next, key, undefined, authenticatedAuthorId))
 		}
 
-		return from(this.dispatch(next, key, authorId))
+		return from(this.dispatch(next, key, authorId, authenticatedAuthorId))
 	}
 
 	/**
@@ -146,25 +156,69 @@ export class IdempotencyInterceptor implements NestInterceptor {
 	 * are no such mutating routes in this app today, and the shape is kept only
 	 * so the interceptor stays usable if one is added.
 	 */
-	private async dispatch(next: CallHandler, key: string, authorId: string): Promise<unknown> {
+	private async dispatch(
+		next: CallHandler,
+		key: string | undefined,
+		authorId: string | undefined,
+		authenticatedAuthorId: string | undefined
+	): Promise<unknown> {
 		const emitted = await firstValueFrom(next.handle())
 
 		if (isOrpcProcedure(emitted)) {
-			return this.wrapProcedure(emitted, key, authorId)
+			return this.wrapProcedure(emitted, key, authorId, authenticatedAuthorId)
 		}
 
+		if (!key || !authorId) return emitted
+		const problem = validateIdempotencyKey(key)
+		if (problem) {
+			return throwOrpcError("BAD_REQUEST", describeIdempotencyKeyProblem(problem))
+		}
 		return this.runWithIdempotency(authorId, key, () => Promise.resolve(emitted))
 	}
 
 	/** Clone a procedure with its handler wrapped in the idempotency transaction. */
-	private wrapProcedure(procedure: OrpcProcedure, key: string, authorId: string): OrpcProcedure {
+	private wrapProcedure(
+		procedure: OrpcProcedure,
+		key: string | undefined,
+		authorId: string | undefined,
+		authenticatedAuthorId: string | undefined
+	): OrpcProcedure {
 		const original = procedure["~orpc"].handler
+		const route = procedure["~orpc"].route as { method?: string; path?: string } | undefined
+		const isConsentRecordRoute = route?.method === "POST" && route.path === "/v1/pisocamp/consent"
 
 		const clone: OrpcProcedure = {
 			"~orpc": {
 				...procedure["~orpc"],
-				handler: (options: unknown) =>
-					this.runWithIdempotency(authorId, key, () => Promise.resolve(original(options))),
+				handler: async (options: unknown) => {
+					if (!key) {
+						if (isConsentRecordRoute) {
+							return throwOrpcError("BAD_REQUEST", "Idempotency-Key is required")
+						}
+						return original(options)
+					}
+					const problem = validateIdempotencyKey(key)
+					if (problem) {
+						return throwOrpcError("BAD_REQUEST", describeIdempotencyKeyProblem(problem))
+					}
+					if (isConsentRecordRoute) {
+						const input = (options as { input?: { id?: unknown } } | null)?.input
+						if (input?.id !== key) {
+							return throwOrpcError(
+								"BAD_REQUEST",
+								"Idempotency-Key must match the consent record id"
+							)
+						}
+						if (
+							authenticatedAuthorId &&
+							!(await this.accountAccessService.isActive(authenticatedAuthorId))
+						) {
+							return throwOrpcError("UNAUTHORIZED", "Account is deactivated")
+						}
+					}
+					if (!authorId) return original(options)
+					return this.runWithIdempotency(authorId, key, () => Promise.resolve(original(options)))
+				},
 			},
 		}
 

@@ -1,8 +1,12 @@
 import { oc } from "@orpc/contract"
 
 import {
+	GetPisoCampConsentInputSchema,
 	PisoCampAdminConfigSchema,
+	PisoCampConsentStatusSchema,
 	PisoCampPublicConfigSchema,
+	RecordedPisoCampConsentSchema,
+	RecordPisoCampConsentInputSchema,
 	UpdatePisoCampAdminConfigSchema,
 } from "./pisocamp.schema.js"
 
@@ -38,5 +42,27 @@ export const pisoCampContract = {
 				spec: spec => ({ ...spec, security: [] }),
 			})
 			.output(PisoCampPublicConfigSchema),
+	},
+	consent: {
+		get: oc
+			.route({
+				method: "GET",
+				path: "/pisocamp/consent/{purpose}",
+				summary: "Get the active privacy notice and current consent state",
+				tags: ["Piso CAMP Consent"],
+				spec: spec => ({ ...spec, security: [] }),
+			})
+			.input(GetPisoCampConsentInputSchema)
+			.output(PisoCampConsentStatusSchema),
+		record: oc
+			.route({
+				method: "POST",
+				path: "/pisocamp/consent",
+				summary: "Record an immutable privacy-notice decision",
+				tags: ["Piso CAMP Consent"],
+				spec: spec => ({ ...spec, security: [] }),
+			})
+			.input(RecordPisoCampConsentInputSchema)
+			.output(RecordedPisoCampConsentSchema),
 	},
 }

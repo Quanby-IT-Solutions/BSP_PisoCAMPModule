@@ -2,6 +2,7 @@
 import "dotenv/config"
 
 import { randomBytes, scryptSync } from "node:crypto"
+import { readFile } from "node:fs/promises"
 import { and, eq, inArray, or } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
@@ -14,6 +15,10 @@ import {
 	type RoleName,
 } from "@repo/contracts"
 
+import {
+	getPrivacyNoticeImportConfiguration,
+	importApprovedPrivacyNotice,
+} from "./privacy-notice-import.js"
 import {
 	accounts,
 	moduleConfiguration,
@@ -73,6 +78,13 @@ async function seedDatabase() {
 	const db = drizzle({ client: pool, schema })
 	const now = new Date()
 	const hashedSeedPassword = await hashPassword(seedPassword)
+	const privacyNoticeImport = getPrivacyNoticeImportConfiguration(process.env)
+	const approvedPrivacyNoticeInput = privacyNoticeImport
+		? {
+				body: await readFile(privacyNoticeImport.bodyFile, "utf8"),
+				expectedSha256: privacyNoticeImport.expectedSha256,
+			}
+		: undefined
 
 	const seedUsers: Array<typeof users.$inferInsert> = [
 		{
@@ -226,6 +238,9 @@ async function seedDatabase() {
 
 	try {
 		await db.transaction(async tx => {
+			if (approvedPrivacyNoticeInput) {
+				await importApprovedPrivacyNotice(tx, approvedPrivacyNoticeInput)
+			}
 			for (const user of seedUsers) {
 				await tx
 					.insert(users)

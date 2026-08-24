@@ -15,6 +15,7 @@
 const List<String> kRedactedFieldNames = <String>[
   'authorization',
   'cookie',
+  'x-device-pseudo-id',
   'set-cookie',
   'password',
   'token',
