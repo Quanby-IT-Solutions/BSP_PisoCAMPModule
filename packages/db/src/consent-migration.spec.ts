@@ -11,6 +11,7 @@ import { importApprovedPrivacyNotice } from "./privacy-notice-import.js"
 import { schema } from "./schema.js"
 
 const f2MigrationName = "20260824065559_overrated_echo"
+const f4MigrationName = "20260824121810_f4_consent_foundation"
 const databaseName = `f4_consent_migration_spec_${process.pid}`
 const migrationsFolder = fileURLToPath(new URL("./migrations", import.meta.url))
 const sourceUrl = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : undefined
@@ -69,11 +70,11 @@ afterAll(async () => {
 })
 
 describe("single additive F4 migration", () => {
-	it("has exactly one migration after F2", async () => {
+	it("keeps exactly one named F4 migration after F2", async () => {
 		const names = (await readdir(migrationsFolder, { withFileTypes: true }))
 			.filter(entry => entry.isDirectory() && entry.name > f2MigrationName)
 			.map(entry => entry.name)
-		expect(names).toHaveLength(1)
+		expect(names.filter(name => name === f4MigrationName)).toHaveLength(1)
 	})
 
 	it("upgrades and reapplies into a fail-closed migration-only state", async () => {

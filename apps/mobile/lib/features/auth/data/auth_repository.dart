@@ -5,11 +5,36 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/features/auth/data/models/session_model.dart';
+import 'package:mobile/features/auth/data/models/user_model.dart';
 import 'package:mobile/services/api/api_client.dart';
 import 'package:mobile/services/storage/secure_storage_service.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'auth_repository.g.dart';
+
+enum AuthSignUpState { authenticated, verificationRequired }
+
+class AuthSignUpOutcome {
+  const AuthSignUpOutcome._({
+    required this.state,
+    required this.user,
+    this.session,
+  });
+
+  AuthSignUpOutcome.authenticated(SessionModel session)
+    : this._(
+        state: AuthSignUpState.authenticated,
+        user: session.user,
+        session: session,
+      );
+
+  const AuthSignUpOutcome.verificationRequired(UserModel user)
+    : this._(state: AuthSignUpState.verificationRequired, user: user);
+
+  final AuthSignUpState state;
+  final UserModel user;
+  final SessionModel? session;
+}
 
 /// Repository that communicates with the Better Auth backend endpoints.
 ///
@@ -68,8 +93,10 @@ class AuthRepository {
       data: {'email': email, 'password': password},
     );
 
-    _logDebug('signIn status=${response.statusCode} '
-        'type=${response.data.runtimeType}');
+    _logDebug(
+      'signIn status=${response.statusCode} '
+      'type=${response.data.runtimeType}',
+    );
 
     final body = _parseJsonBody(response);
     if (response.statusCode == 200 && body != null) {
@@ -82,8 +109,8 @@ class AuthRepository {
 
   /// Signs up with email, password, and name.
   ///
-  /// Better Auth `/sign-up/email` returns the same shape as sign-in.
-  Future<SessionModel?> signUp({
+  /// Better Auth returns a nullable token while email verification is pending.
+  Future<AuthSignUpOutcome> signUp({
     required String email,
     required String password,
     required String name,
@@ -93,16 +120,26 @@ class AuthRepository {
       data: {'email': email, 'password': password, 'name': name},
     );
 
-    _logDebug('signUp status=${response.statusCode} '
-        'type=${response.data.runtimeType}');
+    _logDebug(
+      'signUp status=${response.statusCode} '
+      'type=${response.data.runtimeType}',
+    );
 
     final body = _parseJsonBody(response);
     if (response.statusCode == 200 && body != null) {
+      final userJson = body['user'];
+      if (userJson is! Map<String, dynamic>) {
+        throw const FormatException('Invalid sign-up response');
+      }
+      final user = UserModel.fromJson(userJson);
+      if (body['token'] == null) {
+        return AuthSignUpOutcome.verificationRequired(user);
+      }
       final session = SessionModel.fromAuthResponse(body);
       await _storage.setSessionToken(session.session.token);
-      return session;
+      return AuthSignUpOutcome.authenticated(session);
     }
-    return null;
+    throw const FormatException('Invalid sign-up response');
   }
 
   /// Signs out and clears every stored credential on the device.
@@ -130,8 +167,10 @@ class AuthRepository {
     try {
       final response = await _dio.get(ApiConstants.getSession);
 
-      _logDebug('getSession status=${response.statusCode} '
-          'type=${response.data.runtimeType}');
+      _logDebug(
+        'getSession status=${response.statusCode} '
+        'type=${response.data.runtimeType}',
+      );
 
       final body = _parseJsonBody(response);
       if (response.statusCode == 200 && body != null) {

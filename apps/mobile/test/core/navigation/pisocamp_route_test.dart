@@ -23,4 +23,29 @@ void main() {
       AppRoutes.login,
     );
   });
+
+  test(
+    'dedicated Piso CAMP registration stays reachable before authentication',
+    () {
+      expect(
+        resolveAppRedirect(
+          isOnboardingDone: true,
+          isAuthenticated: false,
+          matchedLocation: AppRoutes.pisoCampRegistration,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test('dedicated Piso CAMP profile completion stays open after signup', () {
+    expect(
+      resolveAppRedirect(
+        isOnboardingDone: true,
+        isAuthenticated: true,
+        matchedLocation: AppRoutes.pisoCampRegistration,
+      ),
+      isNull,
+    );
+  });
 }

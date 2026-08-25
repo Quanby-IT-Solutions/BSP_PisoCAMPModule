@@ -12,17 +12,26 @@ import {
 	PisoCampConsentService,
 	pisoCampConsentTransactionProvider,
 } from "./pisocamp-consent.service"
+import { PisoCampProfileController } from "./pisocamp-profile.controller"
+import {
+	pisoCampProfileDatabaseProvider,
+	PisoCampProfileService,
+	pisoCampProfileTransactionProvider,
+} from "./pisocamp-profile.service"
 import { PisoCampController } from "./pisocamp.controller"
 import { PisoCampService } from "./pisocamp.service"
 
 @Module({
 	imports: [RbacModule],
-	controllers: [PisoCampController],
+	controllers: [PisoCampController, PisoCampProfileController],
 	providers: [
 		PisoCampAdminConfigService,
 		PisoCampConsentService,
 		PisoCampConsentSubjectService,
 		PisoCampService,
+		PisoCampProfileService,
+		pisoCampProfileDatabaseProvider,
+		pisoCampProfileTransactionProvider,
 		IdempotencyInterceptor,
 		pisoCampConsentDatabaseProvider,
 		pisoCampConsentTransactionProvider,

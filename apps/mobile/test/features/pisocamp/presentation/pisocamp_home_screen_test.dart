@@ -8,13 +8,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/app_router.dart';
 import 'package:mobile/core/network/connectivity_provider.dart';
+import 'package:mobile/features/auth/data/auth_repository.dart';
+import 'package:mobile/features/auth/data/models/session_model.dart';
+import 'package:mobile/features/auth/data/models/user_model.dart';
 import 'package:mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:mobile/features/pisocamp/data/guest_identity_service.dart';
 import 'package:mobile/features/pisocamp/data/consent_local_store.dart';
 import 'package:mobile/features/pisocamp/data/consent_repository.dart';
 import 'package:mobile/features/pisocamp/data/consent_service.dart';
 import 'package:mobile/features/pisocamp/data/pisocamp_repository.dart';
+import 'package:mobile/features/pisocamp/data/pisocamp_profile_repository.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_home_screen.dart';
 import 'package:mobile/services/storage/secure_storage_service.dart';
@@ -37,6 +42,7 @@ void main() {
     return ProviderScope(
       overrides: [
         isAuthenticatedProvider.overrideWith((ref) => authenticated),
+        pisoCampProfileStatusProvider.overrideWith((ref) async => null),
         requireConsentProvider.overrideWithValue(
           (context, purpose, {required online}) async => online
               ? ConsentGateResult.grantedSynced
@@ -93,6 +99,132 @@ void main() {
     expect(find.text('Piso CAMP'), findsAtLeastNWidgets(1));
   });
 
+  testWidgets(
+    'authenticated missing profile is prompted without account fields',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            isAuthenticatedProvider.overrideWith((ref) => true),
+            pisoCampProfileStatusProvider.overrideWith(
+              (ref) async => const PisoCampProfileResult(
+                status: PisoCampProfileState.missing,
+                missingFields: <String>[
+                  'gender',
+                  'age',
+                  'regionCode',
+                  'cityCode',
+                ],
+                name: 'Existing User',
+                email: 'existing@example.com',
+                profile: null,
+              ),
+            ),
+            guestIdentityServiceProvider.overrideWithValue(
+              GuestIdentityService(SecureStorageService()),
+            ),
+            pisoCampHomeProvider.overrideWith(
+              (ref) => Stream.value(
+                const PisoCampHomeLoadResult(home: home, isOffline: false),
+              ),
+            ),
+          ],
+          child: const MaterialApp(home: PisoCampHomeScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Complete Piso CAMP profile'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'signed-in transition fetches missing profile and shows completion action',
+    (tester) async {
+      final auth = _TransitionAuthRepository();
+      final profiles = _RetryProfileRepository();
+      final container = ProviderContainer(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(auth),
+          pisoCampProfileRepositoryProvider.overrideWithValue(profiles),
+          connectivityStatusProvider.overrideWith((ref) => Stream.value(true)),
+          guestIdentityServiceProvider.overrideWithValue(
+            GuestIdentityService(SecureStorageService()),
+          ),
+          pisoCampHomeProvider.overrideWith(
+            (ref) => Stream.value(
+              const PisoCampHomeLoadResult(home: home, isOffline: false),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: PisoCampHomeScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(profiles.profileGets, 0);
+
+      final signIn = container
+          .read(authStateProvider.notifier)
+          .signIn(email: 'existing@example.test', password: 'test-password');
+      await tester.pump();
+      expect(profiles.profileGets, 0);
+
+      auth.signInResult.complete(_session());
+      await signIn;
+      await tester.pumpAndSettle();
+
+      expect(profiles.profileGets, 1);
+      expect(find.text('Complete Piso CAMP profile'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+    },
+  );
+
+  testWidgets('profile load error is visible and retryable', (tester) async {
+    final auth = _TransitionAuthRepository(restoredSession: _session());
+    final profiles = _RetryProfileRepository(failFirst: true);
+    final container = ProviderContainer(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(auth),
+        pisoCampProfileRepositoryProvider.overrideWithValue(profiles),
+        connectivityStatusProvider.overrideWith((ref) => Stream.value(true)),
+        guestIdentityServiceProvider.overrideWithValue(
+          GuestIdentityService(SecureStorageService()),
+        ),
+        pisoCampHomeProvider.overrideWith(
+          (ref) => Stream.value(
+            const PisoCampHomeLoadResult(home: home, isOffline: false),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: PisoCampHomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Piso CAMP profile is unavailable.'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(profiles.profileGets, 1);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(profiles.profileGets, 2);
+    expect(find.text('Complete Piso CAMP profile'), findsOneWidget);
+  });
+
   testWidgets('a repeated guest entry does not show the account prompt', (
     tester,
   ) async {
@@ -116,7 +248,7 @@ void main() {
           builder: (context, state) => const PisoCampHomeScreen(),
         ),
         GoRoute(
-          path: AppRoutes.register,
+          path: AppRoutes.pisoCampRegistration,
           builder: (context, state) =>
               const Scaffold(body: Text('Registration route')),
         ),
@@ -205,7 +337,7 @@ void main() {
           builder: (context, state) => const PisoCampHomeScreen(),
         ),
         GoRoute(
-          path: AppRoutes.register,
+          path: AppRoutes.pisoCampRegistration,
           builder: (context, state) =>
               const Scaffold(body: Text('Registration route')),
         ),
@@ -333,7 +465,7 @@ void main() {
             builder: (context, state) => const PisoCampHomeScreen(),
           ),
           GoRoute(
-            path: AppRoutes.register,
+            path: AppRoutes.pisoCampRegistration,
             builder: (context, state) =>
                 const Scaffold(body: Text('Registration route')),
           ),
@@ -401,7 +533,7 @@ void main() {
             builder: (context, state) => const PisoCampHomeScreen(),
           ),
           GoRoute(
-            path: AppRoutes.register,
+            path: AppRoutes.pisoCampRegistration,
             builder: (context, state) =>
                 const Scaffold(body: Text('Registration route')),
           ),
@@ -597,5 +729,62 @@ class _PrivacyRouteObserver extends NavigatorObserver {
     if (route.settings.name?.startsWith('/pisocamp/privacy-notice/') == true) {
       privacyRoutes++;
     }
+  }
+}
+
+SessionModel _session() => const SessionModel(
+  session: SessionData(token: 'test-session-token'),
+  user: UserModel(
+    id: 'existing-user',
+    name: 'Existing User',
+    email: 'existing@example.test',
+  ),
+);
+
+class _TransitionAuthRepository implements AuthRepository {
+  _TransitionAuthRepository({this.restoredSession});
+
+  final SessionModel? restoredSession;
+  final Completer<SessionModel?> signInResult = Completer<SessionModel?>();
+
+  @override
+  Future<SessionModel?> getSession() async => restoredSession;
+
+  @override
+  Future<SessionModel?> signIn({
+    required String email,
+    required String password,
+  }) => signInResult.future;
+
+  @override
+  Future<AuthSignUpOutcome> signUp({
+    required String email,
+    required String password,
+    required String name,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> signOut() async {}
+}
+
+class _RetryProfileRepository extends PisoCampProfileRepository {
+  _RetryProfileRepository({this.failFirst = false}) : super(Dio());
+
+  final bool failFirst;
+  int profileGets = 0;
+
+  @override
+  Future<PisoCampProfileResult> fetchProfile() async {
+    profileGets++;
+    if (failFirst && profileGets == 1) {
+      throw StateError('temporary profile failure');
+    }
+    return const PisoCampProfileResult(
+      status: PisoCampProfileState.missing,
+      missingFields: <String>['gender', 'age', 'regionCode', 'cityCode'],
+      name: 'Existing User',
+      email: 'existing@example.test',
+      profile: null,
+    );
   }
 }

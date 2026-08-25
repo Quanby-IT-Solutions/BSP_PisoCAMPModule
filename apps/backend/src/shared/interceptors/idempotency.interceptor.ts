@@ -186,13 +186,15 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		const original = procedure["~orpc"].handler
 		const route = procedure["~orpc"].route as { method?: string; path?: string } | undefined
 		const isConsentRecordRoute = route?.method === "POST" && route.path === "/v1/pisocamp/consent"
+		const isProfileUpsertRoute = route?.method === "POST" && route.path === "/v1/pisocamp/profile"
+		const requiresMatchingRequestId = isConsentRecordRoute || isProfileUpsertRoute
 
 		const clone: OrpcProcedure = {
 			"~orpc": {
 				...procedure["~orpc"],
 				handler: async (options: unknown) => {
 					if (!key) {
-						if (isConsentRecordRoute) {
+						if (requiresMatchingRequestId) {
 							return throwOrpcError("BAD_REQUEST", "Idempotency-Key is required")
 						}
 						return original(options)
@@ -201,13 +203,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
 					if (problem) {
 						return throwOrpcError("BAD_REQUEST", describeIdempotencyKeyProblem(problem))
 					}
-					if (isConsentRecordRoute) {
+					if (requiresMatchingRequestId) {
 						const input = (options as { input?: { id?: unknown } } | null)?.input
 						if (input?.id !== key) {
-							return throwOrpcError(
-								"BAD_REQUEST",
-								"Idempotency-Key must match the consent record id"
-							)
+							return throwOrpcError("BAD_REQUEST", "Idempotency-Key must match the request id")
 						}
 						if (
 							authenticatedAuthorId &&

@@ -300,6 +300,92 @@ export const consentRecords = createTable(
 )
 
 // ============================================================================
+// PISO CAMP PROFILE AND FROZEN PSGC CATALOG
+// ============================================================================
+
+export const pisoCampRegions = createTable("region", t => ({
+	code: t.text("code").primaryKey(),
+	name: t.text("name").notNull(),
+	catalogVersion: t.text("catalog_version").notNull(),
+}))
+
+export const pisoCampCities = createTable(
+	"city",
+	t => ({
+		code: t.text("code").primaryKey(),
+		regionCode: t
+			.text("region_code")
+			.notNull()
+			.references(() => pisoCampRegions.code, { onDelete: "restrict" }),
+		name: t.text("name").notNull(),
+		catalogVersion: t.text("catalog_version").notNull(),
+	}),
+	t => [
+		unique("city_code_region_unique").on(t.code, t.regionCode),
+		index("city_region_name_idx").on(t.regionCode, t.name),
+	]
+)
+
+export const pisoCampProfiles = createTable(
+	"piso_camp_profile",
+	t => ({
+		accountId: t
+			.text("account_id")
+			.primaryKey()
+			.references(() => users.id, { onDelete: "cascade" }),
+		gender: t.text("gender").notNull().$type<"female" | "male" | "prefer_not_to_say">(),
+		age: t.integer("age").notNull(),
+		regionCode: t
+			.text("region_code")
+			.notNull()
+			.references(() => pisoCampRegions.code, { onDelete: "restrict" }),
+		cityCode: t.text("city_code").notNull(),
+		registrationConsentRecordId: t
+			.uuid("registration_consent_record_id")
+			.notNull()
+			.references(() => consentRecords.id, { onDelete: "restrict" }),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: t.timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		foreignKey({
+			columns: [t.cityCode, t.regionCode],
+			foreignColumns: [pisoCampCities.code, pisoCampCities.regionCode],
+			name: "piso_camp_profile_city_region_fkey",
+		}).onDelete("restrict"),
+		check(
+			"piso_camp_profile_gender_check",
+			sql`${t.gender} in ('female', 'male', 'prefer_not_to_say')`
+		),
+		check("piso_camp_profile_age_check", sql`${t.age} between 1 and 120`),
+	]
+)
+
+export const pisoCampDeviceAccountLinks = createTable(
+	"piso_camp_device_account_link",
+	t => ({
+		devicePseudoId: t.text("device_pseudo_id").primaryKey(),
+		accountId: t
+			.text("account_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		registrationConsentRecordId: t
+			.uuid("registration_consent_record_id")
+			.notNull()
+			.unique()
+			.references(() => consentRecords.id, { onDelete: "restrict" }),
+		linkedAt: t.timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		check(
+			"piso_camp_device_account_link_device_check",
+			sql`${t.devicePseudoId} ~ '^[A-Za-z0-9_-]{22}$'`
+		),
+		index("piso_camp_device_account_link_account_idx").on(t.accountId),
+	]
+)
+
+// ============================================================================
 // AUDIT LOG
 // ============================================================================
 
@@ -367,6 +453,10 @@ export const relations = defineRelations(
 		pisoCampAccountState,
 		privacyNotices,
 		consentRecords,
+		pisoCampRegions,
+		pisoCampCities,
+		pisoCampProfiles,
+		pisoCampDeviceAccountLinks,
 		auditLog,
 	},
 	r => ({
@@ -495,6 +585,10 @@ export const schema = Object.assign(
 		pisoCampAccountState,
 		privacyNotices,
 		consentRecords,
+		pisoCampRegions,
+		pisoCampCities,
+		pisoCampProfiles,
+		pisoCampDeviceAccountLinks,
 		auditLog,
 	},
 	relations

@@ -9,6 +9,7 @@ import 'package:mobile/features/home/presentation/screens/home_screen.dart';
 import 'package:mobile/features/onboarding/presentation/providers/onboarding_provider.dart';
 import 'package:mobile/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_home_screen.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_registration_screen.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 part 'app_router.g.dart';
@@ -22,6 +23,7 @@ class AppRoutes {
   static const register = '/register';
   static const home = '/';
   static const pisoCamp = '/pisocamp';
+  static const pisoCampRegistration = '/pisocamp/register';
 }
 
 String? resolveAppRedirect({
@@ -40,7 +42,9 @@ String? resolveAppRedirect({
     return isAuthenticated ? AppRoutes.home : AppRoutes.login;
   }
   if (!isAuthenticated) {
-    return auth || matchedLocation == AppRoutes.pisoCamp
+    return auth ||
+            matchedLocation == AppRoutes.pisoCamp ||
+            matchedLocation == AppRoutes.pisoCampRegistration
         ? null
         : AppRoutes.login;
   }
@@ -104,6 +108,10 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: AppRoutes.pisoCamp,
         builder: (context, state) => const PisoCampHomeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.pisoCampRegistration,
+        builder: (context, state) => const PisoCampRegistrationScreen(),
       ),
     ],
     errorBuilder: (context, state) =>

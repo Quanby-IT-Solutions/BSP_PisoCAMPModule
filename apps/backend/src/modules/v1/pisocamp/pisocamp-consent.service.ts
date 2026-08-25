@@ -5,10 +5,15 @@ import {
 	ServiceUnavailableException,
 	type Provider,
 } from "@nestjs/common"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, inArray, or } from "drizzle-orm"
 
 import type { DBClient } from "@repo/db/client"
-import { consentRecords, moduleConfiguration, privacyNotices } from "@repo/db/schema"
+import {
+	consentRecords,
+	moduleConfiguration,
+	pisoCampDeviceAccountLinks,
+	privacyNotices,
+} from "@repo/db/schema"
 
 import {
 	databaseTransactionContext,
@@ -50,7 +55,7 @@ export class PisoCampConsentService {
 		purpose: V1Inputs["pisocamp"]["consent"]["get"]["purpose"]
 	): Promise<V1Outputs["pisocamp"]["consent"]["get"]> {
 		const notice = await this.getActiveNotice(this.database)
-		const subjectWhere = this.subjectWhere(subject)
+		const subjectWhere = await this.subjectWhere(subject, purpose)
 		const [current] = await this.database
 			.select({ status: consentRecords.status })
 			.from(consentRecords)
@@ -121,10 +126,26 @@ export class PisoCampConsentService {
 		})
 	}
 
-	private subjectWhere(subject: ConsentSubject) {
-		return "accountId" in subject
+	private async subjectWhere(
+		subject: ConsentSubject,
+		purpose: V1Inputs["pisocamp"]["consent"]["get"]["purpose"]
+	) {
+		if ("devicePseudoId" in subject)
+			return eq(consentRecords.devicePseudoId, subject.devicePseudoId)
+		if (purpose !== "registration") return eq(consentRecords.accountId, subject.accountId)
+		const links = await this.database
+			.select({ consentRecordId: pisoCampDeviceAccountLinks.registrationConsentRecordId })
+			.from(pisoCampDeviceAccountLinks)
+			.where(eq(pisoCampDeviceAccountLinks.accountId, subject.accountId))
+		return links.length === 0
 			? eq(consentRecords.accountId, subject.accountId)
-			: eq(consentRecords.devicePseudoId, subject.devicePseudoId)
+			: or(
+					eq(consentRecords.accountId, subject.accountId),
+					inArray(
+						consentRecords.id,
+						links.map(link => link.consentRecordId)
+					)
+				)!
 	}
 
 	private async getActiveNotice(database: Pick<DBClient, "select">) {

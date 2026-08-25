@@ -87,6 +87,8 @@ export {
 	GetPisoCampConsentInputSchema,
 	PisoCampConsentStatusSchema,
 	PisoCampPrivacyNoticeSchema,
+	PisoCampProfileOutputSchema,
+	PisoCampProfileSchema,
 	PisoCampPublicConfigSchema,
 	PisoCampAdminConfigSchema,
 	RecordPisoCampConsentInputSchema,

@@ -96,3 +96,68 @@ export type PisoCampPrivacyNotice = z.infer<typeof PisoCampPrivacyNoticeSchema>
 export type PisoCampConsentStatus = z.infer<typeof PisoCampConsentStatusSchema>
 export type RecordPisoCampConsentInput = z.infer<typeof RecordPisoCampConsentInputSchema>
 export type RecordedPisoCampConsent = z.infer<typeof RecordedPisoCampConsentSchema>
+
+export const PisoCampGenderSchema = z.enum(["female", "male", "prefer_not_to_say"])
+export const PisoCampLocationCodeSchema = z.string().regex(/^\d{10}$/)
+export const UpsertPisoCampProfileInputSchema = z
+	.object({
+		id: z.uuid(),
+		gender: PisoCampGenderSchema,
+		age: z.number().int().min(1).max(120),
+		regionCode: PisoCampLocationCodeSchema,
+		cityCode: PisoCampLocationCodeSchema,
+	})
+	.strict()
+
+export const PisoCampProfileDataSchema = UpsertPisoCampProfileInputSchema.omit({ id: true })
+	.extend({
+		registrationConsentRecordId: z.uuid(),
+	})
+	.strict()
+
+const PisoCampMissingFieldSchema = z.enum(["gender", "age", "regionCode", "cityCode"])
+const PisoCampProfileIdentityShape = {
+	name: z.string().min(1),
+	email: z.email(),
+}
+
+export const PisoCampProfileOutputSchema = z.discriminatedUnion("status", [
+	z
+		.object({
+			status: z.literal("missing"),
+			missingFields: z.array(PisoCampMissingFieldSchema).min(1),
+			...PisoCampProfileIdentityShape,
+			profile: z.null(),
+		})
+		.strict(),
+	z
+		.object({
+			status: z.literal("complete"),
+			missingFields: z.array(PisoCampMissingFieldSchema).length(0),
+			...PisoCampProfileIdentityShape,
+			profile: PisoCampProfileDataSchema,
+		})
+		.strict(),
+])
+
+/** Compatibility name retained for existing contracts, DTOs, and consumers. */
+export const PisoCampProfileSchema = PisoCampProfileOutputSchema
+
+export const PisoCampCitySchema = z
+	.object({ code: PisoCampLocationCodeSchema, name: z.string().min(1) })
+	.strict()
+export const PisoCampRegionSchema = z
+	.object({
+		code: PisoCampLocationCodeSchema,
+		name: z.string().min(1),
+		cities: z.array(PisoCampCitySchema),
+	})
+	.strict()
+export const PisoCampLocationCatalogSchema = z
+	.object({
+		version: z.literal("PSGC-2Q-2026"),
+		sourceUrl: z.url(),
+		catalogSha256: z.string().regex(/^[a-f0-9]{64}$/),
+		regions: z.array(PisoCampRegionSchema),
+	})
+	.strict()

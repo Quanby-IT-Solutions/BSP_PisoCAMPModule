@@ -58,38 +58,36 @@ class AuthState extends _$AuthState {
     }
   }
 
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> signIn({required String email, required String password}) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(
-      () => ref.read(authRepositoryProvider).signIn(
-            email: email,
-            password: password,
-          ),
+      () => ref
+          .read(authRepositoryProvider)
+          .signIn(email: email, password: password),
     );
 
     _syncCrashReportingIdentity(state.hasValue ? state.value : null);
   }
 
-  Future<void> signUp({
+  Future<AuthSignUpOutcome?> signUp({
     required String email,
     required String password,
     required String name,
   }) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(authRepositoryProvider).signUp(
-            email: email,
-            password: password,
-            name: name,
-          ),
-    );
+    try {
+      final outcome = await ref
+          .read(authRepositoryProvider)
+          .signUp(email: email, password: password, name: name);
+      state = AsyncData(outcome.session);
 
-    // Sign-up returns the same authenticated SessionModel as sign-in, so it is
-    // the same identity transition.
-    _syncCrashReportingIdentity(state.hasValue ? state.value : null);
+      _syncCrashReportingIdentity(outcome.session);
+      return outcome;
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+      _syncCrashReportingIdentity(null);
+      return null;
+    }
   }
 
   Future<void> signOut() async {

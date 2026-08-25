@@ -4,10 +4,13 @@ import {
 	GetPisoCampConsentInputSchema,
 	PisoCampAdminConfigSchema,
 	PisoCampConsentStatusSchema,
+	PisoCampLocationCatalogSchema,
+	PisoCampProfileSchema,
 	PisoCampPublicConfigSchema,
 	RecordedPisoCampConsentSchema,
 	RecordPisoCampConsentInputSchema,
 	UpdatePisoCampAdminConfigSchema,
+	UpsertPisoCampProfileInputSchema,
 } from "./pisocamp.schema.js"
 
 export const pisoCampContract = {
@@ -42,6 +45,36 @@ export const pisoCampContract = {
 				spec: spec => ({ ...spec, security: [] }),
 			})
 			.output(PisoCampPublicConfigSchema),
+	},
+	locations: {
+		get: oc
+			.route({
+				method: "GET",
+				path: "/pisocamp/locations",
+				summary: "Get the frozen PSGC region and city options",
+				tags: ["Piso CAMP"],
+				spec: spec => ({ ...spec, security: [] }),
+			})
+			.output(PisoCampLocationCatalogSchema),
+	},
+	profile: {
+		get: oc
+			.route({
+				method: "GET",
+				path: "/pisocamp/profile",
+				summary: "Get authenticated Piso CAMP profile completion",
+				tags: ["Piso CAMP Profile"],
+			})
+			.output(PisoCampProfileSchema),
+		upsert: oc
+			.route({
+				method: "POST",
+				path: "/pisocamp/profile",
+				summary: "Complete authenticated Piso CAMP profile",
+				tags: ["Piso CAMP Profile"],
+			})
+			.input(UpsertPisoCampProfileInputSchema)
+			.output(PisoCampProfileSchema),
 	},
 	consent: {
 		get: oc

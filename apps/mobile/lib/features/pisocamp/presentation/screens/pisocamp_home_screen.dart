@@ -6,8 +6,10 @@ import 'package:mobile/core/navigation/app_router.dart';
 import 'package:mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:mobile/features/pisocamp/data/consent_local_store.dart';
 import 'package:mobile/features/pisocamp/data/consent_service.dart';
+import 'package:mobile/features/pisocamp/data/pisocamp_profile_repository.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/account_prompt.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 
@@ -66,7 +68,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
         return;
       }
       if (result == ConsentGateResult.grantedSynced) {
-        context.push(AppRoutes.register);
+        context.push(AppRoutes.pisoCampRegistration);
       }
     } finally {
       if (mounted) setState(() => _creatingAccount = false);
@@ -87,6 +89,9 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     });
     final state = ref.watch(pisoCampHomeProvider);
     final authenticated = ref.watch(isAuthenticatedProvider);
+    final profileStatus = authenticated
+        ? ref.watch(pisoCampProfileStatusProvider)
+        : const AsyncData<PisoCampProfileResult?>(null);
     final authLoading = ref.watch(authStateProvider).isLoading;
     final transportAvailable = ref
         .watch(connectivityStatusProvider)
@@ -152,6 +157,39 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
                           onContinueAsGuest: _continue,
                         );
                       },
+                    ),
+                  if (authenticated && profileStatus.hasError)
+                    AppCard(
+                      child: ListTile(
+                        leading: const Icon(Icons.error_outline),
+                        title: const Text('Piso CAMP profile is unavailable.'),
+                        subtitle: const Text(
+                          'Check your connection and try again.',
+                        ),
+                        trailing: FilledButton(
+                          onPressed: () =>
+                              ref.invalidate(pisoCampProfileStatusProvider),
+                          child: const Text('Retry'),
+                        ),
+                      ),
+                    ),
+                  if (authenticated &&
+                      profileStatus.asData?.value?.status ==
+                          PisoCampProfileState.missing)
+                    AppCard(
+                      child: ListTile(
+                        leading: const Icon(Icons.person_add_alt_1_outlined),
+                        title: const Text('Complete Piso CAMP profile'),
+                        subtitle: const Text(
+                          'Add the remaining required demographic and location details.',
+                        ),
+                        trailing: FilledButton(
+                          onPressed: _creatingAccount
+                              ? null
+                              : () => _create(offline),
+                          child: const Text('Complete'),
+                        ),
+                      ),
                     ),
                 ],
               ),

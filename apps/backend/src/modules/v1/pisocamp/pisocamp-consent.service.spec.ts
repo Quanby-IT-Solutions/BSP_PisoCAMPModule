@@ -8,7 +8,14 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres"
 import { migrate } from "drizzle-orm/node-postgres/migrator"
 import pg from "pg"
 
-import { consentRecords, moduleConfiguration, privacyNotices, schema, users } from "@repo/db/schema"
+import {
+	consentRecords,
+	moduleConfiguration,
+	pisoCampDeviceAccountLinks,
+	privacyNotices,
+	schema,
+	users,
+} from "@repo/db/schema"
 
 import { PisoCampConsentService } from "./pisocamp-consent.service"
 
@@ -137,6 +144,54 @@ describe("PisoCampConsentService", () => {
 			service.getStatus({ devicePseudoId: "AbCdEfGhIjKlMnOpQrSt_-" }, "registration")
 		).resolves.toMatchObject({ state: "granted" })
 	})
+
+	itDb("derives authenticated consent through a linked pre-signup device", async () => {
+		await database
+			.insert(pisoCampDeviceAccountLinks)
+			.values({
+				devicePseudoId: "AbCdEfGhIjKlMnOpQrSt_-",
+				accountId: "consent-account-1",
+				registrationConsentRecordId: "b3e8f099-a472-42c2-8e82-890446fe6411",
+			})
+			.onConflictDoNothing()
+		await expect(
+			service.getStatus({ accountId: "consent-account-1" }, "registration")
+		).resolves.toMatchObject({ state: "granted" })
+	})
+
+	itDb(
+		"inherits only the exact linked registration evidence, not later device or other-purpose records",
+		async () => {
+			await database.insert(consentRecords).values([
+				{
+					id: "33d99af9-4d05-4d49-9001-0bf97e105798",
+					devicePseudoId: "AbCdEfGhIjKlMnOpQrSt_-",
+					purpose: "registration",
+					noticeId: firstNotice.id,
+					noticeVersion: firstNotice.version,
+					status: "declined",
+					respondedAt: new Date("2026-08-24T05:00:00Z"),
+					recordedAt: new Date("2026-08-24T05:00:00Z"),
+				},
+				{
+					id: "633d8fd3-b86b-4136-a0a0-755ebf682165",
+					devicePseudoId: "AbCdEfGhIjKlMnOpQrSt_-",
+					purpose: "survey",
+					noticeId: firstNotice.id,
+					noticeVersion: firstNotice.version,
+					status: "granted",
+					respondedAt: new Date("2026-08-24T06:00:00Z"),
+					recordedAt: new Date("2026-08-24T06:00:00Z"),
+				},
+			])
+			await expect(
+				service.getStatus({ accountId: "consent-account-1" }, "registration")
+			).resolves.toMatchObject({ state: "granted" })
+			await expect(
+				service.getStatus({ accountId: "consent-account-1" }, "survey")
+			).resolves.toMatchObject({ state: "none" })
+		}
+	)
 
 	itDb("replays the same client UUID but conflicts on changed evidence", async () => {
 		const input = {

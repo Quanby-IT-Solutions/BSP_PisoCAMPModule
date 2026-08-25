@@ -122,11 +122,19 @@ async function run(
 	authorId: string | null,
 	key: string | undefined,
 	value: unknown,
-	options?: { devicePseudoId?: string; input?: unknown; consentRoute?: boolean }
+	options?: {
+		devicePseudoId?: string
+		input?: unknown
+		consentRoute?: boolean
+		profileRoute?: boolean
+	}
 ) {
 	const { calls, handler } = options?.consentRoute
 		? countingConsentHandler(value)
-		: countingHandler(value)
+		: countingHandler(
+				value,
+				options?.profileRoute ? { method: "POST", path: "/v1/pisocamp/profile" } : undefined
+			)
 	const observable = await interceptor.intercept(
 		contextFor(authorId, key, options?.devicePseudoId),
 		handler
@@ -421,6 +429,31 @@ describe("replay window", () => {
 			.where(and(eq(idempotencyKeys.authorId, GUEST_AUTHOR), eq(idempotencyKeys.key, key)))
 		expect(accountRows).toHaveLength(1)
 		expect(guestRows).toHaveLength(0)
+	})
+})
+
+describe("F3 profile idempotency policy", () => {
+	itDb("requires a key matching the profile request UUID", async () => {
+		await expect(
+			run(USER_A, undefined, { ok: true }, { profileRoute: true, input: { id: SHARED_KEY } })
+		).rejects.toMatchObject({ code: "BAD_REQUEST" })
+		await expect(
+			run(
+				USER_A,
+				"3f2504e0-4f89-4fd3-9a0c-0305e82c3301",
+				{ ok: true },
+				{ profileRoute: true, input: { id: "8bdc754e-3d04-4eab-b98c-523f378ac1e4" } }
+			)
+		).rejects.toMatchObject({ code: "BAD_REQUEST" })
+	})
+
+	itDb("blocks a deactivated account before replaying a stored profile response", async () => {
+		const key = "8bdc754e-3d04-4eab-b98c-523f378ac1e4"
+		await run(USER_A, key, { status: "complete" }, { profileRoute: true, input: { id: key } })
+		mockIsActive.mockResolvedValue(false)
+		await expect(
+			run(USER_A, key, { status: "complete" }, { profileRoute: true, input: { id: key } })
+		).rejects.toMatchObject({ code: "UNAUTHORIZED" })
 	})
 })
 

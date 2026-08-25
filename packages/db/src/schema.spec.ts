@@ -6,9 +6,28 @@ import {
 	consentRecords,
 	moduleConfiguration,
 	pisoCampAccountState,
+	pisoCampCities,
+	pisoCampDeviceAccountLinks,
+	pisoCampProfiles,
+	pisoCampRegions,
 	privacyNotices,
 	schema,
 } from "./schema.js"
+
+describe("F3 profile database schema", () => {
+	it("defines catalog, demographic profile, and unique device link tables", () => {
+		expect(getTableName(pisoCampRegions)).toBe("region")
+		expect(getTableName(pisoCampCities)).toBe("city")
+		expect(getTableName(pisoCampProfiles)).toBe("piso_camp_profile")
+		expect(getTableName(pisoCampDeviceAccountLinks)).toBe("piso_camp_device_account_link")
+		expect(getTableConfig(pisoCampProfiles).checks.map(check => check.name)).toEqual(
+			expect.arrayContaining(["piso_camp_profile_gender_check", "piso_camp_profile_age_check"])
+		)
+		expect(getTableConfig(pisoCampDeviceAccountLinks).checks.map(check => check.name)).toContain(
+			"piso_camp_device_account_link_device_check"
+		)
+	})
+})
 
 describe("F2 database schema", () => {
 	it("defines module_configuration with its persisted value and audit columns", () => {

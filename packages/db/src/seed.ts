@@ -15,6 +15,7 @@ import {
 	type RoleName,
 } from "@repo/contracts"
 
+import { seedPisoCampLocations } from "./pisocamp-location-seed.js"
 import {
 	getPrivacyNoticeImportConfiguration,
 	importApprovedPrivacyNotice,
@@ -238,6 +239,7 @@ async function seedDatabase() {
 
 	try {
 		await db.transaction(async tx => {
+			await seedPisoCampLocations(tx)
 			if (approvedPrivacyNoticeInput) {
 				await importApprovedPrivacyNotice(tx, approvedPrivacyNoticeInput)
 			}

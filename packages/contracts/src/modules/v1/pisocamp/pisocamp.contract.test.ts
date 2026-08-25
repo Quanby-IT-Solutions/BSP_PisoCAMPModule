@@ -4,6 +4,20 @@ import { v1Contract } from "../v1.contract.js"
 import { pisoCampContract } from "./pisocamp.contract.js"
 
 describe("Piso CAMP consent contract", () => {
+	it("exposes the F3 catalog and authenticated profile routes", () => {
+		expect(v1Contract.pisocamp.locations.get["~orpc"].route).toMatchObject({
+			method: "GET",
+			path: "/v1/pisocamp/locations",
+		})
+		expect(v1Contract.pisocamp.profile.get["~orpc"].route).toMatchObject({
+			method: "GET",
+			path: "/v1/pisocamp/profile",
+		})
+		expect(v1Contract.pisocamp.profile.upsert["~orpc"].route).toMatchObject({
+			method: "POST",
+			path: "/v1/pisocamp/profile",
+		})
+	})
 	it("publishes exact unversioned paths for the v1 router to prefix once", () => {
 		expect(pisoCampContract.consent.get["~orpc"].route).toMatchObject({
 			method: "GET",

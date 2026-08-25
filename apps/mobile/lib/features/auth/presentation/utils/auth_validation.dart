@@ -11,6 +11,10 @@
 class AuthValidation {
   AuthValidation._();
 
+  static final RegExp _email = RegExp(
+    r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+  );
+
   /// Must match `passwordMinLength` in the backend register schema.
   static const int passwordMinLength = 8;
 
@@ -20,6 +24,13 @@ class AuthValidation {
     if (value.length < passwordMinLength) {
       return 'Password must be at least $passwordMinLength characters';
     }
+    return null;
+  }
+
+  static String? email(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) return 'Email is required';
+    if (!_email.hasMatch(trimmed)) return 'Enter a valid email address';
     return null;
   }
 }
