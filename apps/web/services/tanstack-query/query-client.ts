@@ -31,10 +31,6 @@ export function shouldDehydrateQuery(query: { state: { status: string } }) {
 	)
 }
 
-export function shouldDehydrateMutation(mutation: { state: { isPaused: boolean } }) {
-	return mutation.state.isPaused
-}
-
 /**
  * Query-key roots that must never be written to IndexedDB (WC-1 / F-04).
  *
@@ -58,6 +54,18 @@ function queryKeyLabels(queryKey: readonly unknown[]): string[] {
 	if (typeof first === "string") return [first]
 	if (Array.isArray(first)) return first.filter((part): part is string => typeof part === "string")
 	return []
+}
+
+export function shouldDehydrateMutation(mutation: {
+	options?: { mutationKey?: readonly unknown[] }
+	state: { isPaused: boolean }
+}) {
+	const mutationKey = mutation.options?.mutationKey ?? []
+	const containsNonPersistedRoot = queryKeyLabels(mutationKey).some(label =>
+		NON_PERSISTED_QUERY_ROOTS.includes(label as (typeof NON_PERSISTED_QUERY_ROOTS)[number])
+	)
+
+	return mutation.state.isPaused && !containsNonPersistedRoot
 }
 
 /**

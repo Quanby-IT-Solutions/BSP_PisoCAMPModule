@@ -1,5 +1,21 @@
 import type { PermissionName, RoleName } from "@repo/contracts"
 
+import { PISOCAMP_CURRENCY_CATALOG } from "./pisocamp-currency-catalog.js"
+
+export const PISOCAMP_CURRENCY_SERIES_SEED = Object.freeze(
+	PISOCAMP_CURRENCY_CATALOG.map(({ denominations: _denominations, ...currencySeries }) =>
+		Object.freeze(currencySeries)
+	)
+)
+
+export const PISOCAMP_CURRENCY_DENOMINATION_SEED = Object.freeze(
+	PISOCAMP_CURRENCY_CATALOG.flatMap(currencySeries =>
+		currencySeries.denominations.map(denomination =>
+			Object.freeze({ seriesCode: currencySeries.code, ...denomination })
+		)
+	)
+)
+
 export const DEFAULT_MODULE_CONFIGURATION = Object.freeze({
 	session_inactivity_minutes: 30,
 	active_privacy_notice_version: "2024-12-26",

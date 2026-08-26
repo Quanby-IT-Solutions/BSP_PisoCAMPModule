@@ -8,9 +8,17 @@ interface PageHeaderProps {
 	icon?: IconSvgElement
 	actions?: React.ReactNode
 	className?: string
+	wrapTitle?: boolean
 }
 
-export function PageHeader({ title, description, icon, actions, className }: PageHeaderProps) {
+export function PageHeader({
+	title,
+	description,
+	icon,
+	actions,
+	className,
+	wrapTitle = false,
+}: PageHeaderProps) {
 	return (
 		<div className={cn("flex flex-wrap items-start justify-between gap-4", className)}>
 			<div className="flex min-w-0 items-center gap-3">
@@ -20,7 +28,14 @@ export function PageHeader({ title, description, icon, actions, className }: Pag
 					</div>
 				) : null}
 				<div className="min-w-0">
-					<h1 className="truncate text-2xl font-bold tracking-tight">{title}</h1>
+					<h1
+						className={cn(
+							"text-2xl font-bold tracking-tight",
+							wrapTitle ? "text-pretty break-words whitespace-normal" : "truncate"
+						)}
+					>
+						{title}
+					</h1>
 					{description ? <p className="text-muted-foreground text-sm">{description}</p> : null}
 				</div>
 			</div>

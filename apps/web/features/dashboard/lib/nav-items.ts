@@ -1,6 +1,7 @@
 import {
 	AccountSetting01Icon,
 	DashboardSquare01Icon,
+	FileEditIcon,
 	Task01Icon,
 	Ticket01Icon,
 	UserMultipleIcon,
@@ -53,6 +54,13 @@ export const navItems: readonly DashboardNavItem[] = [
 		section: "Administration",
 		requiredPermission: "admin.config.manage",
 	},
+	{
+		label: "Content",
+		href: "/pisocamp/content",
+		icon: FileEditIcon,
+		section: "Administration",
+		requiredPermission: "content.items.edit",
+	},
 ]
 
 export const dashboardRouteTitles: readonly Pick<DashboardNavItem, "href" | "label">[] = [
@@ -64,6 +72,14 @@ export const dashboardRouteTitles: readonly Pick<DashboardNavItem, "href" | "lab
 ]
 
 export function getDashboardRouteTitle(pathname: string): string {
+	if (pathname === "/pisocamp/content/new") {
+		return "New Content"
+	}
+
+	if (/^\/pisocamp\/content\/[^/]+\/edit$/.test(pathname)) {
+		return "Edit Content"
+	}
+
 	const currentRoute = dashboardRouteTitles.find(
 		route => pathname === route.href || pathname.startsWith(`${route.href}/`)
 	)

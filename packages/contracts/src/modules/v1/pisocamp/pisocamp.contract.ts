@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract"
 
+import { pisoCampContentContract } from "./content.contract.js"
 import {
 	GetPisoCampConsentInputSchema,
 	PisoCampAdminConfigSchema,
@@ -15,6 +16,7 @@ import {
 
 export const pisoCampContract = {
 	admin: {
+		content: pisoCampContentContract,
 		config: {
 			get: oc
 				.route({

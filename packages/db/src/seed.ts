@@ -24,6 +24,8 @@ import {
 	accounts,
 	moduleConfiguration,
 	permissions,
+	pisoCampCurrencyDenominations,
+	pisoCampCurrencySeries,
 	rolePermissions,
 	roles,
 	schema,
@@ -32,7 +34,12 @@ import {
 	userRoles,
 	users,
 } from "./schema.js"
-import { DEFAULT_MODULE_CONFIGURATION, ROLE_PERMISSION_NAMES } from "./seed-catalog.js"
+import {
+	DEFAULT_MODULE_CONFIGURATION,
+	PISOCAMP_CURRENCY_DENOMINATION_SEED,
+	PISOCAMP_CURRENCY_SERIES_SEED,
+	ROLE_PERMISSION_NAMES,
+} from "./seed-catalog.js"
 import {
 	ALLOW_REMOTE_SEED_ENV,
 	assertSeedAllowed,
@@ -240,6 +247,14 @@ async function seedDatabase() {
 	try {
 		await db.transaction(async tx => {
 			await seedPisoCampLocations(tx)
+			await tx
+				.insert(pisoCampCurrencySeries)
+				.values([...PISOCAMP_CURRENCY_SERIES_SEED])
+				.onConflictDoNothing()
+			await tx
+				.insert(pisoCampCurrencyDenominations)
+				.values([...PISOCAMP_CURRENCY_DENOMINATION_SEED])
+				.onConflictDoNothing()
 			if (approvedPrivacyNoticeInput) {
 				await importApprovedPrivacyNotice(tx, approvedPrivacyNoticeInput)
 			}

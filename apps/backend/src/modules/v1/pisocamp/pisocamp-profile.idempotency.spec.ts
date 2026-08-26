@@ -1,3 +1,4 @@
+import { Reflector } from "@nestjs/core"
 import { resolve } from "node:path"
 import { and, eq, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
@@ -21,6 +22,7 @@ import {
 import type { databaseTransactionContext as TransactionContext } from "@/common/database/database-transaction.context"
 import type { db as DatabaseClient } from "@/common/database/database.client"
 import type { AccountAccessService } from "@/common/rbac/account-access.service"
+import { RequireIdempotency } from "@/shared/decorators/require-idempotency.decorator"
 import type { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
 
 import type { PisoCampProfileService } from "./pisocamp-profile.service"
@@ -54,8 +56,15 @@ let AccountAccess: typeof AccountAccessService
 let ProfileService: typeof PisoCampProfileService
 let admin: pg.Client
 
+class ProfileMutation {
+	@RequireIdempotency({ requestIdField: "id", requireActiveAccount: true })
+	execute() {}
+}
+
 function context() {
 	return {
+		getHandler: () => ProfileMutation.prototype.execute,
+		getClass: () => ProfileMutation,
 		switchToHttp: () => ({
 			getRequest: () => ({
 				headers: { "idempotency-key": requestId, "x-device-pseudo-id": deviceId },
@@ -178,7 +187,9 @@ describe("F3 profile shared idempotency transaction", () => {
 			)
 		)
 		const service = new ProfileService(db, transactionContext)
-		await expect(execute(new Interceptor(new AccountAccess()), service)).rejects.toThrow()
+		await expect(
+			execute(new Interceptor(new AccountAccess(), new Reflector()), service)
+		).rejects.toThrow()
 		expect(await db.select().from(pisoCampProfiles)).toHaveLength(0)
 		expect(await db.select().from(pisoCampDeviceAccountLinks)).toHaveLength(0)
 		expect(
@@ -193,7 +204,7 @@ describe("F3 profile shared idempotency transaction", () => {
 	it("retries once, persists once, and blocks deactivated replay", async () => {
 		await removeTrigger()
 		const service = new ProfileService(db, transactionContext),
-			interceptor = new Interceptor(new AccountAccess())
+			interceptor = new Interceptor(new AccountAccess(), new Reflector())
 		const first = await execute(interceptor, service),
 			replay = await execute(interceptor, service)
 		expect(replay.result).toEqual(first.result)

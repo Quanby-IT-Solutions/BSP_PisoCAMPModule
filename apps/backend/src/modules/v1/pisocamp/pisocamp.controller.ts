@@ -4,6 +4,7 @@ import { implement, ORPCError } from "@orpc/server"
 import { AllowAnonymous, Session, type UserSession } from "@thallesp/nestjs-better-auth"
 
 import { v1 } from "@/config/api-versions.config"
+import { RequireIdempotency } from "@/shared/decorators/require-idempotency.decorator"
 import { RequirePermissions } from "@/shared/decorators/require-permissions.decorator"
 import { StrictThrottle } from "@/shared/decorators/strict-throttle.decorator"
 import { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
@@ -69,6 +70,7 @@ export class PisoCampController {
 
 	@AllowAnonymous()
 	@StrictThrottle()
+	@RequireIdempotency({ requestIdField: "id", requireActiveAccount: true })
 	@UseInterceptors(IdempotencyInterceptor)
 	@Implement(v1.pisocamp.consent.record)
 	async recordConsent(@Req() request: ConsentHttpRequest) {

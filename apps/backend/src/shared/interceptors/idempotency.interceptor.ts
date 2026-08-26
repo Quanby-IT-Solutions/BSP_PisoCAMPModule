@@ -4,6 +4,7 @@ import {
 	type ExecutionContext,
 	type NestInterceptor,
 } from "@nestjs/common"
+import { Reflector } from "@nestjs/core"
 import { and, eq, gt, sql } from "drizzle-orm"
 import { firstValueFrom, from, type Observable } from "rxjs"
 
@@ -11,6 +12,10 @@ import { idempotencyKeys } from "@repo/db/schema"
 
 import { databaseTransactionContext } from "@/common/database/database-transaction.context"
 import { AccountAccessService } from "@/common/rbac/account-access.service"
+import {
+	IDEMPOTENCY_REQUIREMENT_KEY,
+	type IdempotencyRequirement,
+} from "@/shared/decorators/require-idempotency.decorator"
 import { isDevicePseudoId } from "@/shared/identity/device-pseudo-id"
 import {
 	resolveVerifiedAccountId,
@@ -36,6 +41,8 @@ type OrpcProcedure = {
 		[key: string]: unknown
 	}
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function isOrpcProcedure(value: unknown): value is OrpcProcedure {
 	return (
@@ -82,8 +89,8 @@ async function throwOrpcError(
  *
  * ## Behaviour
  *
- *   - No `Idempotency-Key` header   → bypass, except the consent POST where
- *                                      the key is mandatory.
+ *   - No `Idempotency-Key` header   → bypass unless route metadata makes the
+ *                                      key mandatory.
  *   - Invalid key                   → 400 before the handler runs.
  *   - No resolvable author id       → bypass (auth guard already rejected, or
  *                                      the route is anonymous).
@@ -115,17 +122,25 @@ async function throwOrpcError(
  */
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
-	constructor(private readonly accountAccessService: AccountAccessService) {}
+	constructor(
+		private readonly accountAccessService: AccountAccessService,
+		private readonly reflector: Reflector
+	) {}
 
 	async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
 		const request = context.switchToHttp().getRequest<VerifiedSessionRequest>()
 
 		const rawKey = request.headers["idempotency-key"]
 		const key = Array.isArray(rawKey) ? rawKey[0] : rawKey
+		const requirement = this.reflector.getAllAndOverride<IdempotencyRequirement>(
+			IDEMPOTENCY_REQUIREMENT_KEY,
+			[context.getHandler(), context.getClass()]
+		)
 
-		// No idempotency key → normal handling.
+		// Missing keys bypass optional routes; metadata-backed routes reject in
+		// the wrapped oRPC handler, where the validated request input is available.
 		if (!key) {
-			return from(this.dispatch(next, undefined, undefined, undefined))
+			return from(this.dispatch(next, undefined, undefined, undefined, requirement))
 		}
 
 		// Mirror RbacGuard's resolution: session first, direct user reference as fallback.
@@ -140,10 +155,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
 
 		// No account or valid guest subject → bypass; the route's identity layer handles rejection.
 		if (!authorId) {
-			return from(this.dispatch(next, key, undefined, authenticatedAuthorId))
+			return from(this.dispatch(next, key, undefined, authenticatedAuthorId, requirement))
 		}
 
-		return from(this.dispatch(next, key, authorId, authenticatedAuthorId))
+		return from(this.dispatch(next, key, authorId, authenticatedAuthorId, requirement))
 	}
 
 	/**
@@ -160,12 +175,13 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		next: CallHandler,
 		key: string | undefined,
 		authorId: string | undefined,
-		authenticatedAuthorId: string | undefined
+		authenticatedAuthorId: string | undefined,
+		requirement: IdempotencyRequirement | undefined
 	): Promise<unknown> {
 		const emitted = await firstValueFrom(next.handle())
 
 		if (isOrpcProcedure(emitted)) {
-			return this.wrapProcedure(emitted, key, authorId, authenticatedAuthorId)
+			return this.wrapProcedure(emitted, key, authorId, authenticatedAuthorId, requirement)
 		}
 
 		if (!key || !authorId) return emitted
@@ -181,20 +197,17 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		procedure: OrpcProcedure,
 		key: string | undefined,
 		authorId: string | undefined,
-		authenticatedAuthorId: string | undefined
+		authenticatedAuthorId: string | undefined,
+		requirement: IdempotencyRequirement | undefined
 	): OrpcProcedure {
 		const original = procedure["~orpc"].handler
-		const route = procedure["~orpc"].route as { method?: string; path?: string } | undefined
-		const isConsentRecordRoute = route?.method === "POST" && route.path === "/v1/pisocamp/consent"
-		const isProfileUpsertRoute = route?.method === "POST" && route.path === "/v1/pisocamp/profile"
-		const requiresMatchingRequestId = isConsentRecordRoute || isProfileUpsertRoute
 
 		const clone: OrpcProcedure = {
 			"~orpc": {
 				...procedure["~orpc"],
 				handler: async (options: unknown) => {
 					if (!key) {
-						if (requiresMatchingRequestId) {
+						if (requirement) {
 							return throwOrpcError("BAD_REQUEST", "Idempotency-Key is required")
 						}
 						return original(options)
@@ -203,12 +216,16 @@ export class IdempotencyInterceptor implements NestInterceptor {
 					if (problem) {
 						return throwOrpcError("BAD_REQUEST", describeIdempotencyKeyProblem(problem))
 					}
-					if (requiresMatchingRequestId) {
-						const input = (options as { input?: { id?: unknown } } | null)?.input
-						if (input?.id !== key) {
+					if (requirement) {
+						if (!UUID_PATTERN.test(key)) {
+							return throwOrpcError("BAD_REQUEST", "Idempotency-Key must be a UUID")
+						}
+						const input = (options as { input?: Record<string, unknown> } | null)?.input
+						if (input?.[requirement.requestIdField] !== key) {
 							return throwOrpcError("BAD_REQUEST", "Idempotency-Key must match the request id")
 						}
 						if (
+							requirement.requireActiveAccount &&
 							authenticatedAuthorId &&
 							!(await this.accountAccessService.isActive(authenticatedAuthorId))
 						) {

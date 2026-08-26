@@ -1,6 +1,8 @@
 import { defineRelations, sql } from "drizzle-orm"
 import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core"
 
+import type { PisoCampContentStatus, PisoCampContentType } from "@repo/contracts"
+
 import { createTable } from "./utils/table.js"
 
 // ============================================================================
@@ -386,6 +388,226 @@ export const pisoCampDeviceAccountLinks = createTable(
 )
 
 // ============================================================================
+// PISO CAMP CONTENT FOUNDATION AND FROZEN CURRENCY CATALOG
+// ============================================================================
+
+export const pisoCampCurrencySeries = createTable(
+	"piso_camp_currency_series",
+	t => ({
+		code: t.text("code").primaryKey(),
+		name: t.text("name").notNull(),
+		mediaKind: t.text("media_kind").notNull().$type<"banknote" | "coin">(),
+		sourceUrl: t.text("source_url").notNull(),
+		catalogVersion: t.text("catalog_version").notNull(),
+	}),
+	t => [
+		unique("piso_camp_currency_series_code_media_kind_unique").on(t.code, t.mediaKind),
+		check(
+			"piso_camp_currency_series_media_kind_check",
+			sql`${t.mediaKind} in ('banknote', 'coin')`
+		),
+		check("piso_camp_currency_series_source_url_check", sql`${t.sourceUrl} ~ '^https://'`),
+	]
+)
+
+export const pisoCampCurrencyDenominations = createTable(
+	"piso_camp_currency_denomination",
+	t => ({
+		seriesCode: t
+			.text("series_code")
+			.notNull()
+			.references(() => pisoCampCurrencySeries.code, { onDelete: "restrict" }),
+		code: t.text("code").notNull(),
+		minorUnitValue: t.integer("minor_unit_value").notNull(),
+		label: t.text("label").notNull(),
+		sortOrder: t.integer("sort_order").notNull(),
+	}),
+	t => [
+		primaryKey({ columns: [t.seriesCode, t.code] }),
+		unique("piso_camp_currency_denomination_series_sort_unique").on(t.seriesCode, t.sortOrder),
+		check("piso_camp_currency_denomination_minor_unit_value_check", sql`${t.minorUnitValue} > 0`),
+		check("piso_camp_currency_denomination_sort_order_check", sql`${t.sortOrder} >= 0`),
+	]
+)
+
+export const contentItems = createTable(
+	"content_item",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		contentType: t.text("content_type").notNull().$type<PisoCampContentType>(),
+		status: t.text("status").notNull().default("draft").$type<PisoCampContentStatus>(),
+		currentWorkingVersionId: t.uuid("current_working_version_id"),
+		currentPublishedVersionId: t.uuid("current_published_version_id"),
+		createdBy: t
+			.text("created_by")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		lastEditedBy: t
+			.text("last_edited_by")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: t.timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("content_item_id_type_unique").on(t.id, t.contentType),
+		check(
+			"content_item_type_check",
+			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link')`
+		),
+		check(
+			"content_item_status_check",
+			sql`${t.status} in ('draft', 'submitted_for_review', 'approved', 'published', 'unpublished', 'deactivated', 'archived')`
+		),
+		index("content_item_list_idx").on(t.status, t.contentType, t.updatedAt.desc()),
+		index("content_item_created_by_idx").on(t.createdBy, t.createdAt.desc()),
+	]
+)
+
+export const contentVersions = createTable(
+	"content_version",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		itemId: t
+			.uuid("item_id")
+			.notNull()
+			.references(() => contentItems.id, { onDelete: "restrict" }),
+		versionNo: t.integer("version_no").notNull(),
+		parentVersionId: t.uuid("parent_version_id"),
+		status: t.text("status").notNull().$type<PisoCampContentStatus>(),
+		contentType: t.text("content_type").notNull().$type<PisoCampContentType>(),
+		title: t.text("title").notNull(),
+		summary: t.text("summary").notNull(),
+		body: t.text("body"),
+		seriesCode: t.text("series_code"),
+		denominationCode: t.text("denomination_code"),
+		primaryUrl: t.text("primary_url"),
+		createdBy: t
+			.text("created_by")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		approvedBy: t.text("approved_by").references(() => users.id, { onDelete: "restrict" }),
+		approvedAt: t.timestamp("approved_at", { withTimezone: true }),
+		publishedBy: t.text("published_by").references(() => users.id, { onDelete: "restrict" }),
+		publishedAt: t.timestamp("published_at", { withTimezone: true }),
+	}),
+	t => [
+		unique("content_version_item_version_no_unique").on(t.itemId, t.versionNo),
+		unique("content_version_item_id_id_unique").on(t.itemId, t.id),
+		foreignKey({
+			columns: [t.itemId, t.contentType],
+			foreignColumns: [contentItems.id, contentItems.contentType],
+			name: "content_version_item_type_fkey",
+		}).onDelete("restrict"),
+		foreignKey({
+			columns: [t.seriesCode, t.denominationCode],
+			foreignColumns: [
+				pisoCampCurrencyDenominations.seriesCode,
+				pisoCampCurrencyDenominations.code,
+			],
+			name: "content_version_currency_denomination_fkey",
+		}).onDelete("restrict"),
+		check("content_version_number_check", sql`${t.versionNo} > 0`),
+		check(
+			"content_version_type_check",
+			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link')`
+		),
+		check(
+			"content_version_status_check",
+			sql`${t.status} in ('draft', 'submitted_for_review', 'approved', 'published', 'unpublished', 'deactivated', 'archived')`
+		),
+		check(
+			"content_version_fields_check",
+			sql`(
+				(${t.contentType} = 'banknote' and ${t.seriesCode} in ('fpp-banknotes', 'engc-banknotes', 'ngc-banknotes') and ${t.denominationCode} is not null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
+				or (${t.contentType} = 'coin' and ${t.seriesCode} in ('ngc-coins', 'bsp-coin-series') and ${t.denominationCode} is not null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
+				or (${t.contentType} = 'security_feature' and ${t.seriesCode} is not null and ${t.denominationCode} is not null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
+				or (${t.contentType} = 'advisory' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
+				or (${t.contentType} = 'link' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.primaryUrl} is not null)
+			)`
+		),
+		check(
+			"content_version_common_text_check",
+			sql`${t.title} = btrim(${t.title}) and char_length(${t.title}) between 1 and 160 and ${t.title} !~ '<!--|</?[A-Za-z]|<!|<\\?' and ${t.summary} = btrim(${t.summary}) and char_length(${t.summary}) between 1 and 500 and ${t.summary} !~ '<!--|</?[A-Za-z]|<!|<\\?' and (${t.body} is null or (${t.body} = btrim(${t.body}) and char_length(${t.body}) between 0 and 10000 and ${t.body} !~ '<!--|</?[A-Za-z]|<!|<\\?'))`
+		),
+		check(
+			"content_version_primary_url_check",
+			sql`${t.primaryUrl} is null or (${t.primaryUrl} = btrim(${t.primaryUrl}) and char_length(${t.primaryUrl}) <= 2048 and ${t.primaryUrl} ~ '^https://[^[:space:]]+$')`
+		),
+		check(
+			"content_version_approval_fields_check",
+			sql`(${t.approvedBy} is null) = (${t.approvedAt} is null)`
+		),
+		check(
+			"content_version_publication_fields_check",
+			sql`(${t.publishedBy} is null) = (${t.publishedAt} is null)`
+		),
+		check(
+			"content_version_lifecycle_fields_check",
+			sql`(
+				(${t.status} in ('draft', 'submitted_for_review') and ${t.approvedBy} is null and ${t.approvedAt} is null and ${t.publishedBy} is null and ${t.publishedAt} is null)
+				or (${t.status} = 'approved' and ${t.approvedBy} is not null and ${t.approvedAt} is not null and ${t.publishedBy} is null and ${t.publishedAt} is null)
+				or (${t.status} in ('published', 'unpublished', 'deactivated', 'archived') and ${t.approvedBy} is not null and ${t.approvedAt} is not null and ${t.publishedBy} is not null and ${t.publishedAt} is not null)
+			)`
+		),
+		index("content_version_item_created_idx").on(t.itemId, t.createdAt.desc()),
+		index("content_version_currency_idx").on(t.seriesCode, t.denominationCode),
+		index("content_version_created_by_idx").on(t.createdBy, t.createdAt.desc()),
+		index("content_version_search_idx").using(
+			"gin",
+			sql`to_tsvector('simple', ${t.title} || ' ' || ${t.summary})`
+		),
+	]
+)
+
+export const relatedLinks = createTable(
+	"related_link",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		contentVersionId: t
+			.uuid("content_version_id")
+			.notNull()
+			.references(() => contentVersions.id, { onDelete: "restrict" }),
+		position: t.integer("position").notNull(),
+		kind: t.text("kind").notNull().$type<"external" | "internal" | "topic">(),
+		label: t.text("label").notNull(),
+		externalUrl: t.text("external_url"),
+		internalRoute: t.text("internal_route"),
+		targetContentItemId: t
+			.uuid("target_content_item_id")
+			.references(() => contentItems.id, { onDelete: "restrict" }),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("related_link_version_position_unique").on(t.contentVersionId, t.position),
+		check("related_link_position_check", sql`${t.position} between 0 and 9`),
+		check("related_link_kind_check", sql`${t.kind} in ('external', 'internal', 'topic')`),
+		check(
+			"related_link_label_check",
+			sql`${t.label} = btrim(${t.label}) and char_length(${t.label}) between 1 and 100 and ${t.label} !~ '<!--|</?[A-Za-z]|<!|<\\?'`
+		),
+		check(
+			"related_link_target_check",
+			sql`(
+				(${t.kind} = 'external' and ${t.externalUrl} is not null and ${t.internalRoute} is null and ${t.targetContentItemId} is null)
+				or (${t.kind} = 'internal' and ${t.externalUrl} is null and ${t.internalRoute} is not null and ${t.targetContentItemId} is null)
+				or (${t.kind} = 'topic' and ${t.externalUrl} is null and ${t.internalRoute} is null and ${t.targetContentItemId} is not null)
+			)`
+		),
+		check(
+			"related_link_external_url_check",
+			sql`${t.externalUrl} is null or (${t.externalUrl} = btrim(${t.externalUrl}) and char_length(${t.externalUrl}) <= 2048 and ${t.externalUrl} ~ '^https://[^[:space:]]+$')`
+		),
+		check(
+			"related_link_internal_route_check",
+			sql`${t.internalRoute} is null or (char_length(${t.internalRoute}) <= 512 and ${t.internalRoute} ~ '^/[a-z0-9]+([a-z0-9-]*[a-z0-9])?(/[a-z0-9]+([a-z0-9-]*[a-z0-9])?)*$')`
+		),
+		index("related_link_topic_target_idx").on(t.targetContentItemId),
+	]
+)
+
+// ============================================================================
 // AUDIT LOG
 // ============================================================================
 
@@ -457,6 +679,11 @@ export const relations = defineRelations(
 		pisoCampCities,
 		pisoCampProfiles,
 		pisoCampDeviceAccountLinks,
+		pisoCampCurrencySeries,
+		pisoCampCurrencyDenominations,
+		contentItems,
+		contentVersions,
+		relatedLinks,
 		auditLog,
 	},
 	r => ({
@@ -472,6 +699,9 @@ export const relations = defineRelations(
 			}),
 			pisoCampAccountStatesUpdated: r.many.pisoCampAccountState({ alias: "accountStateUpdater" }),
 			consentRecords: r.many.consentRecords(),
+			contentItemsCreated: r.many.contentItems({ alias: "contentItemCreator" }),
+			contentItemsEdited: r.many.contentItems({ alias: "contentItemEditor" }),
+			contentVersionsCreated: r.many.contentVersions({ alias: "contentVersionCreator" }),
 		},
 		sessions: {
 			user: r.one.users({
@@ -562,6 +792,56 @@ export const relations = defineRelations(
 				to: [r.privacyNotices.id, r.privacyNotices.version],
 			}),
 		},
+		pisoCampCurrencySeries: {
+			denominations: r.many.pisoCampCurrencyDenominations(),
+		},
+		pisoCampCurrencyDenominations: {
+			series: r.one.pisoCampCurrencySeries({
+				from: r.pisoCampCurrencyDenominations.seriesCode,
+				to: r.pisoCampCurrencySeries.code,
+			}),
+			contentVersions: r.many.contentVersions(),
+		},
+		contentItems: {
+			creator: r.one.users({
+				from: r.contentItems.createdBy,
+				to: r.users.id,
+				alias: "contentItemCreator",
+			}),
+			lastEditor: r.one.users({
+				from: r.contentItems.lastEditedBy,
+				to: r.users.id,
+				alias: "contentItemEditor",
+			}),
+			versions: r.many.contentVersions(),
+			topicLinks: r.many.relatedLinks(),
+		},
+		contentVersions: {
+			item: r.one.contentItems({
+				from: r.contentVersions.itemId,
+				to: r.contentItems.id,
+			}),
+			creator: r.one.users({
+				from: r.contentVersions.createdBy,
+				to: r.users.id,
+				alias: "contentVersionCreator",
+			}),
+			currencyDenomination: r.one.pisoCampCurrencyDenominations({
+				from: [r.contentVersions.seriesCode, r.contentVersions.denominationCode],
+				to: [r.pisoCampCurrencyDenominations.seriesCode, r.pisoCampCurrencyDenominations.code],
+			}),
+			relatedLinks: r.many.relatedLinks(),
+		},
+		relatedLinks: {
+			version: r.one.contentVersions({
+				from: r.relatedLinks.contentVersionId,
+				to: r.contentVersions.id,
+			}),
+			topicTarget: r.one.contentItems({
+				from: r.relatedLinks.targetContentItemId,
+				to: r.contentItems.id,
+			}),
+		},
 	})
 )
 
@@ -589,6 +869,11 @@ export const schema = Object.assign(
 		pisoCampCities,
 		pisoCampProfiles,
 		pisoCampDeviceAccountLinks,
+		pisoCampCurrencySeries,
+		pisoCampCurrencyDenominations,
+		contentItems,
+		contentVersions,
+		relatedLinks,
 		auditLog,
 	},
 	relations

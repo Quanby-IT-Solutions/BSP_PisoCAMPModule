@@ -108,6 +108,44 @@ export type {
 	UpdatePisoCampAdminConfig,
 } from "./modules/v1/pisocamp/pisocamp.schema.js"
 
+// Piso CAMP draft-content administration schemas
+export { pisoCampContentContract } from "./modules/v1/pisocamp/content.contract.js"
+export {
+	CONTENT_STATUSES,
+	CONTENT_TYPES,
+	CreatePisoCampContentInputSchema,
+	ListPisoCampContentInputSchema,
+	ListPisoCampContentOutputSchema,
+	PISO_CAMP_CURRENCY_SERIES_CODES,
+	PisoCampContentDetailSchema,
+	PisoCampContentDraftSchema,
+	PisoCampContentItemIdSchema,
+	PisoCampContentStatusSchema,
+	PisoCampContentSummarySchema,
+	PisoCampContentTypeSchema,
+	PisoCampContentVersionSchema,
+	PisoCampCurrencyCatalogSchema,
+	PisoCampCurrencySeriesCodeSchema,
+	PisoCampRelatedLinkInputSchema,
+	PisoCampRelatedLinkOutputSchema,
+	UpdatePisoCampContentInputSchema,
+} from "./modules/v1/pisocamp/content.schema.js"
+export type {
+	CreatePisoCampContentInput,
+	ListPisoCampContentInput,
+	ListPisoCampContentOutput,
+	PisoCampContentDetail,
+	PisoCampContentDraft,
+	PisoCampContentStatus,
+	PisoCampContentSummary,
+	PisoCampContentType,
+	PisoCampContentVersion,
+	PisoCampCurrencyCatalog,
+	PisoCampRelatedLinkInput,
+	PisoCampRelatedLinkOutput,
+	UpdatePisoCampContentInput,
+} from "./modules/v1/pisocamp/content.schema.js"
+
 // Future versions:
 // export { v2Contract, type V2Contract } from "./modules/v2/v2.contract.js"
 // export const v2 = { ... }

@@ -1,3 +1,4 @@
+import { Reflector } from "@nestjs/core"
 import { resolve } from "node:path"
 import { and, eq, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
@@ -41,6 +42,8 @@ let originalConfigExists = false
 
 function contextFor(key: string) {
 	return {
+		getHandler: () => contextFor,
+		getClass: () => class AdminConfigMutation {},
 		switchToHttp: () => ({
 			getRequest: () => ({
 				headers: { "idempotency-key": key },
@@ -83,7 +86,7 @@ async function removeFailureTrigger() {
 }
 
 function createInterceptor() {
-	return new InterceptorConstructor({ isActive: async () => true } as never)
+	return new InterceptorConstructor({ isActive: async () => true } as never, new Reflector())
 }
 
 async function resetEvidence() {

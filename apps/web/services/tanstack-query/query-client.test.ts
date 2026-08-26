@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { NON_PERSISTED_QUERY_ROOTS, shouldDehydrateQuery, shouldPersistQuery } from "./query-client"
+import {
+	NON_PERSISTED_QUERY_ROOTS,
+	shouldDehydrateMutation,
+	shouldDehydrateQuery,
+	shouldPersistQuery,
+} from "./query-client"
 
 // WC-1 / F-04: `session` and `rbac` (the full user directory, emails included)
 // must never be written to IndexedDB, while offline-first roots like todos must
@@ -35,6 +40,13 @@ describe("shouldPersistQuery", () => {
 		expect(shouldPersistQuery(query(orpcKey("pisocamp", "admin", "config", "get")))).toBe(false)
 	})
 
+	it("never persists CM-1 authoring content query data in the browser/PWA cache", () => {
+		expect(shouldPersistQuery(query(orpcKey("pisocamp", "admin", "content", "list")))).toBe(false)
+		expect(shouldPersistQuery(query(orpcKey("pisocamp", "admin", "content", "get"), pending))).toBe(
+			false
+		)
+	})
+
 	it("excludes sensitive queries in every state, not just settled ones", () => {
 		expect(shouldPersistQuery(query(["session"], pending))).toBe(false)
 		expect(shouldPersistQuery(query(["rbac", "users"], pending))).toBe(false)
@@ -64,5 +76,27 @@ describe("shouldDehydrateQuery", () => {
 	// keeps its existing behaviour — only the persistence path is restricted.
 	it("still dehydrates session data for SSR hydration", () => {
 		expect(shouldDehydrateQuery(query(["session"]))).toBe(true)
+	})
+})
+
+describe("shouldDehydrateMutation", () => {
+	it("never persists paused CM-1 authoring mutations", () => {
+		expect(
+			shouldDehydrateMutation({
+				options: {
+					mutationKey: [["orpc", "pisocamp", "admin", "content", "create"]],
+				},
+				state: { isPaused: true },
+			})
+		).toBe(false)
+	})
+
+	it("keeps persisting offline todo mutations", () => {
+		expect(
+			shouldDehydrateMutation({
+				options: { mutationKey: ["todos", "create"] },
+				state: { isPaused: true },
+			})
+		).toBe(true)
 	})
 })

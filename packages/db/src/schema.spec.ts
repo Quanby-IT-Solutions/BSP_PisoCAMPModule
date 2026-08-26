@@ -4,15 +4,119 @@ import { describe, expect, it } from "vitest"
 
 import {
 	consentRecords,
+	contentItems,
+	contentVersions,
 	moduleConfiguration,
 	pisoCampAccountState,
 	pisoCampCities,
+	pisoCampCurrencyDenominations,
+	pisoCampCurrencySeries,
 	pisoCampDeviceAccountLinks,
 	pisoCampProfiles,
 	pisoCampRegions,
 	privacyNotices,
+	relatedLinks,
 	schema,
 } from "./schema.js"
+
+describe("CM-1 content database schema", () => {
+	it("defines the controlled currency catalog with composite denomination identity", () => {
+		expect(getTableName(pisoCampCurrencySeries)).toBe("piso_camp_currency_series")
+		expect(getTableName(pisoCampCurrencyDenominations)).toBe("piso_camp_currency_denomination")
+		expect(Object.keys(getTableColumns(pisoCampCurrencySeries))).toEqual([
+			"code",
+			"name",
+			"mediaKind",
+			"sourceUrl",
+			"catalogVersion",
+		])
+		expect(Object.keys(getTableColumns(pisoCampCurrencyDenominations))).toEqual([
+			"seriesCode",
+			"code",
+			"minorUnitValue",
+			"label",
+			"sortOrder",
+		])
+		expect(getTableConfig(pisoCampCurrencyDenominations).primaryKeys).toHaveLength(1)
+		expect(schema.pisoCampCurrencySeries.table).toBe(pisoCampCurrencySeries)
+		expect(schema.pisoCampCurrencyDenominations.table).toBe(pisoCampCurrencyDenominations)
+	})
+
+	it("defines stable items, immutable versions, and version-scoped related links", () => {
+		expect(getTableName(contentItems)).toBe("content_item")
+		expect(getTableName(contentVersions)).toBe("content_version")
+		expect(getTableName(relatedLinks)).toBe("related_link")
+		expect(Object.keys(getTableColumns(contentItems))).toEqual([
+			"id",
+			"contentType",
+			"status",
+			"currentWorkingVersionId",
+			"currentPublishedVersionId",
+			"createdBy",
+			"lastEditedBy",
+			"createdAt",
+			"updatedAt",
+		])
+		expect(Object.keys(getTableColumns(contentVersions))).toEqual([
+			"id",
+			"itemId",
+			"versionNo",
+			"parentVersionId",
+			"status",
+			"contentType",
+			"title",
+			"summary",
+			"body",
+			"seriesCode",
+			"denominationCode",
+			"primaryUrl",
+			"createdBy",
+			"createdAt",
+			"approvedBy",
+			"approvedAt",
+			"publishedBy",
+			"publishedAt",
+		])
+		expect(Object.keys(getTableColumns(relatedLinks))).toEqual([
+			"id",
+			"contentVersionId",
+			"position",
+			"kind",
+			"label",
+			"externalUrl",
+			"internalRoute",
+			"targetContentItemId",
+			"createdAt",
+		])
+
+		const itemChecks = getTableConfig(contentItems).checks.map(item => item.name)
+		expect(itemChecks).toEqual(
+			expect.arrayContaining(["content_item_type_check", "content_item_status_check"])
+		)
+		const versionChecks = getTableConfig(contentVersions).checks.map(item => item.name)
+		expect(versionChecks).toEqual(
+			expect.arrayContaining([
+				"content_version_number_check",
+				"content_version_type_check",
+				"content_version_status_check",
+				"content_version_fields_check",
+				"content_version_approval_fields_check",
+				"content_version_publication_fields_check",
+				"content_version_lifecycle_fields_check",
+			])
+		)
+		expect(getTableConfig(relatedLinks).checks.map(item => item.name)).toEqual(
+			expect.arrayContaining([
+				"related_link_kind_check",
+				"related_link_position_check",
+				"related_link_target_check",
+			])
+		)
+		expect(schema.contentItems.table).toBe(contentItems)
+		expect(schema.contentVersions.table).toBe(contentVersions)
+		expect(schema.relatedLinks.table).toBe(relatedLinks)
+	})
+})
 
 describe("F3 profile database schema", () => {
 	it("defines catalog, demographic profile, and unique device link tables", () => {

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
 	BSP_PRIVACY_NOTICE_METADATA,
 	DEFAULT_MODULE_CONFIGURATION,
+	PISOCAMP_CURRENCY_DENOMINATION_SEED,
+	PISOCAMP_CURRENCY_SERIES_SEED,
 	ROLE_PERMISSION_NAMES,
 } from "./seed-catalog.js"
 
@@ -57,5 +59,24 @@ describe("F2 seed catalog", () => {
 			effectiveAt: new Date("2024-12-26T00:00:00.000Z"),
 		})
 		expect(BSP_PRIVACY_NOTICE_METADATA).not.toHaveProperty("body")
+	})
+
+	it("projects the frozen currency catalog into idempotent relational seed rows", () => {
+		expect(PISOCAMP_CURRENCY_SERIES_SEED).toHaveLength(5)
+		expect(PISOCAMP_CURRENCY_DENOMINATION_SEED).toHaveLength(29)
+		expect(PISOCAMP_CURRENCY_SERIES_SEED[0]).toEqual({
+			code: "fpp-banknotes",
+			name: "First Philippine Polymer Banknote Series",
+			mediaKind: "banknote",
+			sourceUrl: "https://www.bsp.gov.ph/SitePages/CoinsAndNotes/PolymerBanknote.aspx",
+			catalogVersion: "BSP-CURRENCY-2026-08-25",
+		})
+		expect(PISOCAMP_CURRENCY_DENOMINATION_SEED).toContainEqual({
+			seriesCode: "ngc-coins",
+			code: "php-20",
+			minorUnitValue: 2_000,
+			label: "PHP 20",
+			sortOrder: 6,
+		})
 	})
 })

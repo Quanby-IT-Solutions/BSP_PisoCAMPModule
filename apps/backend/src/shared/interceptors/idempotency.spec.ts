@@ -6,13 +6,22 @@
  * which a mocked db exhibits.
  */
 
+import { Reflector } from "@nestjs/core"
+import { resolve } from "node:path"
 import { and, eq, lt, sql } from "drizzle-orm"
+import { drizzle } from "drizzle-orm/node-postgres"
+import { migrate } from "drizzle-orm/node-postgres/migrator"
+import pg from "pg"
 import { of } from "rxjs"
 
 import { idempotencyKeys, users } from "@repo/db/schema"
 
 import { db } from "@/common/database/database.client"
 import { ExpiryCleanupService } from "@/common/maintenance/expiry-cleanup.service"
+import {
+	IDEMPOTENCY_REQUIREMENT_KEY,
+	type IdempotencyRequirement,
+} from "@/shared/decorators/require-idempotency.decorator"
 
 import {
 	describeIdempotencyKeyProblem,
@@ -44,8 +53,9 @@ const SHARED_KEY = "shared-key-0001"
 const GUEST_AUTHOR = "guest:AbCdEfGhIjKlMnOpQrSt_-"
 
 let dbReachable = false
+const databaseTestsEnabled = process.env.RUN_DB_IDEMPOTENCY_TESTS === "1"
 
-const interceptor = new IdempotencyInterceptor({ isActive: mockIsActive } as never)
+const interceptor = new IdempotencyInterceptor({ isActive: mockIsActive } as never, new Reflector())
 
 beforeEach(() => {
 	mockGetSession.mockReset()
@@ -55,8 +65,21 @@ beforeEach(() => {
 })
 
 /** Minimal ExecutionContext carrying a session and an Idempotency-Key. */
-function contextFor(authorId: string | null, key?: string, devicePseudoId?: string) {
+
+function contextFor(
+	authorId: string | null,
+	key?: string,
+	devicePseudoId?: string,
+	requirement?: IdempotencyRequirement
+) {
+	const handler = () => undefined
+	if (requirement) {
+		Reflect.defineMetadata(IDEMPOTENCY_REQUIREMENT_KEY, requirement, handler)
+	}
+
 	return {
+		getHandler: () => handler,
+		getClass: () => class TestController {},
 		switchToHttp: () => ({
 			getRequest: () => ({
 				headers: {
@@ -127,6 +150,7 @@ async function run(
 		input?: unknown
 		consentRoute?: boolean
 		profileRoute?: boolean
+		requirement?: IdempotencyRequirement
 	}
 ) {
 	const { calls, handler } = options?.consentRoute
@@ -136,7 +160,15 @@ async function run(
 				options?.profileRoute ? { method: "POST", path: "/v1/pisocamp/profile" } : undefined
 			)
 	const observable = await interceptor.intercept(
-		contextFor(authorId, key, options?.devicePseudoId),
+		contextFor(
+			authorId,
+			key,
+			options?.devicePseudoId,
+			options?.requirement ??
+				(options?.consentRoute || options?.profileRoute
+					? { requestIdField: "id", requireActiveAccount: true }
+					: undefined)
+		),
 		handler
 	)
 	const emitted = await new Promise<{ "~orpc": { handler: (o: unknown) => unknown } }>(resolve => {
@@ -148,6 +180,108 @@ async function run(
 	return { result, calls }
 }
 
+// Database proofs run only when the caller explicitly provisions a database.
+// Otherwise Jest records them as skipped rather than successful no-ops. Once
+// enabled, connection/setup failures fail the suite before any proof runs.
+const itDb: jest.It = databaseTestsEnabled ? it : it.skip
+
+describe("route metadata idempotency policy", () => {
+	const requirement: IdempotencyRequirement = {
+		requestIdField: "requestId",
+		requireActiveAccount: true,
+	}
+	const requestId = "6d3ce6fc-5e27-4a87-b574-695af4e9ca2a"
+
+	beforeEach(async () => {
+		if (!dbReachable) return
+		await db.delete(idempotencyKeys).where(eq(idempotencyKeys.authorId, USER_A))
+		await db.delete(idempotencyKeys).where(eq(idempotencyKeys.authorId, USER_B))
+	})
+
+	it("requires a header on an arbitrary decorated mutation", async () => {
+		await expect(
+			run(USER_A, undefined, { ok: true }, { input: { requestId }, requirement })
+		).rejects.toMatchObject({ code: "BAD_REQUEST" })
+	})
+
+	it("rejects a malformed UUID on an arbitrary decorated mutation", async () => {
+		await expect(
+			run(
+				USER_A,
+				"not-a-uuid-0001",
+				{ ok: true },
+				{ input: { requestId: "not-a-uuid-0001" }, requirement }
+			)
+		).rejects.toMatchObject({ code: "BAD_REQUEST" })
+	})
+
+	it("rejects a header that differs from the configured request id field", async () => {
+		await expect(
+			run(
+				USER_A,
+				requestId,
+				{ ok: true },
+				{
+					input: { requestId: "3416e440-d559-4ac7-aed8-efb4f39d4942" },
+					requirement,
+				}
+			)
+		).rejects.toMatchObject({ code: "BAD_REQUEST" })
+	})
+
+	itDb("replays a decorated mutation only within the same verified actor scope", async () => {
+		const first = await run(
+			USER_A,
+			requestId,
+			{ owner: "A" },
+			{
+				input: { requestId },
+				requirement,
+			}
+		)
+		const replay = await run(
+			USER_A,
+			requestId,
+			{ owner: "SHOULD NOT RUN" },
+			{
+				input: { requestId },
+				requirement,
+			}
+		)
+		const otherActor = await run(
+			USER_B,
+			requestId,
+			{ owner: "B" },
+			{
+				input: { requestId },
+				requirement,
+			}
+		)
+
+		expect(first.result).toEqual({ owner: "A" })
+		expect(replay.result).toEqual({ owner: "A" })
+		expect(replay.calls.count).toBe(0)
+		expect(otherActor.result).toEqual({ owner: "B" })
+		expect(otherActor.calls.count).toBe(1)
+	})
+
+	itDb("checks active-account state before replay when metadata requires it", async () => {
+		await run(USER_A, requestId, { ok: true }, { input: { requestId }, requirement })
+		mockIsActive.mockResolvedValue(false)
+
+		await expect(
+			run(USER_A, requestId, { ok: false }, { input: { requestId }, requirement })
+		).rejects.toMatchObject({ code: "UNAUTHORIZED" })
+	})
+
+	it("keeps idempotency optional on an undecorated mutation", async () => {
+		const result = await run(USER_A, undefined, { ok: true }, { input: { requestId } })
+
+		expect(result.result).toEqual({ ok: true })
+		expect(result.calls.count).toBe(1)
+	})
+})
+
 async function cleanup() {
 	await db.delete(idempotencyKeys).where(eq(idempotencyKeys.authorId, GUEST_AUTHOR))
 	for (const id of [USER_A, USER_B]) {
@@ -157,12 +291,14 @@ async function cleanup() {
 }
 
 beforeAll(async () => {
-	try {
-		await db.execute(sql`select 1`)
-		dbReachable = true
-	} catch {
-		return
-	}
+	if (!databaseTestsEnabled) return
+	const migrationPool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
+	await migrate(drizzle({ client: migrationPool }), {
+		migrationsFolder: resolve(__dirname, "../../../../../packages/db/src/migrations"),
+	})
+	await migrationPool.end()
+	await db.execute(sql`select 1`)
+	dbReachable = true
 	await cleanup()
 	const now = new Date()
 	await db.insert(users).values(
@@ -181,19 +317,6 @@ afterAll(async () => {
 	await cleanup()
 	await db.$client.end()
 })
-
-const itDb: jest.It = ((name: string, fn: jest.ProvidesCallback, timeout?: number) =>
-	it(
-		name,
-		async (...args: unknown[]) => {
-			if (!dbReachable) {
-				console.warn(`[ab-3] skipped "${name}": no database reachable`)
-				return
-			}
-			return (fn as (...a: unknown[]) => unknown)(...args)
-		},
-		timeout
-	)) as jest.It
 
 describe("key validation (rejects before any write)", () => {
 	it("accepts a UUID", () => {
@@ -335,7 +458,7 @@ describe("replay window", () => {
 		expect(replay.calls.count).toBe(1)
 	})
 
-	itDb("bypasses entirely when no key is sent", async () => {
+	it("bypasses entirely when no key is sent", async () => {
 		const first = await run(USER_A, undefined, { n: 1 })
 		const second = await run(USER_A, undefined, { n: 2 })
 
@@ -343,7 +466,7 @@ describe("replay window", () => {
 		expect(second.result).toEqual({ n: 2 })
 	})
 
-	itDb("bypasses when there is no authenticated user", async () => {
+	it("bypasses when there is no authenticated user", async () => {
 		const { result, calls } = await run(null, "anon-key-00001", { n: 1 })
 
 		expect(result).toEqual({ n: 1 })

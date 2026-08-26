@@ -8,6 +8,7 @@ import { INTERCEPTORS_METADATA } from "@nestjs/common/constants"
 import { Reflector } from "@nestjs/core"
 import { Test, type TestingModule } from "@nestjs/testing"
 
+import { IDEMPOTENCY_REQUIREMENT_KEY } from "@/shared/decorators/require-idempotency.decorator"
 import { REQUIRED_PERMISSIONS_KEY } from "@/shared/decorators/require-permissions.decorator"
 import { STRICT_THROTTLE_KEY } from "@/shared/decorators/strict-throttle.decorator"
 
@@ -111,6 +112,9 @@ describe("PisoCampController", () => {
 		expect(
 			Reflect.getMetadata(INTERCEPTORS_METADATA, PisoCampController.prototype.recordConsent)
 		).toHaveLength(1)
+		expect(
+			Reflect.getMetadata(IDEMPOTENCY_REQUIREMENT_KEY, PisoCampController.prototype.recordConsent)
+		).toEqual({ requestIdField: "id", requireActiveAccount: true })
 	})
 
 	it("derives the GET subject server-side and returns its active notice state", async () => {

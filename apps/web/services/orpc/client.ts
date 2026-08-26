@@ -11,6 +11,10 @@ import { env } from "@/env"
 
 export const ORPC_API_URL = env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")
 
+export interface OrpcClientContext {
+	headers?: Record<string, string>
+}
+
 export function credentialedFetch(
 	input: RequestInfo | URL,
 	init?: RequestInit,
@@ -19,11 +23,13 @@ export function credentialedFetch(
 	return request(input, { ...init, credentials: "include" })
 }
 
-const link = new OpenAPILink(v1Contract, {
+const link = new OpenAPILink<OrpcClientContext>(v1Contract, {
 	url: ORPC_API_URL,
+	headers: options => options.context.headers ?? {},
 	fetch: (input, init) => credentialedFetch(input, init),
 })
 
-const client: ContractRouterClient<typeof v1Contract> = createORPCClient(link)
+export const contractClient: ContractRouterClient<typeof v1Contract, OrpcClientContext> =
+	createORPCClient(link)
 
-export const orpc = createTanstackQueryUtils(client, { path: ["orpc"] })
+export const orpc = createTanstackQueryUtils(contractClient, { path: ["orpc"] })

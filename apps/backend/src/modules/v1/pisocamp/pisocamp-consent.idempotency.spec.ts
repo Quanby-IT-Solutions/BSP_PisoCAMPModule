@@ -1,3 +1,4 @@
+import { Reflector } from "@nestjs/core"
 import { createHash } from "node:crypto"
 import { resolve } from "node:path"
 import { eq, sql } from "drizzle-orm"
@@ -17,6 +18,7 @@ import {
 import type { databaseTransactionContext as TransactionContext } from "@/common/database/database-transaction.context"
 import type { db as DatabaseClient } from "@/common/database/database.client"
 import type { AccountAccessService } from "@/common/rbac/account-access.service"
+import { RequireIdempotency } from "@/shared/decorators/require-idempotency.decorator"
 import type { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
 
 import type { PisoCampConsentService } from "./pisocamp-consent.service"
@@ -67,8 +69,15 @@ const notice = {
 	effectiveAt: new Date("2024-12-26T00:00:00.000Z"),
 }
 
+class ConsentMutation {
+	@RequireIdempotency({ requestIdField: "id", requireActiveAccount: true })
+	execute() {}
+}
+
 function contextFor(key: string, accountId?: string) {
 	return {
+		getHandler: () => ConsentMutation.prototype.execute,
+		getClass: () => ConsentMutation,
 		switchToHttp: () => ({
 			getRequest: () => ({
 				headers: {
@@ -131,7 +140,7 @@ async function removeFailureTrigger() {
 }
 
 function createInterceptor() {
-	return new InterceptorConstructor(new AccountAccessServiceConstructor())
+	return new InterceptorConstructor(new AccountAccessServiceConstructor(), new Reflector())
 }
 
 beforeAll(async () => {

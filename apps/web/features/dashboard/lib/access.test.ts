@@ -74,6 +74,12 @@ describe("navItems", () => {
 					href: "/pisocamp/config",
 					requiredPermission: "admin.config.manage",
 				}),
+				expect.objectContaining({
+					label: "Content",
+					href: "/pisocamp/content",
+					section: "Administration",
+					requiredPermission: "content.items.edit",
+				}),
 			])
 		)
 	})
@@ -101,6 +107,12 @@ describe("navItems", () => {
 				item => item.label
 			)
 		).toContain("Module Configuration")
+
+		expect(
+			getAccessibleNavItems({ roles: [], permissions: ["content.items.edit"] }).map(
+				item => item.label
+			)
+		).toContain("Content")
 	})
 
 	it("resolves mobile header titles from dashboard routes", () => {
@@ -109,6 +121,9 @@ describe("navItems", () => {
 		expect(getDashboardRouteTitle("/todos")).toBe("Todos / Posts")
 		expect(getDashboardRouteTitle("/user-management")).toBe("User Management")
 		expect(getDashboardRouteTitle("/pisocamp/config")).toBe("Module Configuration")
+		expect(getDashboardRouteTitle("/pisocamp/content")).toBe("Content")
+		expect(getDashboardRouteTitle("/pisocamp/content/new")).toBe("New Content")
+		expect(getDashboardRouteTitle("/pisocamp/content/abc/edit")).toBe("Edit Content")
 		expect(getDashboardRouteTitle("/account")).toBe("Account")
 	})
 })

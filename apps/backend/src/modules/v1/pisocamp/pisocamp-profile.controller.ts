@@ -4,6 +4,7 @@ import { implement, ORPCError } from "@orpc/server"
 import { AllowAnonymous, Session, type UserSession } from "@thallesp/nestjs-better-auth"
 
 import { v1 } from "@/config/api-versions.config"
+import { RequireIdempotency } from "@/shared/decorators/require-idempotency.decorator"
 import { StrictThrottle } from "@/shared/decorators/strict-throttle.decorator"
 import { isDevicePseudoId } from "@/shared/identity/device-pseudo-id"
 import { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
@@ -34,6 +35,7 @@ export class PisoCampProfileController {
 	}
 
 	@StrictThrottle()
+	@RequireIdempotency({ requestIdField: "id", requireActiveAccount: true })
 	@UseInterceptors(IdempotencyInterceptor)
 	@Implement(v1.pisocamp.profile.upsert)
 	async completeProfile(@Session() session: UserSession, @Req() request: ProfileRequest) {

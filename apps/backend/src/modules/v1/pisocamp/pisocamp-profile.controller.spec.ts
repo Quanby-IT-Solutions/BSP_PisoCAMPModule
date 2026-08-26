@@ -2,6 +2,8 @@ import { SetMetadata } from "@nestjs/common"
 import { INTERCEPTORS_METADATA } from "@nestjs/common/constants"
 import { Test } from "@nestjs/testing"
 
+import { IDEMPOTENCY_REQUIREMENT_KEY } from "@/shared/decorators/require-idempotency.decorator"
+
 import { PisoCampProfileController } from "./pisocamp-profile.controller"
 import { PisoCampProfileService } from "./pisocamp-profile.service"
 
@@ -72,6 +74,12 @@ describe("PisoCampProfileController", () => {
 				PisoCampProfileController.prototype.completeProfile
 			)
 		).toHaveLength(1)
+		expect(
+			Reflect.getMetadata(
+				IDEMPOTENCY_REQUIREMENT_KEY,
+				PisoCampProfileController.prototype.completeProfile
+			)
+		).toEqual({ requestIdField: "id", requireActiveAccount: true })
 	})
 
 	it("uses the verified session account and exact device header, never client identity", async () => {
