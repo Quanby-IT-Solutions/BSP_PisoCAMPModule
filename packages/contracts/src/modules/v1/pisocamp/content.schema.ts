@@ -188,6 +188,43 @@ export const UpdatePisoCampContentInputSchema = z
 
 export const PisoCampContentItemIdSchema = z.object({ itemId: z.uuid() }).strict()
 
+export const PISO_CAMP_CONTENT_WORKFLOW_ACTIONS = [
+	"submit",
+	"approve",
+	"reject",
+	"publish",
+] as const
+export const PisoCampContentWorkflowActionSchema = z.enum(PISO_CAMP_CONTENT_WORKFLOW_ACTIONS)
+
+const WorkflowCommentsSchema = z
+	.string()
+	.min(1)
+	.max(2_000)
+	.refine(value => value === value.trim(), "Comments must not have leading or trailing whitespace")
+	.refine(value => !HTML_MARKUP_PATTERN.test(value), "HTML is not allowed")
+
+const ContentTransitionCorrelationShape = {
+	itemId: z.uuid(),
+	requestId: z.uuid(),
+	expectedVersionNo: z.number().int().positive(),
+}
+
+export const SubmitPisoCampContentInputSchema = z
+	.object({ ...ContentTransitionCorrelationShape, comments: WorkflowCommentsSchema.optional() })
+	.strict()
+
+export const ApprovePisoCampContentInputSchema = z
+	.object({ ...ContentTransitionCorrelationShape, comments: WorkflowCommentsSchema })
+	.strict()
+
+export const RejectPisoCampContentInputSchema = z
+	.object({ ...ContentTransitionCorrelationShape, comments: WorkflowCommentsSchema })
+	.strict()
+
+export const PublishPisoCampContentInputSchema = z
+	.object({ ...ContentTransitionCorrelationShape, comments: WorkflowCommentsSchema.optional() })
+	.strict()
+
 export const ListPisoCampContentInputSchema = z
 	.object({
 		page: z.coerce.number().int().positive().default(1),
@@ -297,6 +334,119 @@ export const PisoCampContentDetailSchema = z
 		}
 	})
 
+const PisoCampContentTransitionMetadataSchema = z.discriminatedUnion("action", [
+	z.object({ action: z.literal("submit"), comments: WorkflowCommentsSchema.nullable() }).strict(),
+	z.object({ action: z.literal("approve"), comments: WorkflowCommentsSchema }).strict(),
+	z.object({ action: z.literal("reject"), comments: WorkflowCommentsSchema }).strict(),
+	z.object({ action: z.literal("publish"), comments: WorkflowCommentsSchema.nullable() }).strict(),
+])
+
+const PisoCampContentActorTimestampSchema = z
+	.object({ actor: EditorIdentitySchema, at: UtcTimestampSchema })
+	.strict()
+
+export const PisoCampContentReviewVersionSchema = PisoCampContentVersionSchema.extend({
+	createdBy: EditorIdentitySchema,
+	createdAt: UtcTimestampSchema,
+	transition: PisoCampContentTransitionMetadataSchema,
+	approval: PisoCampContentActorTimestampSchema.nullable(),
+	publication: PisoCampContentActorTimestampSchema.nullable(),
+})
+	.strict()
+	.superRefine((version, context) => {
+		const expectedStatus = {
+			submit: "submitted_for_review",
+			approve: "approved",
+			reject: "draft",
+			publish: "published",
+		} as const
+
+		if (version.status !== expectedStatus[version.transition.action]) {
+			context.addIssue({
+				code: "custom",
+				message: "Transition action and version status must match",
+				path: ["transition", "action"],
+			})
+		}
+
+		const requiresApproval = version.status === "approved" || version.status === "published"
+		if (requiresApproval !== (version.approval !== null)) {
+			context.addIssue({
+				code: "custom",
+				message: "Approval metadata must match the version status",
+				path: ["approval"],
+			})
+		}
+
+		if ((version.status === "published") !== (version.publication !== null)) {
+			context.addIssue({
+				code: "custom",
+				message: "Publication metadata must match the version status",
+				path: ["publication"],
+			})
+		}
+	})
+
+export const PisoCampContentReviewDetailSchema = z
+	.object({
+		id: z.uuid(),
+		contentType: PisoCampContentTypeSchema,
+		status: PisoCampContentStatusSchema,
+		currentVersion: PisoCampContentReviewVersionSchema,
+		creator: EditorIdentitySchema,
+		lastEditor: EditorIdentitySchema,
+		createdAt: UtcTimestampSchema,
+		dateModified: UtcTimestampSchema,
+	})
+	.strict()
+	.superRefine((detail, context) => {
+		if (detail.contentType !== detail.currentVersion.content.contentType) {
+			context.addIssue({
+				code: "custom",
+				message: "Item and current-version content types must match",
+				path: ["currentVersion", "content", "contentType"],
+			})
+		}
+		if (detail.status !== detail.currentVersion.status) {
+			context.addIssue({
+				code: "custom",
+				message: "Item and current-version statuses must match",
+				path: ["currentVersion", "status"],
+			})
+		}
+	})
+
+export const PISO_CAMP_CONTENT_REVIEW_QUEUE_STATUSES = ["submitted_for_review", "approved"] as const
+export const PisoCampContentReviewQueueStatusSchema = z.enum(
+	PISO_CAMP_CONTENT_REVIEW_QUEUE_STATUSES
+)
+
+export const ListPisoCampContentReviewQueueInputSchema = z
+	.object({
+		page: z.coerce.number().int().positive().default(1),
+		limit: z.coerce.number().int().min(1).max(100).default(20),
+		status: PisoCampContentReviewQueueStatusSchema.optional(),
+	})
+	.strict()
+
+export const PisoCampContentReviewQueueSummarySchema = PisoCampContentSummarySchema.refine(
+	(
+		summary
+	): summary is typeof summary & {
+		status: (typeof PISO_CAMP_CONTENT_REVIEW_QUEUE_STATUSES)[number]
+	} => PisoCampContentReviewQueueStatusSchema.safeParse(summary.status).success,
+	"Only submitted or approved content belongs in the review queue"
+)
+
+export const ListPisoCampContentReviewQueueOutputSchema = z
+	.object({
+		items: z.array(PisoCampContentReviewQueueSummarySchema),
+		page: z.number().int().positive(),
+		limit: z.number().int().min(1).max(100),
+		total: z.number().int().nonnegative(),
+	})
+	.strict()
+
 export const ListPisoCampContentOutputSchema = z
 	.object({
 		items: z.array(PisoCampContentSummarySchema),
@@ -383,9 +533,28 @@ export type PisoCampRelatedLinkInput = z.infer<typeof PisoCampRelatedLinkInputSc
 export type PisoCampRelatedLinkOutput = z.infer<typeof PisoCampRelatedLinkOutputSchema>
 export type CreatePisoCampContentInput = z.infer<typeof CreatePisoCampContentInputSchema>
 export type UpdatePisoCampContentInput = z.infer<typeof UpdatePisoCampContentInputSchema>
+export type PisoCampContentWorkflowAction = z.infer<typeof PisoCampContentWorkflowActionSchema>
+export type SubmitPisoCampContentInput = z.infer<typeof SubmitPisoCampContentInputSchema>
+export type ApprovePisoCampContentInput = z.infer<typeof ApprovePisoCampContentInputSchema>
+export type RejectPisoCampContentInput = z.infer<typeof RejectPisoCampContentInputSchema>
+export type PublishPisoCampContentInput = z.infer<typeof PublishPisoCampContentInputSchema>
 export type ListPisoCampContentInput = z.infer<typeof ListPisoCampContentInputSchema>
 export type PisoCampContentSummary = z.infer<typeof PisoCampContentSummarySchema>
 export type PisoCampContentVersion = z.infer<typeof PisoCampContentVersionSchema>
 export type PisoCampContentDetail = z.infer<typeof PisoCampContentDetailSchema>
+export type PisoCampContentReviewVersion = z.infer<typeof PisoCampContentReviewVersionSchema>
+export type PisoCampContentReviewDetail = z.infer<typeof PisoCampContentReviewDetailSchema>
+export type PisoCampContentReviewQueueStatus = z.infer<
+	typeof PisoCampContentReviewQueueStatusSchema
+>
+export type ListPisoCampContentReviewQueueInput = z.infer<
+	typeof ListPisoCampContentReviewQueueInputSchema
+>
+export type PisoCampContentReviewQueueSummary = z.infer<
+	typeof PisoCampContentReviewQueueSummarySchema
+>
+export type ListPisoCampContentReviewQueueOutput = z.infer<
+	typeof ListPisoCampContentReviewQueueOutputSchema
+>
 export type ListPisoCampContentOutput = z.infer<typeof ListPisoCampContentOutputSchema>
 export type PisoCampCurrencyCatalog = z.infer<typeof PisoCampCurrencyCatalogSchema>

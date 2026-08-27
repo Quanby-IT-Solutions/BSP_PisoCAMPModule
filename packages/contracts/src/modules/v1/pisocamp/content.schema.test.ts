@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest"
 
-import type { PisoCampContentVersion, PisoCampRelatedLinkOutput } from "../../../contracts.js"
+import {
+	ApprovePisoCampContentInputSchema,
+	ListPisoCampContentReviewQueueInputSchema,
+	ListPisoCampContentReviewQueueOutputSchema,
+	PisoCampContentReviewDetailSchema,
+	PublishPisoCampContentInputSchema,
+	RejectPisoCampContentInputSchema,
+	SubmitPisoCampContentInputSchema,
+	type PisoCampContentReviewDetail,
+	type PisoCampContentVersion,
+	type PisoCampRelatedLinkOutput,
+} from "../../../contracts.js"
 import {
 	CONTENT_STATUSES,
 	CONTENT_TYPES,
@@ -248,6 +259,213 @@ describe("CM-1 draft input schemas", () => {
 				createInput(advisoryDraft, [{ ...relatedLinks[0], unknown: true }])
 			)
 		).toThrow()
+	})
+})
+
+describe("CM-3 workflow schemas", () => {
+	const baseTransition = { itemId, requestId, expectedVersionNo: 2 }
+	const approvedReviewDetail = {
+		id: itemId,
+		contentType: "banknote",
+		status: "approved",
+		currentVersion: {
+			id: versionId,
+			versionNo: 3,
+			status: "approved",
+			content: currencyDrafts[0],
+			relatedLinks: [],
+			createdBy: editor,
+			createdAt: timestamp,
+			transition: { action: "approve", comments: "Reviewed against BSP copy." },
+			approval: { actor: editor, at: timestamp },
+			publication: null,
+		},
+		creator: editor,
+		lastEditor: editor,
+		createdAt: timestamp,
+		dateModified: timestamp,
+	} as const
+
+	it("requires strict UUID and optimistic-version correlation fields on every transition", () => {
+		for (const { schema, input } of [
+			{ schema: SubmitPisoCampContentInputSchema, input: baseTransition },
+			{
+				schema: ApprovePisoCampContentInputSchema,
+				input: { ...baseTransition, comments: "Reviewed against BSP copy." },
+			},
+			{
+				schema: RejectPisoCampContentInputSchema,
+				input: { ...baseTransition, comments: "Reviewed against BSP copy." },
+			},
+			{ schema: PublishPisoCampContentInputSchema, input: baseTransition },
+		]) {
+			expect(schema.parse(input)).toEqual(input)
+			expect(schema.safeParse({ ...input, itemId: "not-a-uuid" }).success).toBe(false)
+			expect(schema.safeParse({ ...input, requestId: "not-a-uuid" }).success).toBe(false)
+			expect(schema.safeParse({ ...input, expectedVersionNo: 0 }).success).toBe(false)
+			expect(schema.safeParse({ ...input, unexpected: true }).success).toBe(false)
+		}
+	})
+
+	it("requires review comments for approve and reject but keeps submit and publish comments optional", () => {
+		for (const schema of [ApprovePisoCampContentInputSchema, RejectPisoCampContentInputSchema]) {
+			expect(schema.safeParse(baseTransition).success).toBe(false)
+			expect(schema.parse({ ...baseTransition, comments: "Reviewed against BSP copy." })).toEqual({
+				...baseTransition,
+				comments: "Reviewed against BSP copy.",
+			})
+		}
+
+		for (const schema of [SubmitPisoCampContentInputSchema, PublishPisoCampContentInputSchema]) {
+			expect(schema.parse(baseTransition)).toEqual(baseTransition)
+		}
+	})
+
+	it("accepts trimmed plain-text comments up to 2000 characters and rejects markup or padding", () => {
+		expect(
+			ApprovePisoCampContentInputSchema.safeParse({
+				...baseTransition,
+				comments: "x".repeat(2000),
+			}).success
+		).toBe(true)
+		for (const comments of [" padded", "padded ", "<b>approved</b>", "", "x".repeat(2001)]) {
+			expect(
+				ApprovePisoCampContentInputSchema.safeParse({ ...baseTransition, comments }).success
+			).toBe(false)
+		}
+	})
+
+	it("exports and parses strict immutable workflow metadata through the package entrypoint", () => {
+		const parsedReviewDetail: PisoCampContentReviewDetail =
+			PisoCampContentReviewDetailSchema.parse(approvedReviewDetail)
+
+		expect(parsedReviewDetail).toEqual(approvedReviewDetail)
+		expect(
+			PisoCampContentReviewDetailSchema.safeParse({
+				...approvedReviewDetail,
+				currentVersion: {
+					...approvedReviewDetail.currentVersion,
+					undisclosedMutableFlag: true,
+				},
+			}).success
+		).toBe(false)
+	})
+
+	it("rejects action/status mismatches and inconsistent approval/publication metadata", () => {
+		const actionStatusMismatch = {
+			...approvedReviewDetail,
+			currentVersion: {
+				...approvedReviewDetail.currentVersion,
+				transition: { action: "submit", comments: null },
+			},
+		}
+		const { approval, ...currentVersionWithoutApproval } = approvedReviewDetail.currentVersion
+		const submittedWithUnexpectedApproval = {
+			...approvedReviewDetail,
+			status: "submitted_for_review",
+			currentVersion: {
+				...approvedReviewDetail.currentVersion,
+				status: "submitted_for_review",
+				transition: { action: "submit", comments: null },
+				publication: null,
+			},
+		}
+		const approvedWithUnexpectedPublication = {
+			...approvedReviewDetail,
+			currentVersion: {
+				...approvedReviewDetail.currentVersion,
+				publication: { actor: editor, at: timestamp },
+			},
+		}
+
+		expect(approval).toBeDefined()
+		for (const value of [
+			actionStatusMismatch,
+			{ ...approvedReviewDetail, currentVersion: currentVersionWithoutApproval },
+			submittedWithUnexpectedApproval,
+			approvedWithUnexpectedPublication,
+		]) {
+			expect(PisoCampContentReviewDetailSchema.safeParse(value).success).toBe(false)
+		}
+	})
+
+	it("rejects null comments for approve and reject transition metadata", () => {
+		const approveWithNullComments = {
+			...approvedReviewDetail,
+			currentVersion: {
+				...approvedReviewDetail.currentVersion,
+				transition: { action: "approve", comments: null },
+			},
+		}
+		const rejectWithNullComments = {
+			...approvedReviewDetail,
+			status: "draft",
+			currentVersion: {
+				...approvedReviewDetail.currentVersion,
+				status: "draft",
+				transition: { action: "reject", comments: null },
+				approval: null,
+				publication: null,
+			},
+		}
+
+		expect(PisoCampContentReviewDetailSchema.safeParse(approveWithNullComments).success).toBe(false)
+		expect(PisoCampContentReviewDetailSchema.safeParse(rejectWithNullComments).success).toBe(false)
+	})
+
+	it("coerces bounded review-queue pagination and rejects non-review statuses", () => {
+		const summary = {
+			id: itemId,
+			contentType: "banknote",
+			status: "submitted_for_review",
+			title: currencyDrafts[0].title,
+			seriesCode: "ngc-banknotes",
+			denominationCode: "php-20",
+			currentVersionNo: 2,
+			creator: editor,
+			lastEditor: editor,
+			createdAt: timestamp,
+			dateModified: timestamp,
+		} as const
+
+		expect(
+			ListPisoCampContentReviewQueueInputSchema.parse({
+				page: "2",
+				limit: "20",
+				status: "approved",
+			})
+		).toEqual({
+			page: 2,
+			limit: 20,
+			status: "approved",
+		})
+		expect(
+			ListPisoCampContentReviewQueueInputSchema.safeParse({ page: 0, limit: 101 }).success
+		).toBe(false)
+		expect(ListPisoCampContentReviewQueueInputSchema.safeParse({ status: "draft" }).success).toBe(
+			false
+		)
+		expect(
+			ListPisoCampContentReviewQueueOutputSchema.parse({
+				items: [summary],
+				page: 1,
+				limit: 20,
+				total: 1,
+			})
+		).toEqual({
+			items: [summary],
+			page: 1,
+			limit: 20,
+			total: 1,
+		})
+		expect(
+			ListPisoCampContentReviewQueueOutputSchema.safeParse({
+				items: [{ ...summary, status: "draft" }],
+				page: 1,
+				limit: 20,
+				total: 1,
+			}).success
+		).toBe(false)
 	})
 })
 

@@ -5,11 +5,28 @@ import { pisoCampContract } from "./pisocamp.contract.js"
 
 describe("Piso CAMP consent contract", () => {
 	it("composes the CM-1 administration surface under admin.content", () => {
-		expect(Object.keys(pisoCampContract.admin.content)).toEqual(["list", "get", "create", "update"])
+		expect(Object.keys(pisoCampContract.admin.content)).toEqual(
+			expect.arrayContaining(["list", "get", "create", "update"])
+		)
 		expect(v1Contract.pisocamp.admin.content.create["~orpc"].route).toMatchObject({
 			method: "POST",
 			path: "/v1/admin/pisocamp/content",
 		})
+	})
+
+	it("composes the CM-3 workflow surface under the same administration contract", () => {
+		expect(Object.keys(pisoCampContract.admin.content)).toEqual([
+			"list",
+			"get",
+			"create",
+			"update",
+			"reviewQueue",
+			"review",
+			"submit",
+			"approve",
+			"reject",
+			"publish",
+		])
 	})
 
 	it("exposes the F3 catalog and authenticated profile routes", () => {

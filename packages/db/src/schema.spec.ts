@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest"
 
 import {
 	consentRecords,
+	contentBundleRebuildRequests,
 	contentItems,
 	contentVersions,
+	idempotencyKeys,
 	moduleConfiguration,
 	pisoCampAccountState,
 	pisoCampCities,
@@ -52,6 +54,7 @@ describe("CM-1 content database schema", () => {
 			"status",
 			"currentWorkingVersionId",
 			"currentPublishedVersionId",
+			"bundlePending",
 			"createdBy",
 			"lastEditedBy",
 			"createdAt",
@@ -76,6 +79,8 @@ describe("CM-1 content database schema", () => {
 			"approvedAt",
 			"publishedBy",
 			"publishedAt",
+			"transitionAction",
+			"transitionComments",
 		])
 		expect(Object.keys(getTableColumns(relatedLinks))).toEqual([
 			"id",
@@ -115,6 +120,76 @@ describe("CM-1 content database schema", () => {
 		expect(schema.contentItems.table).toBe(contentItems)
 		expect(schema.contentVersions.table).toBe(contentVersions)
 		expect(schema.relatedLinks.table).toBe(relatedLinks)
+	})
+})
+
+describe("CM-3 content workflow database schema", () => {
+	it("stores only a nullable deterministic request fingerprint for idempotency replay binding", () => {
+		expect(Object.keys(getTableColumns(idempotencyKeys))).toEqual([
+			"key",
+			"authorId",
+			"requestFingerprint",
+			"response",
+			"createdAt",
+			"expiresAt",
+		])
+		expect(getTableConfig(idempotencyKeys).checks.map(item => item.name)).toContain(
+			"idempotency_keys_request_fingerprint_check"
+		)
+	})
+
+	it("adds immutable transition metadata and bundle invalidation state", () => {
+		expect(Object.keys(getTableColumns(contentItems))).toContain("bundlePending")
+		expect(Object.keys(getTableColumns(contentVersions))).toEqual(
+			expect.arrayContaining(["transitionAction", "transitionComments"])
+		)
+		expect(getTableConfig(contentVersions).checks.map(item => item.name)).toEqual(
+			expect.arrayContaining([
+				"content_version_transition_action_check",
+				"content_version_transition_comments_check",
+				"content_version_transition_lifecycle_check",
+			])
+		)
+	})
+
+	it("defines the durable rebuild outbox with ownership, retry checks, and polling indexes", () => {
+		const outbox = contentBundleRebuildRequests
+
+		expect(getTableName(outbox)).toBe("content_bundle_rebuild_request")
+		expect(Object.keys(getTableColumns(outbox))).toEqual([
+			"id",
+			"itemId",
+			"publishedVersionId",
+			"state",
+			"attemptCount",
+			"availableAt",
+			"lastAttemptAt",
+			"processedAt",
+			"lastError",
+			"createdAt",
+		])
+		const config = getTableConfig(outbox)
+		expect(config.foreignKeys.map(item => item.getName())).toContain(
+			"content_bundle_rebuild_request_item_version_fkey"
+		)
+		expect(config.uniqueConstraints.map(item => item.name)).toContain(
+			"content_bundle_rebuild_request_published_version_unique"
+		)
+		expect(config.checks.map(item => item.name)).toEqual(
+			expect.arrayContaining([
+				"content_bundle_rebuild_request_state_check",
+				"content_bundle_rebuild_request_attempt_count_check",
+				"content_bundle_rebuild_request_last_error_check",
+				"content_bundle_rebuild_request_delivery_metadata_check",
+			])
+		)
+		expect(config.indexes.map(item => item.config.name)).toEqual(
+			expect.arrayContaining([
+				"content_bundle_rebuild_request_poll_idx",
+				"content_bundle_rebuild_request_item_created_idx",
+			])
+		)
+		expect(schema.contentBundleRebuildRequests.table).toBe(outbox)
 	})
 })
 

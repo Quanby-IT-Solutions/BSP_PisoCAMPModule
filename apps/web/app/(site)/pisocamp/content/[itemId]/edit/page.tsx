@@ -19,11 +19,15 @@ export default async function EditPisoCampContentPage({
 		{ roles: access.roles, permissions: access.permissions },
 		{ requiredPermission: "content.items.edit" }
 	)
+	const canSubmit = canAccess(
+		{ roles: access.roles, permissions: access.permissions },
+		{ requiredPermission: "content.items.submit" }
+	)
 
 	if (access.status !== "loaded" || !permitted) {
 		redirect("/dashboard")
 	}
 
 	const { itemId } = await params
-	return <ContentFormView mode="edit" itemId={itemId} />
+	return <ContentFormView mode="edit" itemId={itemId} canSubmit={canSubmit} />
 }

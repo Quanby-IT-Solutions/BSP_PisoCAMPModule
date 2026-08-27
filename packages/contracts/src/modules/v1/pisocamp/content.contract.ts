@@ -1,11 +1,18 @@
 import { oc } from "@orpc/contract"
 
 import {
+	ApprovePisoCampContentInputSchema,
 	CreatePisoCampContentInputSchema,
 	ListPisoCampContentInputSchema,
 	ListPisoCampContentOutputSchema,
+	ListPisoCampContentReviewQueueInputSchema,
+	ListPisoCampContentReviewQueueOutputSchema,
 	PisoCampContentDetailSchema,
 	PisoCampContentItemIdSchema,
+	PisoCampContentReviewDetailSchema,
+	PublishPisoCampContentInputSchema,
+	RejectPisoCampContentInputSchema,
+	SubmitPisoCampContentInputSchema,
 	UpdatePisoCampContentInputSchema,
 } from "./content.schema.js"
 
@@ -48,4 +55,58 @@ export const pisoCampContentContract = {
 		})
 		.input(UpdatePisoCampContentInputSchema)
 		.output(PisoCampContentDetailSchema),
+	reviewQueue: oc
+		.route({
+			method: "GET",
+			path: "/admin/pisocamp/content/review-queue",
+			summary: "List Piso CAMP content awaiting review or publication",
+			tags,
+		})
+		.input(ListPisoCampContentReviewQueueInputSchema)
+		.output(ListPisoCampContentReviewQueueOutputSchema),
+	review: oc
+		.route({
+			method: "GET",
+			path: "/admin/pisocamp/content/{itemId}/review",
+			summary: "Get immutable Piso CAMP content workflow details",
+			tags,
+		})
+		.input(PisoCampContentItemIdSchema)
+		.output(PisoCampContentReviewDetailSchema),
+	submit: oc
+		.route({
+			method: "POST",
+			path: "/admin/pisocamp/content/{itemId}/submit",
+			summary: "Submit draft Piso CAMP content for review",
+			tags,
+		})
+		.input(SubmitPisoCampContentInputSchema)
+		.output(PisoCampContentReviewDetailSchema),
+	approve: oc
+		.route({
+			method: "POST",
+			path: "/admin/pisocamp/content/{itemId}/approve",
+			summary: "Approve submitted Piso CAMP content",
+			tags,
+		})
+		.input(ApprovePisoCampContentInputSchema)
+		.output(PisoCampContentReviewDetailSchema),
+	reject: oc
+		.route({
+			method: "POST",
+			path: "/admin/pisocamp/content/{itemId}/reject",
+			summary: "Reject submitted Piso CAMP content",
+			tags,
+		})
+		.input(RejectPisoCampContentInputSchema)
+		.output(PisoCampContentReviewDetailSchema),
+	publish: oc
+		.route({
+			method: "POST",
+			path: "/admin/pisocamp/content/{itemId}/publish",
+			summary: "Publish approved Piso CAMP content",
+			tags,
+		})
+		.input(PublishPisoCampContentInputSchema)
+		.output(PisoCampContentReviewDetailSchema),
 }

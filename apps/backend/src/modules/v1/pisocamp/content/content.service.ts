@@ -28,6 +28,13 @@ import {
 import { db } from "@/common/database/database.client"
 import type { V1Inputs } from "@/config/contract-types"
 
+import {
+	fromContentVersion,
+	getContentDetail,
+	selectContentLinks,
+	toContentVersionValues,
+} from "./content-mapping"
+
 type CreateInput = V1Inputs["pisocamp"]["admin"]["content"]["create"]
 type UpdateInput = V1Inputs["pisocamp"]["admin"]["content"]["update"]
 type ListInput = V1Inputs["pisocamp"]["admin"]["content"]["list"]
@@ -198,50 +205,9 @@ export class ContentService {
 	}
 
 	private async getDetail(database: ContentDb, itemId: string): Promise<PisoCampContentDetail> {
-		const [row] = await database
-			.select({
-				id: contentItems.id,
-				contentType: contentItems.contentType,
-				status: contentItems.status,
-				createdAt: contentItems.createdAt,
-				dateModified: contentItems.updatedAt,
-				creatorId: creator.id,
-				creatorName: creator.name,
-				editorId: editor.id,
-				editorName: editor.name,
-				versionId: contentVersions.id,
-				versionNo: contentVersions.versionNo,
-				versionStatus: contentVersions.status,
-				title: contentVersions.title,
-				summary: contentVersions.summary,
-				body: contentVersions.body,
-				seriesCode: contentVersions.seriesCode,
-				denominationCode: contentVersions.denominationCode,
-				primaryUrl: contentVersions.primaryUrl,
-			})
-			.from(contentItems)
-			.innerJoin(contentVersions, eq(contentItems.currentWorkingVersionId, contentVersions.id))
-			.innerJoin(creator, eq(contentItems.createdBy, creator.id))
-			.innerJoin(editor, eq(contentItems.lastEditedBy, editor.id))
-			.where(eq(contentItems.id, itemId))
-		if (!row) throw new ORPCError("NOT_FOUND", { message: "Content item not found" })
-		const links = await this.selectLinks(database, row.versionId)
-		return {
-			id: row.id,
-			contentType: row.contentType,
-			status: row.status,
-			currentVersion: {
-				id: row.versionId,
-				versionNo: row.versionNo,
-				status: row.versionStatus,
-				content: this.fromVersion(row),
-				relatedLinks: links,
-			},
-			creator: { id: row.creatorId, name: row.creatorName },
-			lastEditor: { id: row.editorId, name: row.editorName },
-			createdAt: row.createdAt.toISOString(),
-			dateModified: row.dateModified.toISOString(),
-		}
+		const detail = await getContentDetail(database, itemId)
+		if (!detail) throw new ORPCError("NOT_FOUND", { message: "Content item not found" })
+		return detail
 	}
 
 	private async validateReferences(
@@ -290,15 +256,7 @@ export class ContentService {
 	}
 
 	private toVersionValues(content: PisoCampContentDraft) {
-		return {
-			contentType: content.contentType,
-			title: content.title,
-			summary: content.summary,
-			body: "body" in content ? (content.body ?? null) : null,
-			seriesCode: "seriesCode" in content ? content.seriesCode : null,
-			denominationCode: "denominationCode" in content ? content.denominationCode : null,
-			primaryUrl: "primaryUrl" in content ? content.primaryUrl : null,
-		}
+		return toContentVersionValues(content)
 	}
 
 	private fromVersion(row: {
@@ -310,23 +268,7 @@ export class ContentService {
 		denominationCode: string | null
 		primaryUrl: string | null
 	}): PisoCampContentDraft {
-		const common = { contentType: row.contentType, title: row.title, summary: row.summary }
-		if (row.contentType === "link")
-			return {
-				...common,
-				contentType: "link",
-				...(row.body === null ? {} : { body: row.body }),
-				primaryUrl: row.primaryUrl!,
-			}
-		if (row.contentType === "advisory")
-			return { ...common, contentType: "advisory", body: row.body! }
-		return {
-			...common,
-			contentType: row.contentType,
-			body: row.body!,
-			seriesCode: row.seriesCode as never,
-			denominationCode: row.denominationCode!,
-		} as PisoCampContentDraft
+		return fromContentVersion(row)
 	}
 
 	private async insertLinks(
@@ -353,17 +295,7 @@ export class ContentService {
 		database: ContentDb,
 		versionId: string
 	): Promise<PisoCampRelatedLinkOutput[]> {
-		const rows = await database
-			.select()
-			.from(relatedLinks)
-			.where(eq(relatedLinks.contentVersionId, versionId))
-			.orderBy(asc(relatedLinks.position), asc(relatedLinks.id))
-		return rows.map(row => {
-			const base = { id: row.id, position: row.position, label: row.label }
-			if (row.kind === "external") return { ...base, kind: "external", url: row.externalUrl! }
-			if (row.kind === "internal") return { ...base, kind: "internal", route: row.internalRoute! }
-			return { ...base, kind: "topic", targetContentItemId: row.targetContentItemId! }
-		})
+		return selectContentLinks(database, versionId)
 	}
 
 	private changedFields(

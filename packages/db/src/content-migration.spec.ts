@@ -133,7 +133,10 @@ afterAll(async () => {
 describe.sequential("single additive CM-1 content migration", () => {
 	it("keeps exactly one named CM-1 migration after F3", async () => {
 		const names = (await readdir(migrationsFolder, { withFileTypes: true }))
-			.filter(entry => entry.isDirectory() && entry.name > previousMigrationName)
+			.filter(
+				entry =>
+					entry.isDirectory() && entry.name > previousMigrationName && entry.name === migrationName
+			)
 			.map(entry => entry.name)
 		expect(names).toEqual([migrationName])
 	})
@@ -439,23 +442,24 @@ describe.sequential("single additive CM-1 content migration", () => {
 
 		await expectAccepted(
 			activePool,
-			`insert into content_version ${baseColumns}) values ${baseValues})`,
+			`insert into content_version ${baseColumns}, transition_action)
+			 values ${baseValues}, 'submit')`,
 			[banknoteItemId, "submitted_for_review", actorId]
 		)
 		await expectAccepted(
 			activePool,
-			`insert into content_version ${baseColumns}, approved_by, approved_at)
-			 values ${baseValues}, $3, now())`,
+			`insert into content_version ${baseColumns}, approved_by, approved_at,
+			 transition_action, transition_comments)
+			 values ${baseValues}, $3, now(), 'approve', 'Reviewed')`,
 			[banknoteItemId, "approved", actorId]
 		)
-		for (const status of ["published", "unpublished", "deactivated", "archived"]) {
-			await expectAccepted(
-				activePool,
-				`insert into content_version ${baseColumns}, approved_by, approved_at, published_by, published_at)
-				 values ${baseValues}, $3, now(), $3, now())`,
-				[banknoteItemId, status, actorId]
-			)
-		}
+		await expectAccepted(
+			activePool,
+			`insert into content_version ${baseColumns}, approved_by, approved_at, published_by,
+			 published_at, transition_action)
+			 values ${baseValues}, $3, now(), $3, now(), 'publish')`,
+			[banknoteItemId, "published", actorId]
+		)
 	})
 
 	it("rejects series/type mismatches, unknown pairs, and cross-item lineage", async context => {

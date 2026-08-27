@@ -148,6 +148,7 @@ async function run(
 	options?: {
 		devicePseudoId?: string
 		input?: unknown
+		route?: { method: string; path: string }
 		consentRoute?: boolean
 		profileRoute?: boolean
 		requirement?: IdempotencyRequirement
@@ -157,7 +158,8 @@ async function run(
 		? countingConsentHandler(value)
 		: countingHandler(
 				value,
-				options?.profileRoute ? { method: "POST", path: "/v1/pisocamp/profile" } : undefined
+				options?.route ??
+					(options?.profileRoute ? { method: "POST", path: "/v1/pisocamp/profile" } : undefined)
 			)
 	const observable = await interceptor.intercept(
 		contextFor(
@@ -432,6 +434,55 @@ describe("replay window", () => {
 		expect(second.calls.count).toBe(0)
 	})
 
+	itDb("rejects a live key reused for a different operation without running it", async () => {
+		const key = "operation-key-001"
+		await run(
+			USER_A,
+			key,
+			{ operation: "submit" },
+			{
+				input: { itemId: "item-a", comments: "Ready" },
+				route: { method: "POST", path: "/content/{itemId}/submit" },
+			}
+		)
+
+		const conflicting = run(
+			USER_A,
+			key,
+			{ operation: "publish" },
+			{
+				input: { itemId: "item-a", comments: "Ready" },
+				route: { method: "POST", path: "/content/{itemId}/publish" },
+			}
+		)
+
+		await expect(conflicting).rejects.toMatchObject({
+			code: "CONFLICT",
+			message: "Idempotency-Key was already used for a different request",
+		})
+	})
+
+	itDb.each([
+		[
+			"different item",
+			{ itemId: "item-a", comments: "Ready" },
+			{ itemId: "item-b", comments: "Ready" },
+		],
+		[
+			"changed comments",
+			{ itemId: "item-a", comments: "Ready" },
+			{ itemId: "item-a", comments: "Changed review context" },
+		],
+	])("rejects a live key reused with a %s", async (_label, firstInput, secondInput) => {
+		const key = `payload-${_label.replaceAll(" ", "-")}-001`
+		const route = { method: "POST", path: "/content/{itemId}/submit" }
+		await run(USER_A, key, { generation: 1 }, { input: firstInput, route })
+
+		await expect(
+			run(USER_A, key, { generation: 2 }, { input: secondInput, route })
+		).rejects.toMatchObject({ code: "CONFLICT" })
+	})
+
 	itDb("stamps an expiry in the future", async () => {
 		await run(USER_A, "expiry-key-001", { ok: true })
 
@@ -456,6 +507,26 @@ describe("replay window", () => {
 
 		expect(replay.result).toEqual({ generation: 2 })
 		expect(replay.calls.count).toBe(1)
+		const [replacement] = await db
+			.select()
+			.from(idempotencyKeys)
+			.where(and(eq(idempotencyKeys.authorId, USER_A), eq(idempotencyKeys.key, "stale-key-0001")))
+		expect(replacement?.requestFingerprint).toMatch(/^[0-9a-f]{64}$/)
+	})
+
+	itDb("conservatively rejects a live legacy row with no request fingerprint", async () => {
+		const key = "legacy-live-key-001"
+		await db.insert(idempotencyKeys).values({
+			authorId: USER_A,
+			key,
+			requestFingerprint: null,
+			response: { legacy: true },
+			expiresAt: new Date(Date.now() + 60_000),
+		})
+
+		await expect(
+			run(USER_A, key, { shouldNotRun: true }, { input: { value: 1 } })
+		).rejects.toMatchObject({ code: "CONFLICT" })
 	})
 
 	it("bypasses entirely when no key is sent", async () => {

@@ -9,6 +9,18 @@ import type { PisoCampContentDetail } from "@repo/contracts"
 
 import { PageHeader } from "@/core/components/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/core/components/ui/alert"
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogTrigger,
+} from "@/core/components/ui/alert-dialog"
+import { Badge } from "@/core/components/ui/badge"
 import { Button } from "@/core/components/ui/button"
 import {
 	Card,
@@ -21,6 +33,7 @@ import { Skeleton } from "@/core/components/ui/skeleton"
 import {
 	useCreatePisoCampContentMutation,
 	usePisoCampContentDetailQuery,
+	useSubmitPisoCampContentMutation,
 	useUpdatePisoCampContentMutation,
 } from "@/features/pisocamp-content-admin/api/content.hooks"
 import { ContentTypeFields } from "@/features/pisocamp-content-admin/components/content-type-fields"
@@ -35,12 +48,21 @@ import {
 	type RelatedLinkFormValue,
 } from "@/features/pisocamp-content-admin/lib/content-form"
 
-type ContentFormViewProps = { mode: "create"; itemId?: never } | { mode: "edit"; itemId: string }
+type ContentFormViewProps =
+	| { mode: "create"; itemId?: never; canSubmit?: never }
+	| { mode: "edit"; itemId: string; canSubmit?: boolean }
 type ContentFormEditorProps =
-	| { mode: "create"; itemId?: never; initialDetail?: never; reloadDetail?: never }
+	| {
+			mode: "create"
+			itemId?: never
+			canSubmit?: never
+			initialDetail?: never
+			reloadDetail?: never
+	  }
 	| {
 			mode: "edit"
 			itemId: string
+			canSubmit: boolean
 			initialDetail: PisoCampContentDetail
 			reloadDetail: () => Promise<PisoCampContentDetail | undefined>
 	  }
@@ -95,7 +117,12 @@ function isConflict(error: unknown) {
 	)
 }
 
-export function ContentFormView({ itemId, mode }: ContentFormViewProps) {
+function titleCase(value: string) {
+	const label = value.split("_").join(" ")
+	return `${label.charAt(0).toUpperCase()}${label.slice(1)}`
+}
+
+export function ContentFormView({ canSubmit = false, itemId, mode }: ContentFormViewProps) {
 	const detail = usePisoCampContentDetailQuery({ itemId: itemId ?? EMPTY_ITEM_ID }, mode === "edit")
 
 	if (mode === "edit" && detail.isPending) {
@@ -111,14 +138,14 @@ export function ContentFormView({ itemId, mode }: ContentFormViewProps) {
 	if (mode === "edit" && (detail.isError || !detail.data)) {
 		return (
 			<Alert variant="destructive">
-				<AlertTitle>Could not load content</AlertTitle>
+				<AlertTitle>Could Not Load Content</AlertTitle>
 				<AlertDescription>
 					Your draft could not be loaded. Try again before editing.
 					<Button
 						type="button"
 						variant="outline"
 						size="sm"
-						className="mt-3"
+						className="mt-3 min-h-11 touch-manipulation transition-colors"
 						onClick={() => detail.refetch()}
 					>
 						Try Again
@@ -129,10 +156,28 @@ export function ContentFormView({ itemId, mode }: ContentFormViewProps) {
 	}
 
 	if (mode === "edit" && detail.data) {
+		if (detail.data.status !== "draft") {
+			return (
+				<div data-testid="content-form-layout" className="w-full max-w-full min-w-0 space-y-6">
+					<PageHeader
+						title="Editing Unavailable"
+						description="Only draft content can be edited. Review the governed snapshot instead."
+						wrapTitle
+					/>
+					<Alert>
+						<AlertTitle>This Content Is Read-Only</AlertTitle>
+						<AlertDescription>
+							Current status: <Badge variant="secondary">{titleCase(detail.data.status)}</Badge>
+						</AlertDescription>
+					</Alert>
+				</div>
+			)
+		}
 		return (
 			<ContentFormEditor
 				mode="edit"
 				itemId={itemId}
+				canSubmit={canSubmit}
 				initialDetail={detail.data}
 				reloadDetail={async () => {
 					const result = await detail.refetch()
@@ -145,11 +190,18 @@ export function ContentFormView({ itemId, mode }: ContentFormViewProps) {
 	return <ContentFormEditor mode="create" />
 }
 
-function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: ContentFormEditorProps) {
+function ContentFormEditor({
+	canSubmit = false,
+	itemId,
+	mode,
+	initialDetail,
+	reloadDetail,
+}: ContentFormEditorProps) {
 	const router = useRouter()
 	const routerRef = useRef(router)
 	const createContent = useCreatePisoCampContentMutation()
 	const updateContent = useUpdatePisoCampContentMutation()
+	const submitContent = useSubmitPisoCampContentMutation()
 	const [values, setValues] = useState(() =>
 		initialDetail ? formValuesFromDetail(initialDetail) : createEmptyContentForm("advisory")
 	)
@@ -158,8 +210,16 @@ function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: Conten
 	const [dirty, setDirty] = useState(false)
 	const [conflict, setConflict] = useState(false)
 	const [saveFailed, setSaveFailed] = useState(false)
+	const [submitFailed, setSubmitFailed] = useState(false)
+	const [submitConflict, setSubmitConflict] = useState(false)
+	const [submitOpen, setSubmitOpen] = useState(false)
+	const [submitting, setSubmitting] = useState(false)
 	const [historyReady, setHistoryReady] = useState(true)
 	const requestId = useRef<string | null>(null)
+	const submitRequestId = useRef<string | null>(null)
+	const submitInFlight = useRef(false)
+	const pendingSubmitError = useRef<"conflict" | "generic" | null>(null)
+	const submitErrorRef = useRef<HTMLDivElement>(null)
 	const titleRef = useRef<HTMLInputElement>(null)
 	const summaryRef = useRef<HTMLInputElement>(null)
 	const bodyRef = useRef<HTMLTextAreaElement>(null)
@@ -178,6 +238,12 @@ function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: Conten
 	useEffect(() => {
 		if (!dirty) ownsDirtyHistoryGuard.current = false
 	}, [dirty])
+
+	useEffect(() => {
+		if (!submitConflict && !submitFailed) return
+		const frame = requestAnimationFrame(() => submitErrorRef.current?.focus())
+		return () => cancelAnimationFrame(frame)
+	}, [submitConflict, submitFailed])
 
 	useEffect(() => {
 		const reconcileStaleGuard = () => {
@@ -310,7 +376,41 @@ function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: Conten
 		setDirty(true)
 		setErrors({})
 		setSaveFailed(false)
+		setSubmitFailed(false)
+		setSubmitConflict(false)
 		requestId.current = null
+	}
+
+	function submitForReview() {
+		if (mode !== "edit" || dirty || pending || submitInFlight.current) return
+		submitInFlight.current = true
+		setSubmitting(true)
+		setSubmitFailed(false)
+		setSubmitConflict(false)
+		submitRequestId.current = getOrCreateRequestId(submitRequestId.current)
+		submitContent.mutate(
+			{
+				itemId,
+				requestId: submitRequestId.current,
+				expectedVersionNo: versionNo,
+			},
+			{
+				onSuccess: () => {
+					submitInFlight.current = false
+					setSubmitting(false)
+					setSubmitOpen(false)
+					submitRequestId.current = null
+					toast.success("Draft submitted for review.")
+					router.push("/pisocamp/content")
+				},
+				onError: error => {
+					submitInFlight.current = false
+					setSubmitting(false)
+					pendingSubmitError.current = isConflict(error) ? "conflict" : "generic"
+					setSubmitOpen(false)
+				},
+			}
+		)
 	}
 
 	function focusFirstInvalid(nextErrors: ContentFormErrors) {
@@ -406,7 +506,11 @@ function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: Conten
 	}
 
 	return (
-		<div data-testid="content-form-layout" className="w-full max-w-full min-w-0 space-y-6">
+		<div
+			data-testid="content-form-layout"
+			data-can-submit={canSubmit}
+			className="w-full max-w-full min-w-0 space-y-6"
+		>
 			<PageHeader
 				title={mode === "create" ? "Create Content" : "Edit Content"}
 				description="Save a validated draft for editorial review."
@@ -442,7 +546,7 @@ function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: Conten
 
 						{conflict ? (
 							<Alert variant="destructive">
-								<AlertTitle>A newer version is available</AlertTitle>
+								<AlertTitle>A Newer Version Is Available</AlertTitle>
 								<AlertDescription>
 									Your unsaved changes have not been overwritten. Reload the latest version before
 									trying again.
@@ -450,7 +554,7 @@ function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: Conten
 										type="button"
 										variant="outline"
 										size="sm"
-										className="mt-3"
+										className="mt-3 min-h-11 touch-manipulation transition-colors"
 										onClick={reloadLatest}
 									>
 										Reload Latest
@@ -460,9 +564,29 @@ function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: Conten
 						) : null}
 						{!conflict && (saveFailed || createContent.isError || updateContent.isError) ? (
 							<Alert variant="destructive">
-								<AlertTitle>Could not save draft</AlertTitle>
+								<AlertTitle>Could Not Save Draft</AlertTitle>
 								<AlertDescription>
 									Your changes remain in the form. Check your connection, then try again.
+								</AlertDescription>
+							</Alert>
+						) : null}
+						{submitConflict || submitFailed ? (
+							<Alert ref={submitErrorRef} tabIndex={-1} variant="destructive">
+								<AlertTitle>Submission Not Completed</AlertTitle>
+								<AlertDescription>
+									{submitConflict
+										? "A newer version is available. Reload the latest version before submitting."
+										: "Check your connection, then try submitting the saved draft again."}
+									{submitConflict ? (
+										<Button
+											type="button"
+											variant="outline"
+											className="mt-3 min-h-11 touch-manipulation transition-colors"
+											onClick={reloadLatest}
+										>
+											Reload Latest
+										</Button>
+									) : null}
 								</AlertDescription>
 							</Alert>
 						) : null}
@@ -476,7 +600,7 @@ function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: Conten
 							<Button
 								type="submit"
 								disabled={pending}
-								className="h-auto min-h-8 w-full whitespace-normal sm:w-auto"
+								className="h-auto min-h-11 w-full touch-manipulation whitespace-normal transition-colors sm:w-auto"
 							>
 								{pending ? "Saving…" : "Save Draft"}
 							</Button>
@@ -484,11 +608,70 @@ function ContentFormEditor({ itemId, mode, initialDetail, reloadDetail }: Conten
 								type="button"
 								variant="outline"
 								onClick={cancel}
-								className="h-auto min-h-8 w-full whitespace-normal sm:w-auto"
+								className="h-auto min-h-11 w-full touch-manipulation whitespace-normal transition-colors sm:w-auto"
 							>
 								Cancel
 							</Button>
+							{mode === "edit" && canSubmit ? (
+								<AlertDialog
+									open={submitOpen}
+									onOpenChange={setSubmitOpen}
+									onOpenChangeComplete={open => {
+										if (open || !pendingSubmitError.current) return
+										const nextError = pendingSubmitError.current
+										pendingSubmitError.current = null
+										setSubmitConflict(nextError === "conflict")
+										setSubmitFailed(nextError === "generic")
+									}}
+								>
+									<AlertDialogTrigger
+										render={
+											<Button
+												type="button"
+												variant="secondary"
+												className="h-auto min-h-11 w-full touch-manipulation whitespace-normal transition-colors sm:w-auto"
+												disabled={dirty || pending || submitting}
+											/>
+										}
+									>
+										Submit for Review
+									</AlertDialogTrigger>
+									<AlertDialogContent className="overscroll-contain">
+										<AlertDialogHeader>
+											<AlertDialogTitle>Submit Draft for Review?</AlertDialogTitle>
+											<AlertDialogDescription>
+												This submits saved version {versionNo}. Submitted content becomes read-only.
+											</AlertDialogDescription>
+										</AlertDialogHeader>
+										<AlertDialogFooter>
+											<AlertDialogCancel
+												className="min-h-11 touch-manipulation transition-colors"
+												disabled={submitting}
+											>
+												Cancel
+											</AlertDialogCancel>
+											<AlertDialogAction
+												type="button"
+												className="min-h-11 touch-manipulation transition-colors"
+												disabled={submitting}
+												onClick={submitForReview}
+											>
+												{submitting ? (
+													<span role="status" aria-live="polite">
+														Submitting draft for review…
+													</span>
+												) : (
+													"Confirm Submission"
+												)}
+											</AlertDialogAction>
+										</AlertDialogFooter>
+									</AlertDialogContent>
+								</AlertDialog>
+							) : null}
 						</div>
+						{mode === "edit" && canSubmit && dirty ? (
+							<p className="text-muted-foreground text-sm">Save your changes before submitting.</p>
+						) : null}
 					</form>
 				</CardContent>
 			</Card>

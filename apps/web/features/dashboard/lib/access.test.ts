@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import { canAccess, type AccessProfile } from "./access"
-import { getAccessibleNavItems, getDashboardRouteTitle, navItems } from "./nav-items"
+import {
+	getAccessibleNavItems,
+	getActiveDashboardNavHref,
+	getDashboardRouteTitle,
+	navItems,
+} from "./nav-items"
 
 const noAccess: AccessProfile = {
 	roles: [],
@@ -80,6 +85,12 @@ describe("navItems", () => {
 					section: "Administration",
 					requiredPermission: "content.items.edit",
 				}),
+				expect.objectContaining({
+					label: "Content Review",
+					href: "/pisocamp/content/review",
+					section: "Administration",
+					requiredPermission: "content.items.approve",
+				}),
 			])
 		)
 	})
@@ -113,6 +124,17 @@ describe("navItems", () => {
 				item => item.label
 			)
 		).toContain("Content")
+
+		expect(
+			getAccessibleNavItems({ roles: [], permissions: ["content.items.approve"] }).map(
+				item => item.label
+			)
+		).toContain("Content Review")
+		expect(
+			getAccessibleNavItems({ roles: [], permissions: ["content.items.edit"] }).map(
+				item => item.label
+			)
+		).not.toContain("Content Review")
 	})
 
 	it("resolves mobile header titles from dashboard routes", () => {
@@ -124,6 +146,18 @@ describe("navItems", () => {
 		expect(getDashboardRouteTitle("/pisocamp/content")).toBe("Content")
 		expect(getDashboardRouteTitle("/pisocamp/content/new")).toBe("New Content")
 		expect(getDashboardRouteTitle("/pisocamp/content/abc/edit")).toBe("Edit Content")
+		expect(getDashboardRouteTitle("/pisocamp/content/review")).toBe("Content Review")
+		expect(getDashboardRouteTitle("/pisocamp/content/review/abc")).toBe("Review Content")
 		expect(getDashboardRouteTitle("/account")).toBe("Account")
+	})
+
+	it("selects only the longest matching navigation destination for nested routes", () => {
+		expect(getActiveDashboardNavHref("/pisocamp/content/review")).toBe("/pisocamp/content/review")
+		expect(getActiveDashboardNavHref("/pisocamp/content/review/item-123")).toBe(
+			"/pisocamp/content/review"
+		)
+		expect(getActiveDashboardNavHref("/pisocamp/content/item-123/edit")).toBe("/pisocamp/content")
+		expect(getActiveDashboardNavHref("/todos/123")).toBe("/todos")
+		expect(getActiveDashboardNavHref("/unknown")).toBeUndefined()
 	})
 })

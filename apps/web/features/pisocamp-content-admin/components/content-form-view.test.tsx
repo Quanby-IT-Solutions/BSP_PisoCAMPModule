@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react"
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ContentFormView } from "./content-form-view"
 
-const { useDetail, useCreate, useUpdate, push, toastSuccess } = vi.hoisted(() => ({
+const { useDetail, useCreate, useUpdate, useSubmit, push, toastSuccess } = vi.hoisted(() => ({
 	useDetail: vi.fn(),
 	useCreate: vi.fn(),
 	useUpdate: vi.fn(),
+	useSubmit: vi.fn(),
 	push: vi.fn(),
 	toastSuccess: vi.fn(),
 }))
@@ -19,6 +20,7 @@ vi.mock("@/features/pisocamp-content-admin/api/content.hooks", () => ({
 	usePisoCampContentDetailQuery: (input: unknown, enabled: boolean) => useDetail(input, enabled),
 	useCreatePisoCampContentMutation: () => useCreate(),
 	useUpdatePisoCampContentMutation: () => useUpdate(),
+	useSubmitPisoCampContentMutation: () => useSubmit(),
 }))
 
 const detail = {
@@ -83,6 +85,7 @@ describe("ContentFormView", () => {
 		useDetail.mockReturnValue({ isPending: false, isError: false, data: detail, refetch: vi.fn() })
 		useCreate.mockReturnValue(mutation())
 		useUpdate.mockReturnValue(mutation())
+		useSubmit.mockReturnValue(mutation())
 	})
 
 	it("shows only fields applicable to each of the five content types", async () => {
@@ -265,6 +268,76 @@ describe("ContentFormView", () => {
 		expect(push).toHaveBeenCalledWith("/pisocamp/content")
 	})
 
+	it("confirms submission of the saved draft and blocks a synchronous double submit", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn()
+		useSubmit.mockReturnValue(mutation(mutate))
+		render(<ContentFormView mode="edit" itemId={detail.id} canSubmit />)
+
+		await user.click(screen.getByRole("button", { name: /submit for review/i }))
+		expect(screen.getByRole("alertdialog")).toHaveAccessibleName("Submit Draft for Review?")
+		expect(screen.getByRole("button", { name: /^cancel$/i })).toHaveClass("min-h-11")
+		const confirm = screen.getByRole("button", { name: /confirm submission/i })
+		act(() => {
+			confirm.click()
+			confirm.click()
+		})
+
+		expect(mutate).toHaveBeenCalledTimes(1)
+		expect(mutate).toHaveBeenCalledWith(
+			expect.objectContaining({ itemId: detail.id, expectedVersionNo: 3 }),
+			expect.any(Object)
+		)
+		expect(screen.getByRole("status")).toHaveTextContent("Submitting draft for review…")
+		await waitFor(() => expect(confirm).toBeDisabled())
+	})
+
+	it("closes a failed submit dialog, focuses safe error copy, and permits retry", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn((_input, options) => options.onError(new Error("private upstream detail")))
+		useSubmit.mockReturnValue(mutation(mutate))
+		render(<ContentFormView mode="edit" itemId={detail.id} canSubmit />)
+
+		await user.click(screen.getByRole("button", { name: /submit for review/i }))
+		await user.click(screen.getByRole("button", { name: /confirm submission/i }))
+
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+		const alert = screen.getByRole("alert")
+		await waitFor(() => expect(alert).toHaveFocus())
+		expect(screen.getByText("Submission Not Completed")).toBeInTheDocument()
+		expect(alert).toHaveTextContent(/check your connection.*try submitting/is)
+		expect(alert).not.toHaveTextContent(/private upstream detail/i)
+		await user.click(screen.getByRole("button", { name: /submit for review/i }))
+		expect(screen.getByRole("alertdialog")).toBeInTheDocument()
+	})
+
+	it("withholds submission for unsaved edits and renders non-draft content read-only", async () => {
+		const user = userEvent.setup()
+		const { rerender } = render(<ContentFormView mode="edit" itemId={detail.id} canSubmit />)
+		const submit = screen.getByRole("button", { name: /submit for review/i })
+		expect(submit).toBeEnabled()
+		await user.type(screen.getByLabelText(/^title/i), " changed")
+		expect(submit).toBeDisabled()
+		expect(screen.getByText(/save your changes before submitting/i)).toBeInTheDocument()
+
+		useDetail.mockReturnValue({
+			isPending: false,
+			isError: false,
+			data: {
+				...detail,
+				status: "submitted_for_review",
+				currentVersion: { ...detail.currentVersion, status: "submitted_for_review" },
+			},
+			refetch: vi.fn(),
+		})
+		rerender(<ContentFormView mode="edit" itemId={detail.id} canSubmit />)
+		expect(screen.getByRole("heading", { name: "Editing Unavailable" })).toBeInTheDocument()
+		expect(screen.getByText("This Content Is Read-Only")).toBeInTheDocument()
+		expect(screen.getByText("Submitted for review")).toBeInTheDocument()
+		expect(screen.queryByRole("form")).not.toBeInTheDocument()
+		expect(screen.queryByRole("button", { name: /save draft/i })).not.toBeInTheDocument()
+	})
+
 	it("submits immutable edit version data and shows a 409 reload action without overwriting", async () => {
 		const user = userEvent.setup()
 		const refetch = vi.fn().mockResolvedValue({ data: detail, status: "success", isError: false })
@@ -294,6 +367,7 @@ describe("ContentFormView", () => {
 			expect.objectContaining({ itemId: detail.id, expectedVersionNo: 3 })
 		)
 		expect(screen.getByRole("alert")).toHaveTextContent(/newer version/i)
+		expect(screen.getByText("A Newer Version Is Available")).toBeInTheDocument()
 		expect(screen.queryByText(/could not save draft/i)).not.toBeInTheDocument()
 		expect(title).toHaveValue("My unsaved edit")
 		await user.click(screen.getByRole("button", { name: /reload latest/i }))
@@ -437,6 +511,7 @@ describe("ContentFormView", () => {
 		useDetail.mockReturnValue({ isPending: false, isError: true, data: undefined, refetch })
 		rerender(<ContentFormView mode="edit" itemId={detail.id} />)
 		await user.click(screen.getByRole("button", { name: /try again/i }))
+		expect(screen.getByRole("button", { name: /try again/i })).toHaveClass("min-h-11")
 		expect(refetch).toHaveBeenCalled()
 
 		useDetail.mockReturnValue({ isPending: false, isError: false, data: detail, refetch })

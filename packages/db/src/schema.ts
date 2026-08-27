@@ -143,6 +143,8 @@ export const idempotencyKeys = createTable(
 	t => ({
 		key: t.text("key").notNull(),
 		authorId: t.text("author_id").notNull(),
+		/** SHA-256 of the canonical operation and validated input. Null only on legacy rows. */
+		requestFingerprint: t.text("request_fingerprint"),
 		response: t.jsonb("response").notNull().$type<unknown>(),
 		createdAt: t.timestamp("created_at").notNull().defaultNow(),
 		/** When this row stops being a valid replay target. */
@@ -150,6 +152,10 @@ export const idempotencyKeys = createTable(
 	}),
 	t => [
 		primaryKey({ columns: [t.authorId, t.key] }),
+		check(
+			"idempotency_keys_request_fingerprint_check",
+			sql`${t.requestFingerprint} is null or ${t.requestFingerprint} ~ '^[0-9a-f]{64}$'`
+		),
 		// The sweeper deletes by expiry; without this it seq-scans the table.
 		index("idempotency_keys_expires_at_idx").on(t.expiresAt),
 	]
@@ -438,6 +444,7 @@ export const contentItems = createTable(
 		status: t.text("status").notNull().default("draft").$type<PisoCampContentStatus>(),
 		currentWorkingVersionId: t.uuid("current_working_version_id"),
 		currentPublishedVersionId: t.uuid("current_published_version_id"),
+		bundlePending: t.boolean("bundle_pending").notNull().default(false),
 		createdBy: t
 			.text("created_by")
 			.notNull()
@@ -491,6 +498,10 @@ export const contentVersions = createTable(
 		approvedAt: t.timestamp("approved_at", { withTimezone: true }),
 		publishedBy: t.text("published_by").references(() => users.id, { onDelete: "restrict" }),
 		publishedAt: t.timestamp("published_at", { withTimezone: true }),
+		transitionAction: t
+			.text("transition_action")
+			.$type<"submit" | "approve" | "reject" | "publish">(),
+		transitionComments: t.text("transition_comments"),
 	}),
 	t => [
 		unique("content_version_item_version_no_unique").on(t.itemId, t.versionNo),
@@ -529,7 +540,7 @@ export const contentVersions = createTable(
 		),
 		check(
 			"content_version_common_text_check",
-			sql`${t.title} = btrim(${t.title}) and char_length(${t.title}) between 1 and 160 and ${t.title} !~ '<!--|</?[A-Za-z]|<!|<\\?' and ${t.summary} = btrim(${t.summary}) and char_length(${t.summary}) between 1 and 500 and ${t.summary} !~ '<!--|</?[A-Za-z]|<!|<\\?' and (${t.body} is null or (${t.body} = btrim(${t.body}) and char_length(${t.body}) between 0 and 10000 and ${t.body} !~ '<!--|</?[A-Za-z]|<!|<\\?'))`
+			sql`${t.title} = btrim(${t.title}) and char_length(${t.title}) between 1 and 160 and ${t.title} !~ '<!--|</?[A-Za-z]|<!|<\\\\?' and ${t.summary} = btrim(${t.summary}) and char_length(${t.summary}) between 1 and 500 and ${t.summary} !~ '<!--|</?[A-Za-z]|<!|<\\\\?' and (${t.body} is null or (${t.body} = btrim(${t.body}) and char_length(${t.body}) between 0 and 10000 and ${t.body} !~ '<!--|</?[A-Za-z]|<!|<\\\\?'))`
 		),
 		check(
 			"content_version_primary_url_check",
@@ -551,6 +562,26 @@ export const contentVersions = createTable(
 				or (${t.status} in ('published', 'unpublished', 'deactivated', 'archived') and ${t.approvedBy} is not null and ${t.approvedAt} is not null and ${t.publishedBy} is not null and ${t.publishedAt} is not null)
 			)`
 		),
+		check(
+			"content_version_transition_action_check",
+			sql`${t.transitionAction} is null or ${t.transitionAction} in ('submit', 'approve', 'reject', 'publish')`
+		),
+		check(
+			"content_version_transition_comments_check",
+			sql`${t.transitionComments} is null or (${t.transitionComments} = btrim(${t.transitionComments}) and char_length(${t.transitionComments}) between 1 and 2000 and ${t.transitionComments} !~ '<!--|</?[A-Za-z]|<!|<\\?')`
+		),
+		check(
+			"content_version_transition_lifecycle_check",
+			sql`(
+				(${t.transitionAction} is null and ${t.transitionComments} is null and ${t.status} = 'draft')
+				or (${t.transitionAction} is not null and (
+					(${t.transitionAction} = 'submit' and ${t.status} = 'submitted_for_review')
+					or (${t.transitionAction} = 'approve' and ${t.status} = 'approved' and ${t.transitionComments} is not null)
+					or (${t.transitionAction} = 'reject' and ${t.status} = 'draft' and ${t.transitionComments} is not null)
+					or (${t.transitionAction} = 'publish' and ${t.status} = 'published')
+				))
+			)`
+		),
 		index("content_version_item_created_idx").on(t.itemId, t.createdAt.desc()),
 		index("content_version_currency_idx").on(t.seriesCode, t.denominationCode),
 		index("content_version_created_by_idx").on(t.createdBy, t.createdAt.desc()),
@@ -558,6 +589,58 @@ export const contentVersions = createTable(
 			"gin",
 			sql`to_tsvector('simple', ${t.title} || ' ' || ${t.summary})`
 		),
+	]
+)
+
+export const contentBundleRebuildRequests = createTable(
+	"content_bundle_rebuild_request",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		itemId: t.uuid("item_id").notNull(),
+		publishedVersionId: t.uuid("published_version_id").notNull(),
+		state: t
+			.text("state")
+			.notNull()
+			.default("pending")
+			.$type<"pending" | "processing" | "completed" | "failed">(),
+		attemptCount: t.integer("attempt_count").notNull().default(0),
+		availableAt: t.timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+		lastAttemptAt: t.timestamp("last_attempt_at", { withTimezone: true }),
+		processedAt: t.timestamp("processed_at", { withTimezone: true }),
+		lastError: t.text("last_error"),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		foreignKey({
+			columns: [t.itemId, t.publishedVersionId],
+			foreignColumns: [contentVersions.itemId, contentVersions.id],
+			name: "content_bundle_rebuild_request_item_version_fkey",
+		}).onDelete("restrict"),
+		unique("content_bundle_rebuild_request_published_version_unique").on(t.publishedVersionId),
+		check(
+			"content_bundle_rebuild_request_state_check",
+			sql`${t.state} in ('pending', 'processing', 'completed', 'failed')`
+		),
+		check("content_bundle_rebuild_request_attempt_count_check", sql`${t.attemptCount} >= 0`),
+		check(
+			"content_bundle_rebuild_request_last_error_check",
+			sql`${t.lastError} is null or (${t.attemptCount} > 0 and ${t.lastError} = btrim(${t.lastError}) and char_length(${t.lastError}) between 1 and 1000 and ${t.lastError} !~ '<!--|</?[A-Za-z]|<!|<\\?')`
+		),
+		check(
+			"content_bundle_rebuild_request_delivery_metadata_check",
+			sql`(
+				(${t.lastAttemptAt} is null or ${t.lastAttemptAt} >= ${t.createdAt})
+				and (${t.processedAt} is null or (${t.lastAttemptAt} is not null and ${t.processedAt} >= ${t.lastAttemptAt}))
+				and (
+					(${t.state} = 'pending' and ${t.processedAt} is null and ((${t.attemptCount} = 0 and ${t.lastAttemptAt} is null) or (${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null)))
+					or (${t.state} = 'processing' and ${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null and ${t.processedAt} is null and ${t.lastError} is null)
+					or (${t.state} = 'failed' and ${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null and ${t.processedAt} is null and ${t.lastError} is not null)
+					or (${t.state} = 'completed' and ${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null and ${t.processedAt} is not null and ${t.lastError} is null)
+				)
+			)`
+		),
+		index("content_bundle_rebuild_request_poll_idx").on(t.state, t.availableAt, t.createdAt),
+		index("content_bundle_rebuild_request_item_created_idx").on(t.itemId, t.createdAt.desc()),
 	]
 )
 
@@ -585,7 +668,7 @@ export const relatedLinks = createTable(
 		check("related_link_kind_check", sql`${t.kind} in ('external', 'internal', 'topic')`),
 		check(
 			"related_link_label_check",
-			sql`${t.label} = btrim(${t.label}) and char_length(${t.label}) between 1 and 100 and ${t.label} !~ '<!--|</?[A-Za-z]|<!|<\\?'`
+			sql`${t.label} = btrim(${t.label}) and char_length(${t.label}) between 1 and 100 and ${t.label} !~ '<!--|</?[A-Za-z]|<!|<\\\\?'`
 		),
 		check(
 			"related_link_target_check",
@@ -683,6 +766,7 @@ export const relations = defineRelations(
 		pisoCampCurrencyDenominations,
 		contentItems,
 		contentVersions,
+		contentBundleRebuildRequests,
 		relatedLinks,
 		auditLog,
 	},
@@ -814,6 +898,7 @@ export const relations = defineRelations(
 				alias: "contentItemEditor",
 			}),
 			versions: r.many.contentVersions(),
+			bundleRebuildRequests: r.many.contentBundleRebuildRequests(),
 			topicLinks: r.many.relatedLinks(),
 		},
 		contentVersions: {
@@ -831,6 +916,20 @@ export const relations = defineRelations(
 				to: [r.pisoCampCurrencyDenominations.seriesCode, r.pisoCampCurrencyDenominations.code],
 			}),
 			relatedLinks: r.many.relatedLinks(),
+			bundleRebuildRequests: r.many.contentBundleRebuildRequests(),
+		},
+		contentBundleRebuildRequests: {
+			item: r.one.contentItems({
+				from: r.contentBundleRebuildRequests.itemId,
+				to: r.contentItems.id,
+			}),
+			publishedVersion: r.one.contentVersions({
+				from: [
+					r.contentBundleRebuildRequests.itemId,
+					r.contentBundleRebuildRequests.publishedVersionId,
+				],
+				to: [r.contentVersions.itemId, r.contentVersions.id],
+			}),
 		},
 		relatedLinks: {
 			version: r.one.contentVersions({
@@ -873,6 +972,7 @@ export const schema = Object.assign(
 		pisoCampCurrencyDenominations,
 		contentItems,
 		contentVersions,
+		contentBundleRebuildRequests,
 		relatedLinks,
 		auditLog,
 	},

@@ -14,8 +14,16 @@ const { redirect, getAccess, contentFormView } = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ redirect }))
 vi.mock("@/features/dashboard/server/get-access", () => ({ getAccess }))
 vi.mock("@/features/pisocamp-content-admin/components/content-form-view", () => ({
-	ContentFormView: ({ itemId, mode }: { itemId: string; mode: string }) => {
-		contentFormView({ itemId, mode })
+	ContentFormView: ({
+		canSubmit,
+		itemId,
+		mode,
+	}: {
+		canSubmit: boolean
+		itemId: string
+		mode: string
+	}) => {
+		contentFormView({ canSubmit, itemId, mode })
 		return (
 			<div>
 				Content form: {mode} {itemId}
@@ -34,7 +42,21 @@ describe("EditPisoCampContentPage", () => {
 		expect(metadata).toEqual(expect.objectContaining({ title: "Edit Content" }))
 	})
 
-	it("renders the item edit feature view with exactly content.items.edit", async () => {
+	it("passes an explicit submit capability to the item edit feature view", async () => {
+		getAccess.mockResolvedValue({
+			status: "loaded",
+			roles: [],
+			permissions: ["content.items.edit", "content.items.submit"],
+		})
+
+		render(await EditPisoCampContentPage(route))
+
+		expect(redirect).not.toHaveBeenCalled()
+		expect(screen.getByText(`Content form: edit ${itemId}`)).toBeInTheDocument()
+		expect(contentFormView).toHaveBeenCalledWith({ canSubmit: true, itemId, mode: "edit" })
+	})
+
+	it("keeps editing available while withholding submit capability without its exact permission", async () => {
 		getAccess.mockResolvedValue({
 			status: "loaded",
 			roles: [],
@@ -43,8 +65,7 @@ describe("EditPisoCampContentPage", () => {
 
 		render(await EditPisoCampContentPage(route))
 
-		expect(redirect).not.toHaveBeenCalled()
-		expect(screen.getByText(`Content form: edit ${itemId}`)).toBeInTheDocument()
+		expect(contentFormView).toHaveBeenCalledWith({ canSubmit: false, itemId, mode: "edit" })
 	})
 
 	it.each([

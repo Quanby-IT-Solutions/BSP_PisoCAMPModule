@@ -5,6 +5,7 @@ import {
 	type NestInterceptor,
 } from "@nestjs/common"
 import { Reflector } from "@nestjs/core"
+import { createHash } from "node:crypto"
 import { and, eq, gt, sql } from "drizzle-orm"
 import { firstValueFrom, from, type Observable } from "rxjs"
 
@@ -38,6 +39,7 @@ import {
 type OrpcProcedure = {
 	"~orpc": {
 		handler: (options: unknown) => unknown
+		route?: unknown
 		[key: string]: unknown
 	}
 }
@@ -54,11 +56,46 @@ function isOrpcProcedure(value: unknown): value is OrpcProcedure {
 }
 
 async function throwOrpcError(
-	code: "BAD_REQUEST" | "UNAUTHORIZED",
+	code: "BAD_REQUEST" | "CONFLICT" | "UNAUTHORIZED",
 	message: string
 ): Promise<never> {
 	const { ORPCError } = await import("@orpc/server")
 	throw new ORPCError(code, { message })
+}
+
+type RequestOperation = { method: string; path: string }
+
+function canonicalize(value: unknown): unknown {
+	if (value === null || typeof value !== "object") return value
+	if (value instanceof Date) return value.toISOString()
+	if (Array.isArray(value)) return value.map(item => canonicalize(item))
+
+	return Object.fromEntries(
+		Object.entries(value)
+			.filter(([, item]) => item !== undefined)
+			.sort(([left], [right]) => left.localeCompare(right))
+			.map(([key, item]) => [key, canonicalize(item)])
+	)
+}
+
+function createRequestFingerprint(operation: RequestOperation, input: unknown): string {
+	const canonicalRequest = JSON.stringify({
+		operation: {
+			method: operation.method.toUpperCase(),
+			path: operation.path,
+		},
+		input: canonicalize(input),
+	})
+	return createHash("sha256").update(canonicalRequest).digest("hex")
+}
+
+function procedureOperation(procedure: OrpcProcedure): RequestOperation {
+	const route = procedure["~orpc"].route
+	if (typeof route === "object" && route !== null) {
+		const { method, path } = route as { method?: unknown; path?: unknown }
+		if (typeof method === "string" && typeof path === "string") return { method, path }
+	}
+	return { method: "ORPC", path: "unknown" }
 }
 
 /**
@@ -129,6 +166,21 @@ export class IdempotencyInterceptor implements NestInterceptor {
 
 	async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
 		const request = context.switchToHttp().getRequest<VerifiedSessionRequest>()
+		const httpRequest = request as VerifiedSessionRequest & {
+			body?: unknown
+			method?: string
+			originalUrl?: string
+			route?: { path?: string }
+			url?: string
+		}
+		const plainOperation = {
+			method: httpRequest.method ?? "NEST",
+			path:
+				httpRequest.route?.path ??
+				httpRequest.originalUrl ??
+				httpRequest.url ??
+				`${context.getClass().name}.${context.getHandler().name}`,
+		}
 
 		const rawKey = request.headers["idempotency-key"]
 		const key = Array.isArray(rawKey) ? rawKey[0] : rawKey
@@ -140,7 +192,17 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		// Missing keys bypass optional routes; metadata-backed routes reject in
 		// the wrapped oRPC handler, where the validated request input is available.
 		if (!key) {
-			return from(this.dispatch(next, undefined, undefined, undefined, requirement))
+			return from(
+				this.dispatch(
+					next,
+					undefined,
+					undefined,
+					undefined,
+					requirement,
+					plainOperation,
+					httpRequest.body
+				)
+			)
 		}
 
 		// Mirror RbacGuard's resolution: session first, direct user reference as fallback.
@@ -155,10 +217,30 @@ export class IdempotencyInterceptor implements NestInterceptor {
 
 		// No account or valid guest subject → bypass; the route's identity layer handles rejection.
 		if (!authorId) {
-			return from(this.dispatch(next, key, undefined, authenticatedAuthorId, requirement))
+			return from(
+				this.dispatch(
+					next,
+					key,
+					undefined,
+					authenticatedAuthorId,
+					requirement,
+					plainOperation,
+					httpRequest.body
+				)
+			)
 		}
 
-		return from(this.dispatch(next, key, authorId, authenticatedAuthorId, requirement))
+		return from(
+			this.dispatch(
+				next,
+				key,
+				authorId,
+				authenticatedAuthorId,
+				requirement,
+				plainOperation,
+				httpRequest.body
+			)
+		)
 	}
 
 	/**
@@ -176,7 +258,9 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		key: string | undefined,
 		authorId: string | undefined,
 		authenticatedAuthorId: string | undefined,
-		requirement: IdempotencyRequirement | undefined
+		requirement: IdempotencyRequirement | undefined,
+		plainOperation: RequestOperation,
+		plainInput: unknown
 	): Promise<unknown> {
 		const emitted = await firstValueFrom(next.handle())
 
@@ -189,7 +273,12 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		if (problem) {
 			return throwOrpcError("BAD_REQUEST", describeIdempotencyKeyProblem(problem))
 		}
-		return this.runWithIdempotency(authorId, key, () => Promise.resolve(emitted))
+		return this.runWithIdempotency(
+			authorId,
+			key,
+			createRequestFingerprint(plainOperation, plainInput),
+			() => Promise.resolve(emitted)
+		)
 	}
 
 	/** Clone a procedure with its handler wrapped in the idempotency transaction. */
@@ -201,6 +290,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		requirement: IdempotencyRequirement | undefined
 	): OrpcProcedure {
 		const original = procedure["~orpc"].handler
+		const operation = procedureOperation(procedure)
 
 		const clone: OrpcProcedure = {
 			"~orpc": {
@@ -233,7 +323,13 @@ export class IdempotencyInterceptor implements NestInterceptor {
 						}
 					}
 					if (!authorId) return original(options)
-					return this.runWithIdempotency(authorId, key, () => Promise.resolve(original(options)))
+					const input = (options as { input?: unknown } | null)?.input
+					return this.runWithIdempotency(
+						authorId,
+						key,
+						createRequestFingerprint(operation, input),
+						() => Promise.resolve(original(options))
+					)
 				},
 			},
 		}
@@ -249,7 +345,12 @@ export class IdempotencyInterceptor implements NestInterceptor {
 	 * Returns the value itself (not an Observable) so it can be awaited from
 	 * inside an oRPC handler.
 	 */
-	private runWithIdempotency<T>(authorId: string, key: string, run: () => Promise<T>): Promise<T> {
+	private runWithIdempotency<T>(
+		authorId: string,
+		key: string,
+		requestFingerprint: string,
+		run: () => Promise<T>
+	): Promise<T> {
 		return databaseTransactionContext.transaction(async tx => {
 			// Locked on author AND key: keying on the key alone let one user's
 			// requests block another's whenever both picked the same value.
@@ -272,6 +373,12 @@ export class IdempotencyInterceptor implements NestInterceptor {
 				)
 
 			if (existing[0]) {
+				if (existing[0].requestFingerprint !== requestFingerprint) {
+					return throwOrpcError(
+						"CONFLICT",
+						"Idempotency-Key was already used for a different request"
+					)
+				}
 				return existing[0].response as T
 			}
 
@@ -288,10 +395,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
 			// target that had already lapsed.
 			await tx
 				.insert(idempotencyKeys)
-				.values({ key, authorId, response: response as unknown, expiresAt })
+				.values({ key, authorId, requestFingerprint, response: response as unknown, expiresAt })
 				.onConflictDoUpdate({
 					target: [idempotencyKeys.authorId, idempotencyKeys.key],
-					set: { response: response as unknown, createdAt: now, expiresAt },
+					set: { requestFingerprint, response: response as unknown, createdAt: now, expiresAt },
 				})
 
 			return response
