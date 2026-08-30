@@ -77,6 +77,28 @@ export const env = createEnv({
 		// Database
 		DATABASE_URL: z.string(),
 
+		// CE-1 published-only offline bundle builder. The worker is opt-in so an
+		// application can never begin building without intentionally supplied
+		// signing configuration. BundleModule validates the private key at boot.
+		PISOCAMP_BUNDLE_WORKER_ENABLED: booleanFromEnv.optional().default(false),
+		PISOCAMP_BUNDLE_SIGNING_KEY_ID: z
+			.string()
+			.regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/)
+			.optional(),
+		PISOCAMP_BUNDLE_SIGNING_PRIVATE_KEY_BASE64: z
+			.string()
+			.min(1)
+			.regex(/^[A-Za-z0-9+/]+={0,2}$/)
+			.optional(),
+		PISOCAMP_BUNDLE_POLL_INTERVAL_MS: z.coerce
+			.number()
+			.int()
+			.min(5_000)
+			.max(300_000)
+			.default(30_000),
+		PISOCAMP_BUNDLE_LEASE_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
+		PISOCAMP_BUNDLE_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(50),
+
 		// Redis (AB-2). Shared state for the throttler and the RBAC permission
 		// cache. Optional so a single-instance local run still boots, but see
 		// the degradation notes in redis.provider.ts: without it, rate limits

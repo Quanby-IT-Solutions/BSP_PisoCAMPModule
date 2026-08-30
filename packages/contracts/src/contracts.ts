@@ -143,6 +143,19 @@ export {
 	SubmitPisoCampContentInputSchema,
 	UpdatePisoCampContentInputSchema,
 } from "./modules/v1/pisocamp/content.schema.js"
+
+// CE-1 signed offline bundle protocol
+export { pisoCampBundleContract } from "./modules/v1/pisocamp/bundle.contract.js"
+export {
+	PisoCampBundleEnvelopeSchema,
+	PisoCampBundleManifestEntrySchema,
+	PisoCampBundleManifestSchema,
+} from "./modules/v1/pisocamp/bundle.schema.js"
+export type {
+	PisoCampBundleEnvelope,
+	PisoCampBundleManifest,
+	PisoCampBundleManifestEntry,
+} from "./modules/v1/pisocamp/bundle.schema.js"
 export type {
 	ApprovePisoCampContentInput,
 	CreatePisoCampContentInput,

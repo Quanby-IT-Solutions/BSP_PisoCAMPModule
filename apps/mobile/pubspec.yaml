@@ -18,6 +18,9 @@ dependencies:
   dio_cookie_manager: ^3.1.1
   cookie_jar: ^4.0.8
   path_provider: ^2.1.5
+  path: ^1.9.1
+  crypto: ^3.0.6
+  cryptography: ^2.7.0
 
   # State management
   flutter_riverpod: ^3.0.3
@@ -86,3 +89,7 @@ flutter:
   # arrives via --dart-define instead (see ApiConstants).
   assets:
     - assets/pisocamp/home.json
+    - assets/pisocamp/bundle/seed/manifest.envelope.json
+    - assets/pisocamp/bundle/seed/resource-index.json
+    - assets/pisocamp/bundle/seed/resources/
+    - assets/pisocamp/bundle/seed/source/

@@ -4,6 +4,14 @@ import { v1Contract } from "../v1.contract.js"
 import { pisoCampContract } from "./pisocamp.contract.js"
 
 describe("Piso CAMP consent contract", () => {
+	it("composes the CE-1 public bundle surface", () => {
+		expect(Object.keys(pisoCampContract.bundle)).toEqual(["manifest", "resource"])
+		expect(v1Contract.pisocamp.bundle.manifest.get["~orpc"].route).toMatchObject({
+			method: "GET",
+			path: "/v1/pisocamp/bundle/manifest",
+		})
+	})
+
 	it("composes the CM-1 administration surface under admin.content", () => {
 		expect(Object.keys(pisoCampContract.admin.content)).toEqual(
 			expect.arrayContaining(["list", "get", "create", "update"])

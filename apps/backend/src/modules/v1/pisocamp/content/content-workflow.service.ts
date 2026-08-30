@@ -58,10 +58,6 @@ export interface PisoCampPublishedBundleCandidate {
 	versionNo: number
 	content: PisoCampContentDraft
 	relatedLinks: PisoCampRelatedLinkOutput[]
-	approvedBy: string
-	approvedAt: string
-	publishedBy: string
-	publishedAt: string
 }
 
 const itemCreator = alias(users, "workflow_item_creator")
@@ -368,8 +364,10 @@ export class ContentWorkflowService {
 		}
 	}
 
-	async listPublishedBundleCandidates(): Promise<PisoCampPublishedBundleCandidate[]> {
-		const rows = await db
+	async listPublishedBundleCandidates(
+		database: ContentDatabase = db
+	): Promise<PisoCampPublishedBundleCandidate[]> {
+		const rows = await database
 			.select({
 				itemId: contentItems.id,
 				versionId: contentVersions.id,
@@ -381,10 +379,6 @@ export class ContentWorkflowService {
 				seriesCode: contentVersions.seriesCode,
 				denominationCode: contentVersions.denominationCode,
 				primaryUrl: contentVersions.primaryUrl,
-				approvedBy: contentVersions.approvedBy,
-				approvedAt: contentVersions.approvedAt,
-				publishedBy: contentVersions.publishedBy,
-				publishedAt: contentVersions.publishedAt,
 			})
 			.from(contentItems)
 			.innerJoin(
@@ -397,7 +391,7 @@ export class ContentWorkflowService {
 			.where(and(eq(contentItems.status, "published"), eq(contentVersions.status, "published")))
 			.orderBy(asc(contentItems.id))
 		const linksByVersionId = await selectContentLinksByVersionIds(
-			db,
+			database,
 			rows.map(row => row.versionId)
 		)
 		return rows.map(row => ({
@@ -406,10 +400,6 @@ export class ContentWorkflowService {
 			versionNo: row.versionNo,
 			content: fromContentVersion(row),
 			relatedLinks: linksByVersionId.get(row.versionId) ?? [],
-			approvedBy: row.approvedBy!,
-			approvedAt: row.approvedAt!.toISOString(),
-			publishedBy: row.publishedBy!,
-			publishedAt: row.publishedAt!.toISOString(),
 		}))
 	}
 }

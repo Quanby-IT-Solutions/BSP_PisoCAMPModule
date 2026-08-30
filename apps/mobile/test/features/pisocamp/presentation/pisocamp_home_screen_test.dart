@@ -655,6 +655,99 @@ void main() {
     expect(find.text('Coins'), findsAtLeastNWidgets(1));
   });
 
+  testWidgets('currency cards are 48dp semantic navigation controls', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(subject(offline: false));
+    await tester.pumpAndSettle();
+
+    final banknotes = find.byWidgetPredicate(
+      (widget) =>
+          widget is ListTile &&
+          widget.title is Text &&
+          (widget.title! as Text).data == 'Banknotes',
+    );
+    final coins = find.byWidgetPredicate(
+      (widget) =>
+          widget is ListTile &&
+          widget.title is Text &&
+          (widget.title! as Text).data == 'Coins',
+    );
+    expect(tester.getSize(banknotes).height, greaterThanOrEqualTo(48));
+    expect(tester.getSize(coins).height, greaterThanOrEqualTo(48));
+    expect(tester.getSemantics(banknotes).flagsCollection.isButton, isTrue);
+    expect(tester.getSemantics(coins).flagsCollection.isButton, isTrue);
+    semantics.dispose();
+  });
+
+  testWidgets('currency cards navigate to the exact guest list routes', (
+    tester,
+  ) async {
+    final router = GoRouter(
+      initialLocation: AppRoutes.pisoCamp,
+      routes: [
+        GoRoute(
+          path: AppRoutes.pisoCamp,
+          builder: (context, state) => const PisoCampHomeScreen(),
+        ),
+        GoRoute(
+          path: AppRoutes.pisoCampBanknotes,
+          builder: (context, state) =>
+              const Scaffold(body: Text('Banknote list route')),
+        ),
+        GoRoute(
+          path: AppRoutes.pisoCampCoins,
+          builder: (context, state) =>
+              const Scaffold(body: Text('Coin list route')),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          isAuthenticatedProvider.overrideWith((ref) => false),
+          guestIdentityServiceProvider.overrideWithValue(
+            GuestIdentityService(SecureStorageService()),
+          ),
+          pisoCampHomeProvider.overrideWith(
+            (ref) => Stream.value(
+              const PisoCampHomeLoadResult(home: home, isOffline: false),
+            ),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ListTile &&
+            widget.title is Text &&
+            (widget.title! as Text).data == 'Banknotes',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, AppRoutes.pisoCampBanknotes);
+    expect(find.text('Banknote list route'), findsOneWidget);
+
+    router.go(AppRoutes.pisoCamp);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ListTile &&
+            widget.title is Text &&
+            (widget.title! as Text).data == 'Coins',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, AppRoutes.pisoCampCoins);
+    expect(find.text('Coin list route'), findsOneWidget);
+  });
+
   testWidgets('offline Create Account explains that internet is required', (
     tester,
   ) async {

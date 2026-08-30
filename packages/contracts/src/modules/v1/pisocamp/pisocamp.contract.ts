@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract"
 
+import { pisoCampBundleContract } from "./bundle.contract.js"
 import { pisoCampContentContract } from "./content.contract.js"
 import {
 	GetPisoCampConsentInputSchema,
@@ -15,6 +16,7 @@ import {
 } from "./pisocamp.schema.js"
 
 export const pisoCampContract = {
+	bundle: pisoCampBundleContract,
 	admin: {
 		content: pisoCampContentContract,
 		config: {

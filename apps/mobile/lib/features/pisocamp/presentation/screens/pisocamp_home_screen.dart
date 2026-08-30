@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,9 +9,11 @@ import 'package:mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:mobile/features/pisocamp/data/consent_local_store.dart';
 import 'package:mobile/features/pisocamp/data/consent_service.dart';
 import 'package:mobile/features/pisocamp/data/pisocamp_profile_repository.dart';
+import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/account_prompt.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 
@@ -26,6 +30,16 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
   void initState() {
     super.initState();
     _continued = ref.read(guestIdentityServiceProvider).hasContinuedAsGuest();
+    _syncCurrencies(BundleSyncTrigger.startup);
+  }
+
+  void _syncCurrencies(BundleSyncTrigger trigger) {
+    unawaited(
+      ref
+          .read(currencyBundleSyncProvider.future)
+          .then((sync) => sync.sync(trigger))
+          .catchError((_) {}),
+    );
   }
 
   Future<void> _continue() async {
@@ -81,6 +95,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
       final wasAvailable = previous?.asData?.value;
       final isAvailable = next.asData?.value;
       if (wasAvailable == false && isAvailable == true) {
+        _syncCurrencies(BundleSyncTrigger.connectivity);
         final home = ref.read(pisoCampHomeProvider).asData?.value;
         if (home?.isOffline == true) {
           ref.invalidate(pisoCampHomeProvider);
@@ -136,6 +151,14 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
                       child: ListTile(
                         title: Text(card.title),
                         subtitle: Text(card.description),
+                        minTileHeight: 64,
+                        trailing: _currencyRoute(card.title) == null
+                            ? null
+                            : const Icon(Icons.chevron_right),
+                        onTap: switch (_currencyRoute(card.title)) {
+                          final route? => () => context.push(route),
+                          null => null,
+                        },
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -198,5 +221,13 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
         },
       ),
     );
+  }
+
+  String? _currencyRoute(String title) {
+    return switch (title.trim().toLowerCase()) {
+      'banknotes' => AppRoutes.pisoCampBanknotes,
+      'coins' => AppRoutes.pisoCampCoins,
+      _ => null,
+    };
   }
 }

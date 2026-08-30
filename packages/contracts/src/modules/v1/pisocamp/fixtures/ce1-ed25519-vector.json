@@ -1,0 +1,11 @@
+{
+	"testOnly": "This fixed key is for CE-1 tests only; never a production, seed, or network release key.",
+	"keyId": "ce1-test-v1",
+	"privateKeyPkcs8Pem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIF26quJAe/MJVouLwf8plTP1H0rFTf4MTNyDITFXiABi\n-----END PRIVATE KEY-----\n",
+	"publicKeySpkiPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA5m0MbmDjnT8FfA/NNZWdLoOYssEmpyUPp+kO7IpPu2Q=\n-----END PUBLIC KEY-----\n",
+	"manifestJson": "{\"schemaVersion\":1,\"bundleVersion\":\"0\",\"generatedAt\":\"2026-08-27T00:00:00Z\",\"minimumClientSchemaVersion\":1,\"entries\":[]}",
+	"payloadUtf8Hex": "7b22736368656d6156657273696f6e223a312c2262756e646c6556657273696f6e223a2230222c2267656e6572617465644174223a22323032362d30382d32375430303a30303a30305a222c226d696e696d756d436c69656e74536368656d6156657273696f6e223a312c22656e7472696573223a5b5d7d",
+	"payloadBase64url": "eyJzY2hlbWFWZXJzaW9uIjoxLCJidW5kbGVWZXJzaW9uIjoiMCIsImdlbmVyYXRlZEF0IjoiMjAyNi0wOC0yN1QwMDowMDowMFoiLCJtaW5pbXVtQ2xpZW50U2NoZW1hVmVyc2lvbiI6MSwiZW50cmllcyI6W119",
+	"signatureBase64url": "VM6GLom2CWon4Kw-T2c5lXlD61bzb8egSAEh6iIoq2htPacpe7fXjR29bTZgrNisWa5oWb8YqAgc6PWgipU3Aw",
+	"sha256": "9ec43cc806a756fe1c24de3e6d94c7f57e04c1b7b5673cd888fb500c833fb87b"
+}

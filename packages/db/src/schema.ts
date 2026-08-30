@@ -1,5 +1,5 @@
 import { defineRelations, sql } from "drizzle-orm"
-import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core"
+import { bytea, check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core"
 
 import type { PisoCampContentStatus, PisoCampContentType } from "@repo/contracts"
 
@@ -592,6 +592,176 @@ export const contentVersions = createTable(
 	]
 )
 
+export const contentBundles = createTable(
+	"content_bundle",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		version: t.bigint("version", { mode: "bigint" }).generatedAlwaysAsIdentity().notNull(),
+		state: t.text("state").notNull().default("building").$type<"building" | "ready" | "failed">(),
+		schemaVersion: t.integer("schema_version").notNull().default(1),
+		manifestPayload: t.text("manifest_payload"),
+		manifestSha256: t.text("manifest_sha256"),
+		algorithm: t.text("algorithm"),
+		keyId: t.text("key_id"),
+		signature: t.text("signature"),
+		entryCount: t.integer("entry_count").notNull().default(0),
+		coreByteLength: t.integer("core_byte_length").notNull().default(0),
+		failureCode: t.text("failure_code"),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		readyAt: t.timestamp("ready_at", { withTimezone: true }),
+		failedAt: t.timestamp("failed_at", { withTimezone: true }),
+	}),
+	t => [
+		unique("content_bundle_version_unique").on(t.version),
+		check("content_bundle_version_check", sql`${t.version} > 0`),
+		check("content_bundle_state_check", sql`${t.state} in ('building', 'ready', 'failed')`),
+		check("content_bundle_schema_version_check", sql`${t.schemaVersion} = 1`),
+		check(
+			"content_bundle_size_check",
+			sql`${t.entryCount} between 0 and 2000 and ${t.coreByteLength} between 0 and 52428800`
+		),
+		check(
+			"content_bundle_envelope_check",
+			sql`(
+				(${t.manifestPayload} is null and ${t.manifestSha256} is null and ${t.algorithm} is null and ${t.keyId} is null and ${t.signature} is null)
+				or (
+					${t.manifestPayload} is not null
+					and ${t.manifestSha256} is not null
+					and ${t.algorithm} is not null
+					and ${t.keyId} is not null
+					and ${t.signature} is not null
+					and ${t.manifestPayload} ~ '^[A-Za-z0-9_-]+$' and char_length(${t.manifestPayload}) <= 2796203
+					and ${t.manifestSha256} ~ '^[a-f0-9]{64}$'
+					and ${t.algorithm} = 'Ed25519'
+					and char_length(${t.keyId}) between 1 and 64 and ${t.keyId} ~ '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+					and ${t.signature} ~ '^[A-Za-z0-9_-]{86}$'
+				)
+			)`
+		),
+		check(
+			"content_bundle_failure_code_check",
+			sql`${t.failureCode} is null or (${t.failureCode} ~ '^[a-z][a-z0-9_]{0,63}$')`
+		),
+		check(
+			"content_bundle_lifecycle_check",
+			sql`(
+				(${t.state} = 'building' and ${t.readyAt} is null and ${t.failedAt} is null and ${t.failureCode} is null and ${t.manifestPayload} is null)
+				or (${t.state} = 'ready' and ${t.readyAt} is not null and ${t.readyAt} >= ${t.createdAt} and ${t.failedAt} is null and ${t.failureCode} is null and ${t.manifestPayload} is not null)
+				or (${t.state} = 'failed' and ${t.failedAt} is not null and ${t.failedAt} >= ${t.createdAt} and ${t.failureCode} is not null and ${t.readyAt} is null and ${t.manifestPayload} is null)
+			)`
+		),
+		index("content_bundle_ready_version_idx")
+			.on(t.version.desc())
+			.where(sql`${t.state} = 'ready'`),
+	]
+)
+
+export const contentBundleBlobs = createTable(
+	"content_bundle_blob",
+	t => ({
+		sha256: t.text("sha256").primaryKey(),
+		byteLength: t.integer("byte_length").notNull(),
+		mediaType: t
+			.text("media_type")
+			.notNull()
+			.$type<"application/json" | "image/png" | "image/jpeg" | "image/webp">(),
+		body: bytea("body").notNull(),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("content_bundle_blob_metadata_unique").on(t.sha256, t.byteLength, t.mediaType),
+		check("content_bundle_blob_sha256_check", sql`${t.sha256} ~ '^[a-f0-9]{64}$'`),
+		check("content_bundle_blob_size_check", sql`${t.byteLength} between 1 and 5242880`),
+		check(
+			"content_bundle_blob_media_type_check",
+			sql`${t.mediaType} in ('application/json', 'image/png', 'image/jpeg', 'image/webp')`
+		),
+		check("content_bundle_blob_body_length_check", sql`octet_length(${t.body}) = ${t.byteLength}`),
+	]
+)
+
+export const contentBundleManifestEntries = createTable(
+	"content_bundle_manifest_entry",
+	t => ({
+		bundleId: t.uuid("bundle_id").notNull(),
+		logicalId: t.text("logical_id").notNull(),
+		position: t.integer("position").notNull(),
+		kind: t.text("kind").notNull().$type<"content" | "image">(),
+		delivery: t.text("delivery").notNull().$type<"core" | "on_demand">(),
+		mediaType: t
+			.text("media_type")
+			.notNull()
+			.$type<"application/json" | "image/png" | "image/jpeg" | "image/webp">(),
+		byteLength: t.integer("byte_length").notNull(),
+		sha256: t.text("sha256").notNull(),
+		downloadPath: t.text("download_path").notNull(),
+		contentItemId: t.uuid("content_item_id"),
+		contentVersionId: t.uuid("content_version_id"),
+	}),
+	t => [
+		primaryKey({ columns: [t.bundleId, t.logicalId] }),
+		unique("content_bundle_manifest_entry_bundle_position_unique").on(t.bundleId, t.position),
+		foreignKey({
+			columns: [t.bundleId],
+			foreignColumns: [contentBundles.id],
+			name: "content_bundle_manifest_entry_bundle_fkey",
+		}).onDelete("restrict"),
+		foreignKey({
+			columns: [t.sha256, t.byteLength, t.mediaType],
+			foreignColumns: [
+				contentBundleBlobs.sha256,
+				contentBundleBlobs.byteLength,
+				contentBundleBlobs.mediaType,
+			],
+			name: "content_bundle_manifest_entry_blob_metadata_fkey",
+		}).onDelete("restrict"),
+		foreignKey({
+			columns: [t.contentItemId, t.contentVersionId],
+			foreignColumns: [contentVersions.itemId, contentVersions.id],
+			name: "content_bundle_manifest_entry_content_item_version_fkey",
+		}).onDelete("restrict"),
+		check(
+			"content_bundle_manifest_entry_logical_id_check",
+			sql`char_length(${t.logicalId}) between 1 and 160 and ${t.logicalId} ~ '^[a-z0-9]+([.:_-][a-z0-9]+)*$'`
+		),
+		check("content_bundle_manifest_entry_position_check", sql`${t.position} between 0 and 1999`),
+		check("content_bundle_manifest_entry_kind_check", sql`${t.kind} in ('content', 'image')`),
+		check(
+			"content_bundle_manifest_entry_delivery_check",
+			sql`${t.delivery} in ('core', 'on_demand')`
+		),
+		check(
+			"content_bundle_manifest_entry_media_type_check",
+			sql`${t.mediaType} in ('application/json', 'image/png', 'image/jpeg', 'image/webp')`
+		),
+		check("content_bundle_manifest_entry_size_check", sql`${t.byteLength} between 1 and 5242880`),
+		check(
+			"content_bundle_manifest_entry_download_path_check",
+			sql`${t.downloadPath} = '/pisocamp/bundle/resources/' || ${t.sha256}`
+		),
+		check(
+			"content_bundle_manifest_entry_content_pair_check",
+			sql`(${t.contentItemId} is null) = (${t.contentVersionId} is null)`
+		),
+		index("content_bundle_manifest_entry_bundle_idx").on(t.bundleId, t.position),
+		index("content_bundle_manifest_entry_content_trace_idx")
+			.on(t.contentItemId, t.contentVersionId)
+			.where(sql`${t.contentItemId} is not null`),
+	]
+)
+
+export const contentBundleChannels = createTable(
+	"content_bundle_channel",
+	t => ({
+		id: t.text("id").primaryKey(),
+		currentBundleId: t.uuid("current_bundle_id").references(() => contentBundles.id, {
+			onDelete: "restrict",
+		}),
+		updatedAt: t.timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [check("content_bundle_channel_primary_check", sql`${t.id} = 'primary'`)]
+)
+
 export const contentBundleRebuildRequests = createTable(
 	"content_bundle_rebuild_request",
 	t => ({
@@ -606,6 +776,9 @@ export const contentBundleRebuildRequests = createTable(
 		attemptCount: t.integer("attempt_count").notNull().default(0),
 		availableAt: t.timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
 		lastAttemptAt: t.timestamp("last_attempt_at", { withTimezone: true }),
+		leaseOwner: t.text("lease_owner"),
+		leaseExpiresAt: t.timestamp("lease_expires_at", { withTimezone: true }),
+		processedBundleId: t.uuid("processed_bundle_id"),
 		processedAt: t.timestamp("processed_at", { withTimezone: true }),
 		lastError: t.text("last_error"),
 		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -616,6 +789,11 @@ export const contentBundleRebuildRequests = createTable(
 			foreignColumns: [contentVersions.itemId, contentVersions.id],
 			name: "content_bundle_rebuild_request_item_version_fkey",
 		}).onDelete("restrict"),
+		foreignKey({
+			columns: [t.processedBundleId],
+			foreignColumns: [contentBundles.id],
+			name: "content_bundle_rebuild_request_processed_bundle_fkey",
+		}).onDelete("restrict"),
 		unique("content_bundle_rebuild_request_published_version_unique").on(t.publishedVersionId),
 		check(
 			"content_bundle_rebuild_request_state_check",
@@ -624,22 +802,30 @@ export const contentBundleRebuildRequests = createTable(
 		check("content_bundle_rebuild_request_attempt_count_check", sql`${t.attemptCount} >= 0`),
 		check(
 			"content_bundle_rebuild_request_last_error_check",
-			sql`${t.lastError} is null or (${t.attemptCount} > 0 and ${t.lastError} = btrim(${t.lastError}) and char_length(${t.lastError}) between 1 and 1000 and ${t.lastError} !~ '<!--|</?[A-Za-z]|<!|<\\?')`
+			sql`${t.lastError} is null or (${t.attemptCount} > 0 and ${t.lastError} ~ '^[a-z][a-z0-9_]{0,63}$')`
+		),
+		check(
+			"content_bundle_rebuild_request_lease_owner_check",
+			sql`${t.leaseOwner} is null or (${t.leaseOwner} = btrim(${t.leaseOwner}) and char_length(${t.leaseOwner}) between 1 and 128 and ${t.leaseOwner} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$')`
 		),
 		check(
 			"content_bundle_rebuild_request_delivery_metadata_check",
 			sql`(
 				(${t.lastAttemptAt} is null or ${t.lastAttemptAt} >= ${t.createdAt})
 				and (${t.processedAt} is null or (${t.lastAttemptAt} is not null and ${t.processedAt} >= ${t.lastAttemptAt}))
+				and (${t.leaseExpiresAt} is null or (${t.lastAttemptAt} is not null and ${t.leaseExpiresAt} > ${t.lastAttemptAt}))
 				and (
-					(${t.state} = 'pending' and ${t.processedAt} is null and ((${t.attemptCount} = 0 and ${t.lastAttemptAt} is null) or (${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null)))
-					or (${t.state} = 'processing' and ${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null and ${t.processedAt} is null and ${t.lastError} is null)
-					or (${t.state} = 'failed' and ${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null and ${t.processedAt} is null and ${t.lastError} is not null)
-					or (${t.state} = 'completed' and ${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null and ${t.processedAt} is not null and ${t.lastError} is null)
+					(${t.state} = 'pending' and ${t.processedAt} is null and ${t.processedBundleId} is null and ${t.leaseOwner} is null and ${t.leaseExpiresAt} is null and ((${t.attemptCount} = 0 and ${t.lastAttemptAt} is null and ${t.lastError} is null) or (${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null)))
+					or (${t.state} = 'processing' and ${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null and ${t.processedAt} is null and ${t.processedBundleId} is null and ${t.lastError} is null and ${t.leaseOwner} is not null and ${t.leaseExpiresAt} is not null)
+					or (${t.state} = 'failed' and ${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null and ${t.processedAt} is null and ${t.processedBundleId} is null and ${t.lastError} is not null and ${t.leaseOwner} is null and ${t.leaseExpiresAt} is null)
+					or (${t.state} = 'completed' and ${t.attemptCount} > 0 and ${t.lastAttemptAt} is not null and ${t.processedAt} is not null and ${t.processedBundleId} is not null and ${t.lastError} is null and ${t.leaseOwner} is null and ${t.leaseExpiresAt} is null)
 				)
 			)`
 		),
 		index("content_bundle_rebuild_request_poll_idx").on(t.state, t.availableAt, t.createdAt),
+		index("content_bundle_rebuild_request_lease_expiry_idx")
+			.on(t.leaseExpiresAt)
+			.where(sql`${t.state} = 'processing'`),
 		index("content_bundle_rebuild_request_item_created_idx").on(t.itemId, t.createdAt.desc()),
 	]
 )
@@ -766,6 +952,10 @@ export const relations = defineRelations(
 		pisoCampCurrencyDenominations,
 		contentItems,
 		contentVersions,
+		contentBundles,
+		contentBundleBlobs,
+		contentBundleManifestEntries,
+		contentBundleChannels,
 		contentBundleRebuildRequests,
 		relatedLinks,
 		auditLog,
@@ -899,6 +1089,7 @@ export const relations = defineRelations(
 			}),
 			versions: r.many.contentVersions(),
 			bundleRebuildRequests: r.many.contentBundleRebuildRequests(),
+			bundleManifestEntries: r.many.contentBundleManifestEntries(),
 			topicLinks: r.many.relatedLinks(),
 		},
 		contentVersions: {
@@ -917,6 +1108,50 @@ export const relations = defineRelations(
 			}),
 			relatedLinks: r.many.relatedLinks(),
 			bundleRebuildRequests: r.many.contentBundleRebuildRequests(),
+			bundleManifestEntries: r.many.contentBundleManifestEntries(),
+		},
+		contentBundles: {
+			manifestEntries: r.many.contentBundleManifestEntries(),
+			channels: r.many.contentBundleChannels(),
+			processedRebuildRequests: r.many.contentBundleRebuildRequests(),
+		},
+		contentBundleBlobs: {
+			manifestEntries: r.many.contentBundleManifestEntries(),
+		},
+		contentBundleManifestEntries: {
+			bundle: r.one.contentBundles({
+				from: r.contentBundleManifestEntries.bundleId,
+				to: r.contentBundles.id,
+			}),
+			blob: r.one.contentBundleBlobs({
+				from: [
+					r.contentBundleManifestEntries.sha256,
+					r.contentBundleManifestEntries.byteLength,
+					r.contentBundleManifestEntries.mediaType,
+				],
+				to: [
+					r.contentBundleBlobs.sha256,
+					r.contentBundleBlobs.byteLength,
+					r.contentBundleBlobs.mediaType,
+				],
+			}),
+			contentItem: r.one.contentItems({
+				from: r.contentBundleManifestEntries.contentItemId,
+				to: r.contentItems.id,
+			}),
+			contentVersion: r.one.contentVersions({
+				from: [
+					r.contentBundleManifestEntries.contentItemId,
+					r.contentBundleManifestEntries.contentVersionId,
+				],
+				to: [r.contentVersions.itemId, r.contentVersions.id],
+			}),
+		},
+		contentBundleChannels: {
+			currentBundle: r.one.contentBundles({
+				from: r.contentBundleChannels.currentBundleId,
+				to: r.contentBundles.id,
+			}),
 		},
 		contentBundleRebuildRequests: {
 			item: r.one.contentItems({
@@ -929,6 +1164,10 @@ export const relations = defineRelations(
 					r.contentBundleRebuildRequests.publishedVersionId,
 				],
 				to: [r.contentVersions.itemId, r.contentVersions.id],
+			}),
+			processedBundle: r.one.contentBundles({
+				from: r.contentBundleRebuildRequests.processedBundleId,
+				to: r.contentBundles.id,
 			}),
 		},
 		relatedLinks: {
@@ -972,6 +1211,10 @@ export const schema = Object.assign(
 		pisoCampCurrencyDenominations,
 		contentItems,
 		contentVersions,
+		contentBundles,
+		contentBundleBlobs,
+		contentBundleManifestEntries,
+		contentBundleChannels,
 		contentBundleRebuildRequests,
 		relatedLinks,
 		auditLog,

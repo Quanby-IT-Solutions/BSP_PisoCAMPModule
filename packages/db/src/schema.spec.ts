@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest"
 
 import {
 	consentRecords,
+	contentBundleBlobs,
+	contentBundleChannels,
+	contentBundleManifestEntries,
 	contentBundleRebuildRequests,
+	contentBundles,
 	contentItems,
 	contentVersions,
 	idempotencyKeys,
@@ -20,6 +24,145 @@ import {
 	relatedLinks,
 	schema,
 } from "./schema.js"
+
+describe("CE-1 offline currency bundle database schema", () => {
+	it("defines durable bundles with generated versions and bounded signed envelope metadata", () => {
+		expect(getTableName(contentBundles)).toBe("content_bundle")
+		expect(Object.keys(getTableColumns(contentBundles))).toEqual([
+			"id",
+			"version",
+			"state",
+			"schemaVersion",
+			"manifestPayload",
+			"manifestSha256",
+			"algorithm",
+			"keyId",
+			"signature",
+			"entryCount",
+			"coreByteLength",
+			"failureCode",
+			"createdAt",
+			"readyAt",
+			"failedAt",
+		])
+		const config = getTableConfig(contentBundles)
+		expect(config.uniqueConstraints.map(item => item.name)).toContain(
+			"content_bundle_version_unique"
+		)
+		expect(config.checks.map(item => item.name)).toEqual(
+			expect.arrayContaining([
+				"content_bundle_version_check",
+				"content_bundle_state_check",
+				"content_bundle_schema_version_check",
+				"content_bundle_size_check",
+				"content_bundle_envelope_check",
+				"content_bundle_lifecycle_check",
+			])
+		)
+		expect(config.indexes.map(item => item.config.name)).toContain(
+			"content_bundle_ready_version_idx"
+		)
+		expect(schema.contentBundles.table).toBe(contentBundles)
+	})
+
+	it("defines immutable content-addressed blobs and deterministic manifest entries", () => {
+		expect(getTableName(contentBundleBlobs)).toBe("content_bundle_blob")
+		expect(Object.keys(getTableColumns(contentBundleBlobs))).toEqual([
+			"sha256",
+			"byteLength",
+			"mediaType",
+			"body",
+			"createdAt",
+		])
+		expect(getTableName(contentBundleManifestEntries)).toBe("content_bundle_manifest_entry")
+		expect(Object.keys(getTableColumns(contentBundleManifestEntries))).toEqual([
+			"bundleId",
+			"logicalId",
+			"position",
+			"kind",
+			"delivery",
+			"mediaType",
+			"byteLength",
+			"sha256",
+			"downloadPath",
+			"contentItemId",
+			"contentVersionId",
+		])
+
+		const blobConfig = getTableConfig(contentBundleBlobs)
+		expect(blobConfig.uniqueConstraints.map(item => item.name)).toContain(
+			"content_bundle_blob_metadata_unique"
+		)
+		expect(blobConfig.checks.map(item => item.name)).toEqual(
+			expect.arrayContaining([
+				"content_bundle_blob_sha256_check",
+				"content_bundle_blob_size_check",
+				"content_bundle_blob_media_type_check",
+				"content_bundle_blob_body_length_check",
+			])
+		)
+
+		const entryConfig = getTableConfig(contentBundleManifestEntries)
+		expect(entryConfig.primaryKeys).toHaveLength(1)
+		expect(entryConfig.uniqueConstraints.map(item => item.name)).toContain(
+			"content_bundle_manifest_entry_bundle_position_unique"
+		)
+		expect(entryConfig.foreignKeys.map(item => item.getName())).toEqual(
+			expect.arrayContaining([
+				"content_bundle_manifest_entry_bundle_fkey",
+				"content_bundle_manifest_entry_blob_metadata_fkey",
+				"content_bundle_manifest_entry_content_item_version_fkey",
+			])
+		)
+		expect(entryConfig.indexes.map(item => item.config.name)).toEqual(
+			expect.arrayContaining([
+				"content_bundle_manifest_entry_bundle_idx",
+				"content_bundle_manifest_entry_content_trace_idx",
+			])
+		)
+		expect(schema.contentBundleBlobs.table).toBe(contentBundleBlobs)
+		expect(schema.contentBundleManifestEntries.table).toBe(contentBundleManifestEntries)
+	})
+
+	it("defines the singleton primary channel and recoverable rebuild lease metadata", () => {
+		expect(getTableName(contentBundleChannels)).toBe("content_bundle_channel")
+		expect(Object.keys(getTableColumns(contentBundleChannels))).toEqual([
+			"id",
+			"currentBundleId",
+			"updatedAt",
+		])
+		expect(getTableConfig(contentBundleChannels).checks.map(item => item.name)).toContain(
+			"content_bundle_channel_primary_check"
+		)
+
+		expect(Object.keys(getTableColumns(contentBundleRebuildRequests))).toEqual([
+			"id",
+			"itemId",
+			"publishedVersionId",
+			"state",
+			"attemptCount",
+			"availableAt",
+			"lastAttemptAt",
+			"leaseOwner",
+			"leaseExpiresAt",
+			"processedBundleId",
+			"processedAt",
+			"lastError",
+			"createdAt",
+		])
+		const requestConfig = getTableConfig(contentBundleRebuildRequests)
+		expect(requestConfig.foreignKeys.map(item => item.getName())).toContain(
+			"content_bundle_rebuild_request_processed_bundle_fkey"
+		)
+		expect(requestConfig.indexes.map(item => item.config.name)).toEqual(
+			expect.arrayContaining([
+				"content_bundle_rebuild_request_poll_idx",
+				"content_bundle_rebuild_request_lease_expiry_idx",
+			])
+		)
+		expect(schema.contentBundleChannels.table).toBe(contentBundleChannels)
+	})
+})
 
 describe("CM-1 content database schema", () => {
 	it("defines the controlled currency catalog with composite denomination identity", () => {
@@ -164,6 +307,9 @@ describe("CM-3 content workflow database schema", () => {
 			"attemptCount",
 			"availableAt",
 			"lastAttemptAt",
+			"leaseOwner",
+			"leaseExpiresAt",
+			"processedBundleId",
 			"processedAt",
 			"lastError",
 			"createdAt",

@@ -27,6 +27,7 @@ const requestId = "68c9dd1d-284e-4974-af97-40d8d3ed1111"
 const secondRequestId = "e152aed6-6de1-46e4-9e47-53beaf142222"
 const terminalPublishedVersionId = "29b46c28-00b8-4b45-9f50-9a6868a66666"
 const terminalRequestId = "61595479-66a4-47c6-8192-d77c583b3333"
+const processedBundleId = "f10aeaa7-acde-4fd6-9840-8144c91f7777"
 
 let admin: pg.Client | undefined
 let pool: pg.Pool | undefined
@@ -178,6 +179,12 @@ describe.sequential("single additive CM-3 content workflow migration", () => {
 				itemId,
 				actorId,
 			]
+		)
+		await activePool.query(
+			`insert into content_bundle
+			 (id, state, manifest_payload, manifest_sha256, algorithm, key_id, signature, ready_at)
+			 values ($1, 'ready', 'e30', $2, 'Ed25519', 'ce1-test-v1', $3, now())`,
+			[processedBundleId, "a".repeat(64), "A".repeat(86)]
 		)
 	})
 
@@ -341,33 +348,37 @@ describe.sequential("single additive CM-3 content workflow migration", () => {
 		)
 		await activePool.query(
 			`update content_bundle_rebuild_request
-			 set state = 'processing', attempt_count = 1, last_attempt_at = now()
+			 set state = 'processing', attempt_count = 1, last_attempt_at = now(),
+			     lease_owner = 'cm3-worker-1', lease_expires_at = now() + interval '5 minutes'
 			 where id = $1`,
 			[secondRequestId]
 		)
 		await activePool.query(
 			`update content_bundle_rebuild_request
-			 set state = 'failed', last_error = 'Builder unavailable'
+			 set state = 'failed', last_error = 'builder_unavailable',
+			     lease_owner = null, lease_expires_at = null
 			 where id = $1`,
 			[secondRequestId]
 		)
 		await activePool.query(
 			`update content_bundle_rebuild_request
-			 set state = 'pending', available_at = now() + interval '1 minute'
+			 set state = 'pending', available_at = now()
 			 where id = $1`,
 			[secondRequestId]
 		)
 		await activePool.query(
 			`update content_bundle_rebuild_request
-			 set state = 'processing', attempt_count = 2, last_attempt_at = now(), last_error = null
+			 set state = 'processing', attempt_count = 2, last_attempt_at = now(), last_error = null,
+			     lease_owner = 'cm3-worker-2', lease_expires_at = now() + interval '5 minutes'
 			 where id = $1`,
 			[secondRequestId]
 		)
 		await activePool.query(
 			`update content_bundle_rebuild_request
-			 set state = 'completed', processed_at = now()
+			 set state = 'completed', processed_at = now(), processed_bundle_id = $2,
+			     lease_owner = null, lease_expires_at = null
 			 where id = $1`,
-			[secondRequestId]
+			[secondRequestId, processedBundleId]
 		)
 		const delivered = await activePool.query(
 			`select state, attempt_count, processed_at is not null processed
@@ -391,7 +402,7 @@ describe.sequential("single additive CM-3 content workflow migration", () => {
 		await expectRejected(
 			activePool,
 			"update content_bundle_rebuild_request set last_error = '<b>secret</b>' where id = $1",
-			"content_bundle_rebuild_request_last_error_check",
+			/content_bundle_rebuild_request_(last_error|delivery_metadata)_check/,
 			[requestId]
 		)
 		await expectRejected(
@@ -423,30 +434,34 @@ describe.sequential("single additive CM-3 content workflow migration", () => {
 			activePool,
 			`update content_bundle_rebuild_request
 			 set state = 'processing', attempt_count = 1,
-			     last_attempt_at = created_at - interval '1 second'
+			     last_attempt_at = created_at - interval '1 second',
+			     lease_owner = 'cm3-invalid-worker', lease_expires_at = now() + interval '5 minutes'
 			 where id = $1`,
 			"content_bundle_rebuild_request_delivery_metadata_check",
 			[terminalRequestId]
 		)
 		await activePool.query(
 			`update content_bundle_rebuild_request
-			 set state = 'processing', attempt_count = 1, last_attempt_at = created_at
+			 set state = 'processing', attempt_count = 1, last_attempt_at = created_at,
+			     lease_owner = 'cm3-terminal-worker', lease_expires_at = now() + interval '5 minutes'
 			 where id = $1`,
 			[terminalRequestId]
 		)
 		await expectRejected(
 			activePool,
 			`update content_bundle_rebuild_request
-			 set state = 'completed', processed_at = last_attempt_at - interval '1 second'
+			 set state = 'completed', processed_at = last_attempt_at - interval '1 second',
+			     processed_bundle_id = $2, lease_owner = null, lease_expires_at = null
 			 where id = $1`,
 			"content_bundle_rebuild_request_delivery_metadata_check",
-			[terminalRequestId]
+			[terminalRequestId, processedBundleId]
 		)
 		await activePool.query(
 			`update content_bundle_rebuild_request
-			 set state = 'completed', processed_at = last_attempt_at
+			 set state = 'completed', processed_at = last_attempt_at, processed_bundle_id = $2,
+			     lease_owner = null, lease_expires_at = null
 			 where id = $1`,
-			[terminalRequestId]
+			[terminalRequestId, processedBundleId]
 		)
 
 		for (const assignment of [

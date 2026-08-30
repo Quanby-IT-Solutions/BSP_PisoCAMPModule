@@ -587,9 +587,9 @@ describe("ContentWorkflowService", () => {
 			versionId: published.currentVersion.id,
 			versionNo: 4,
 			content: advisory("Published"),
-			approvedBy: APPROVER_ID,
-			publishedBy: PUBLISHER_ID,
 		})
+		expect(candidates[0]).not.toHaveProperty("approvedBy")
+		expect(candidates[0]).not.toHaveProperty("publishedBy")
 		expect(candidates[0]!.relatedLinks[0]).toMatchObject(externalLink)
 		expect(candidates.map(candidate => candidate.itemId)).not.toEqual(
 			expect.arrayContaining([draft.id, submitted.id, approved.id])

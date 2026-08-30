@@ -46,6 +46,49 @@ describe("booleanFromEnv", () => {
 	})
 })
 
+describe("PisoCAMP bundle worker environment", () => {
+	const ORIGINAL_ENV = process.env
+	const BASE_ENV: NodeJS.ProcessEnv = {
+		NODE_ENV: "test",
+		CORS_ORIGINS: "http://localhost",
+		DATABASE_URL: "postgres://user:pass@localhost:5432/turbo-template",
+		BETTER_AUTH_SECRET: "Zq3n1r5pQ8vT2wY6bK9cA4dF7gH0jL2m",
+		BETTER_AUTH_TRUSTED_ORIGINS: "http://localhost",
+	}
+	let consoleError: jest.SpyInstance
+
+	beforeEach(() => {
+		consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined)
+	})
+
+	afterEach(() => {
+		consoleError.mockRestore()
+		process.env = ORIGINAL_ENV
+		jest.resetModules()
+	})
+
+	const load = (overrides: NodeJS.ProcessEnv = {}) => {
+		jest.resetModules()
+		process.env = { ...BASE_ENV, ...overrides }
+		return (require("@/config/env.config") as typeof import("@/config/env.config")).env
+	}
+
+	it("defaults the worker off in tests and applies bounded polling defaults", () => {
+		const loaded = load()
+		expect(loaded.PISOCAMP_BUNDLE_WORKER_ENABLED).toBe(false)
+		expect(loaded.PISOCAMP_BUNDLE_POLL_INTERVAL_MS).toBe(30_000)
+		expect(loaded.PISOCAMP_BUNDLE_LEASE_SECONDS).toBe(120)
+		expect(loaded.PISOCAMP_BUNDLE_BATCH_SIZE).toBe(50)
+	})
+
+	it("accepts only a lowercase kebab signing key ID and bounded worker settings", () => {
+		expect(() => load({ PISOCAMP_BUNDLE_SIGNING_KEY_ID: "Not_Allowed" })).toThrow()
+		expect(() => load({ PISOCAMP_BUNDLE_POLL_INTERVAL_MS: "4999" })).toThrow()
+		expect(() => load({ PISOCAMP_BUNDLE_LEASE_SECONDS: "901" })).toThrow()
+		expect(() => load({ PISOCAMP_BUNDLE_BATCH_SIZE: "101" })).toThrow()
+	})
+})
+
 // ---------------------------------------------------------------------------
 // AC-1 / F-03 — BETTER_AUTH_SECRET must fail the boot, not warn.
 //

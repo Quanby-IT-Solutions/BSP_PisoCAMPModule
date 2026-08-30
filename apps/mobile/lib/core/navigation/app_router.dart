@@ -10,6 +10,9 @@ import 'package:mobile/features/onboarding/presentation/providers/onboarding_pro
 import 'package:mobile/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_home_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_registration_screen.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/currency_detail_screen.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/currency_list_screen.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 part 'app_router.g.dart';
@@ -24,6 +27,44 @@ class AppRoutes {
   static const home = '/';
   static const pisoCamp = '/pisocamp';
   static const pisoCampRegistration = '/pisocamp/register';
+  static const pisoCampBanknotes = '/pisocamp/currency/banknotes';
+  static const pisoCampCoins = '/pisocamp/currency/coins';
+
+  static String currencyDetail({
+    required String kind,
+    required String logicalId,
+  }) {
+    if (CurrencyRouteKind.fromPathSegment(kind) == null) {
+      throw ArgumentError.value(kind, 'kind', 'Unsupported currency kind');
+    }
+    if (!isValidCurrencyLogicalId(logicalId)) {
+      throw ArgumentError.value(
+        logicalId,
+        'logicalId',
+        'Invalid currency logical ID',
+      );
+    }
+    return '/pisocamp/currency/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(logicalId)}';
+  }
+}
+
+bool isGuestCurrencyRoute(String matchedLocation) {
+  if (matchedLocation == AppRoutes.pisoCampBanknotes ||
+      matchedLocation == AppRoutes.pisoCampCoins) {
+    return true;
+  }
+  final match = RegExp(
+    r'^/pisocamp/currency/(banknotes|coins)/([^/]+)$',
+  ).firstMatch(matchedLocation);
+  if (match == null) return false;
+  final segment = match.group(2)!;
+  try {
+    final decoded = Uri.decodeComponent(segment);
+    if (!isValidCurrencyLogicalId(decoded)) return false;
+    return segment == decoded || Uri.encodeComponent(decoded) == segment;
+  } on FormatException {
+    return false;
+  }
 }
 
 String? resolveAppRedirect({
@@ -44,7 +85,8 @@ String? resolveAppRedirect({
   if (!isAuthenticated) {
     return auth ||
             matchedLocation == AppRoutes.pisoCamp ||
-            matchedLocation == AppRoutes.pisoCampRegistration
+            matchedLocation == AppRoutes.pisoCampRegistration ||
+            isGuestCurrencyRoute(matchedLocation)
         ? null
         : AppRoutes.login;
   }
@@ -113,9 +155,38 @@ GoRouter appRouter(Ref ref) {
         path: AppRoutes.pisoCampRegistration,
         builder: (context, state) => const PisoCampRegistrationScreen(),
       ),
+      GoRoute(
+        path: '/pisocamp/currency/:kind',
+        builder: (context, state) {
+          final kind = CurrencyRouteKind.fromPathSegment(
+            state.pathParameters['kind'] ?? '',
+          );
+          return kind == null
+              ? const _SafeNotFoundScreen()
+              : CurrencyListScreen(kind: kind);
+        },
+      ),
+      GoRoute(
+        path: '/pisocamp/currency/:kind/:logicalId',
+        builder: (context, state) {
+          final kind = CurrencyRouteKind.fromPathSegment(
+            state.pathParameters['kind'] ?? '',
+          );
+          final logicalId = state.pathParameters['logicalId'] ?? '';
+          if (kind == null || !isValidCurrencyLogicalId(logicalId)) {
+            return const _SafeNotFoundScreen();
+          }
+          return CurrencyDetailScreen(
+            kind: kind,
+            logicalId: logicalId,
+            initialCatalog: state.extra is CurrencyCatalogView
+                ? state.extra! as CurrencyCatalogView
+                : null,
+          );
+        },
+      ),
     ],
-    errorBuilder: (context, state) =>
-        Scaffold(body: Center(child: Text('Page not found: ${state.uri}'))),
+    errorBuilder: (context, state) => const _SafeNotFoundScreen(),
   );
 
   ref.onDispose(() {
@@ -124,4 +195,13 @@ GoRouter appRouter(Ref ref) {
   });
 
   return router;
+}
+
+class _SafeNotFoundScreen extends StatelessWidget {
+  const _SafeNotFoundScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: Text('Page not found.')));
+  }
 }

@@ -76,6 +76,12 @@ class ApiConstants {
   static String get pisoCampLocations => '$versionedUrl/pisocamp/locations';
   static String get pisoCampProfile => '$versionedUrl/pisocamp/profile';
 
+  // Public, credential-free signed currency bundle endpoints.
+  static String get pisoCampBundleManifest =>
+      '$versionedUrl/pisocamp/bundle/manifest';
+  static String pisoCampBundleResource(String lowercaseSha256) =>
+      '$versionedUrl/pisocamp/bundle/resources/$lowercaseSha256';
+
   // Public Piso CAMP privacy notice and consent recording.
   static String pisoCampConsentStatus(String purpose) =>
       '$versionedUrl/pisocamp/consent/$purpose';
