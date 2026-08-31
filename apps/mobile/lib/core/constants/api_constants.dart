@@ -86,4 +86,6 @@ class ApiConstants {
   static String pisoCampConsentStatus(String purpose) =>
       '$versionedUrl/pisocamp/consent/$purpose';
   static String get pisoCampConsent => '$versionedUrl/pisocamp/consent';
+
+  static String get pisoCampEvents => '$versionedUrl/pisocamp/events';
 }

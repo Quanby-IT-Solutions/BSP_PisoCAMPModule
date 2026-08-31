@@ -1,0 +1,216 @@
+import { z } from "zod"
+
+import { DevicePseudoIdSchema } from "./pisocamp.schema.js"
+
+const EVENT_MAX_BYTES = 8 * 1024
+const BATCH_MAX_BYTES = 512 * 1024
+const textEncoder = new TextEncoder()
+const forbiddenKeySegments = [
+	"email",
+	"name",
+	"image",
+	"photo",
+	"frame",
+	"token",
+	"cookie",
+	"authorization",
+] as const
+
+export const ANALYTICS_EVENT_NAMES = [
+	"module_entry",
+	"account_prompt_shown",
+	"account_prompt_guest",
+	"content_view",
+] as const
+
+export const UuidV4Schema = z
+	.string()
+	.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+
+const AnalyticsCommonSchema = z.object({
+	schemaVersion: z.literal(1),
+	eventId: UuidV4Schema,
+	occurredAt: z.iso.datetime({ offset: true }),
+	subjectPseudoId: DevicePseudoIdSchema,
+	sessionId: UuidV4Schema,
+	accountType: z.enum(["guest", "registered"]),
+	appVersion: z.string().trim().min(1).max(64),
+	osName: z.enum(["android", "ios", "other"]),
+	osVersion: z.string().trim().min(1).max(96),
+	deviceCategory: z.enum(["phone", "tablet", "other"]),
+	networkState: z.enum(["online", "offline", "unknown"]),
+})
+
+const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("module_entry"),
+		screen: z.literal("pisocamp_home"),
+		feature: z.literal("module"),
+		status: z.literal("completed"),
+		properties: z.object({ entryPoint: z.enum(["navigation", "deep_link", "other"]) }).strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("account_prompt_shown"),
+		screen: z.literal("pisocamp_home"),
+		feature: z.literal("account_prompt"),
+		status: z.literal("completed"),
+		properties: z.object({}).strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("account_prompt_guest"),
+		screen: z.literal("pisocamp_home"),
+		feature: z.literal("account_prompt"),
+		status: z.literal("completed"),
+		properties: z.object({}).strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("content_view"),
+		screen: z.literal("currency_detail"),
+		feature: z.literal("currency_education"),
+		status: z.literal("completed"),
+		properties: z.object({ logicalId: z.string().trim().min(1).max(128) }).strict(),
+	}).strict(),
+])
+
+function hasForbiddenKeySegment(key: string): boolean {
+	const normalized = key
+		.normalize("NFKC")
+		.toLowerCase()
+		.replace(/[^a-z0-9]/g, "")
+	return forbiddenKeySegments.some(segment => normalized.includes(segment))
+}
+
+function isEmailShaped(value: string): boolean {
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
+function isImagePayload(value: string): boolean {
+	const compact = value.trim().replace(/\s/g, "")
+	return (
+		compact.toLowerCase().startsWith("data:image/") ||
+		/^(?:iVBORw0KGgo|\/9j\/|R0lGOD|UklGR)/.test(compact)
+	)
+}
+
+function inspectForbiddenValues(value: unknown, path: PropertyKey[], ctx: z.RefinementCtx): void {
+	if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+		ctx.addIssue({
+			code: "custom",
+			message: "Analytics events cannot contain byte arrays",
+			path,
+		})
+		return
+	}
+
+	if (typeof value === "string") {
+		if (isEmailShaped(value) || isImagePayload(value)) {
+			ctx.addIssue({
+				code: "custom",
+				message: "Analytics events contain a forbidden data shape",
+				path,
+			})
+		}
+		return
+	}
+
+	if (Array.isArray(value)) {
+		value.forEach((entry, index) => inspectForbiddenValues(entry, [...path, index], ctx))
+		return
+	}
+
+	if (value !== null && typeof value === "object") {
+		for (const [key, entry] of Object.entries(value)) {
+			inspectForbiddenValues(entry, [...path, key], ctx)
+		}
+	}
+}
+
+function inspectForbiddenPropertyKeys(
+	value: unknown,
+	path: PropertyKey[],
+	ctx: z.RefinementCtx
+): void {
+	if (Array.isArray(value)) {
+		value.forEach((entry, index) => inspectForbiddenPropertyKeys(entry, [...path, index], ctx))
+		return
+	}
+
+	if (value !== null && typeof value === "object") {
+		for (const [key, entry] of Object.entries(value)) {
+			if (hasForbiddenKeySegment(key)) {
+				ctx.addIssue({
+					code: "custom",
+					message: "Analytics properties contain a forbidden key",
+					path: [...path, key],
+				})
+			}
+			inspectForbiddenPropertyKeys(entry, [...path, key], ctx)
+		}
+	}
+}
+
+export const AnalyticsEventSchema = AnalyticsEventCatalogSchema.superRefine((event, ctx) => {
+	inspectForbiddenValues(event, [], ctx)
+	inspectForbiddenPropertyKeys(event.properties, ["properties"], ctx)
+
+	if (textEncoder.encode(JSON.stringify(event)).byteLength > EVENT_MAX_BYTES) {
+		ctx.addIssue({
+			code: "custom",
+			message: "Analytics event exceeds the 8 KiB encoded limit",
+		})
+	}
+})
+
+export const IngestAnalyticsEventsInputSchema = z
+	.object({ events: z.array(AnalyticsEventSchema).min(1).max(100) })
+	.strict()
+	.superRefine(({ events }, ctx) => {
+		const eventIds = new Set<string>()
+		for (const [index, event] of events.entries()) {
+			if (eventIds.has(event.eventId)) {
+				ctx.addIssue({
+					code: "custom",
+					message: "Analytics event IDs must be unique within a batch",
+					path: ["events", index, "eventId"],
+				})
+			}
+			eventIds.add(event.eventId)
+		}
+
+		if (textEncoder.encode(JSON.stringify({ events })).byteLength > BATCH_MAX_BYTES) {
+			ctx.addIssue({
+				code: "custom",
+				message: "Analytics batch exceeds the 512 KiB encoded limit",
+			})
+		}
+	})
+
+export const IngestAnalyticsEventsOutputSchema = z
+	.object({ ackedEventIds: z.array(UuidV4Schema).max(100) })
+	.strict()
+	.superRefine(({ ackedEventIds }, ctx) => {
+		const eventIds = new Set<string>()
+		for (const [index, eventId] of ackedEventIds.entries()) {
+			if (eventIds.has(eventId)) {
+				ctx.addIssue({
+					code: "custom",
+					message: "Acknowledged analytics event IDs must be unique",
+					path: ["ackedEventIds", index],
+				})
+			}
+			eventIds.add(eventId)
+		}
+	})
+
+export const ModuleEntryTodaySchema = z
+	.object({
+		date: z.iso.date(),
+		timezone: z.literal("Asia/Manila"),
+		moduleEntryCount: z.number().int().nonnegative(),
+	})
+	.strict()
+
+export type AnalyticsEvent = z.infer<typeof AnalyticsEventSchema>
+export type IngestAnalyticsEventsInput = z.infer<typeof IngestAnalyticsEventsInputSchema>
+export type IngestAnalyticsEventsOutput = z.infer<typeof IngestAnalyticsEventsOutputSchema>
+export type ModuleEntryToday = z.infer<typeof ModuleEntryTodaySchema>

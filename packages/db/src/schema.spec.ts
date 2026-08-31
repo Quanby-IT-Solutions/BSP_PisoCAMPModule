@@ -3,6 +3,7 @@ import { getTableConfig } from "drizzle-orm/pg-core"
 import { describe, expect, it } from "vitest"
 
 import {
+	analyticsEvents,
 	consentRecords,
 	contentBundleBlobs,
 	contentBundleChannels,
@@ -24,6 +25,77 @@ import {
 	relatedLinks,
 	schema,
 } from "./schema.js"
+
+describe("AN-1 analytics event database schema", () => {
+	it("persists only the closed, pseudonymous analytics envelope", () => {
+		expect(getTableName(analyticsEvents)).toBe("analytics_event")
+		const prohibitedColumns = [
+			"accountId",
+			"account_id",
+			"email",
+			"name",
+			"ipAddress",
+			"ip_address",
+			"userAgent",
+			"user_agent",
+			"image",
+			"token",
+			"cookie",
+			"authorization",
+		]
+		expect(
+			Object.keys(getTableColumns(analyticsEvents)).filter(column =>
+				prohibitedColumns.includes(column)
+			)
+		).toEqual([])
+		expect(Object.keys(getTableColumns(analyticsEvents))).toEqual([
+			"eventId",
+			"schemaVersion",
+			"eventName",
+			"occurredAt",
+			"subjectPseudoId",
+			"sessionId",
+			"accountType",
+			"screen",
+			"feature",
+			"appVersion",
+			"osName",
+			"osVersion",
+			"deviceCategory",
+			"networkState",
+			"status",
+			"properties",
+			"receivedAt",
+		])
+
+		const config = getTableConfig(analyticsEvents)
+		expect(getTableColumns(analyticsEvents).eventId.primary).toBe(true)
+		expect(config.checks.map(item => item.name)).toEqual(
+			expect.arrayContaining([
+				"analytics_event_schema_version_check",
+				"analytics_event_name_check",
+				"analytics_event_subject_pseudo_id_check",
+				"analytics_event_account_type_check",
+				"analytics_event_catalog_check",
+				"analytics_event_app_version_check",
+				"analytics_event_os_name_check",
+				"analytics_event_os_version_check",
+				"analytics_event_device_category_check",
+				"analytics_event_network_state_check",
+				"analytics_event_status_check",
+				"analytics_event_properties_object_check",
+			])
+		)
+		expect(config.indexes.map(item => item.config.name)).toEqual(
+			expect.arrayContaining([
+				"analytics_event_name_occurred_at_idx",
+				"analytics_event_subject_occurred_at_idx",
+				"analytics_event_session_occurred_at_idx",
+			])
+		)
+		expect(schema.analyticsEvents.table).toBe(analyticsEvents)
+	})
+})
 
 describe("CE-1 offline currency bundle database schema", () => {
 	it("defines durable bundles with generated versions and bounded signed envelope metadata", () => {

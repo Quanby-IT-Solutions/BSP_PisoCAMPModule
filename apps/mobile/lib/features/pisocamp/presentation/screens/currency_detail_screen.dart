@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/app_router.dart';
+import 'package:mobile/features/pisocamp/data/analytics_event.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 
 class CurrencyDetailScreen extends ConsumerStatefulWidget {
@@ -27,6 +29,7 @@ class _CurrencyDetailScreenState extends ConsumerState<CurrencyDetailScreen> {
   late Future<CurrencyCatalogView> _catalog;
   late Future<_ResolvedDetail?> _detail;
   int _generation = 0;
+  String? _recordedLogicalId;
 
   @override
   void initState() {
@@ -48,6 +51,7 @@ class _CurrencyDetailScreenState extends ConsumerState<CurrencyDetailScreen> {
       widget.initialCatalog,
     );
     if (!routeChanged && !catalogSourceChanged) return;
+    if (routeChanged) _recordedLogicalId = null;
     if (catalogSourceChanged) {
       final suppliedCatalog = widget.initialCatalog;
       _catalog = suppliedCatalog == null
@@ -64,13 +68,15 @@ class _CurrencyDetailScreenState extends ConsumerState<CurrencyDetailScreen> {
     if (generation != _generation) return null;
     final document = catalog.resolve(kind, logicalId);
     if (document == null) return null;
-    unawaited(
-      Future<void>.sync(
+    if (_recordedLogicalId != document.logicalId) {
+      _recordedLogicalId = document.logicalId;
+      emitAnalyticsFuture(
+        ContentViewIntent(document.logicalId),
         () => ref
             .read(contentViewAnalyticsProvider)
             .recordOpen(document.logicalId),
-      ).catchError((_) {}),
-    );
+      );
+    }
     return _ResolvedDetail(
       catalog: catalog,
       document: document,

@@ -11,6 +11,7 @@ import 'package:mobile/features/pisocamp/data/bundle_client.dart';
 import 'package:mobile/features/pisocamp/data/bundle_store.dart';
 import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/bundle_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 
 import '../data/bundle_test_support.dart';
@@ -227,6 +228,61 @@ void main() {
       final verifiedImage = await view.readImage(coin);
       expect(verifiedImage, isNotNull);
       expect((verifiedImage!.width, verifiedImage.height), (1536, 1024));
+    },
+  );
+
+  test(
+    'installed valid empty bundle opens the saved catalog while startup sync is offline',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'ce1-ui-installed-offline-',
+      );
+      final server = await LoopbackBundleServer.start();
+      final update = await TestSignedBundle.create(
+        version: '1',
+        resources: const [],
+      );
+      final versionedUrl = server.versionedUrl;
+      server.manifestBytes = update.envelopeBytes;
+      final store = BundleStore(
+        documentsRoot: root,
+        loadAsset: loadSeedAsset,
+        networkKeyRing: update.keyRing,
+        versionedUrl: versionedUrl,
+      );
+      await store.bootstrap();
+      final client = BundleClient(dio: Dio(), versionedUrl: versionedUrl);
+      final staged = await store.stage(
+        envelope: update.envelope,
+        envelopeBytes: update.envelopeBytes,
+        client: client,
+      );
+      await store.activate(staged);
+      client.close();
+      await server.close();
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+
+      final container = ProviderContainer(
+        overrides: [
+          bundleDocumentsRootProvider.overrideWith((ref) async => root),
+          bundleAssetLoaderProvider.overrideWithValue(loadSeedAsset),
+          bundleVersionedUrlProvider.overrideWithValue(versionedUrl),
+          bundleNetworkKeyRingProvider.overrideWithValue(update.keyRing),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final sync = await container.read(currencyBundleSyncProvider.future);
+      unawaited(sync.sync(BundleSyncTrigger.startup));
+      final view = await container
+          .read(currencyCatalogViewProvider.future)
+          .timeout(const Duration(seconds: 2));
+
+      expect(view.snapshot.version, '1');
+      expect(view.documents, hasLength(29));
+      expect(view.documentsFor(CurrencyRouteKind.banknotes), hasLength(15));
     },
   );
 

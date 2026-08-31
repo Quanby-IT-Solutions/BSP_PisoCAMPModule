@@ -5,7 +5,7 @@ import { APIError } from "better-auth/api"
 import { openAPI } from "better-auth/plugins"
 import { z } from "zod"
 
-import { createDBClient } from "@repo/db/client"
+import { createDBClient, type DBClient } from "@repo/db/client"
 import { accounts, sessions, users, verifications } from "@repo/db/schema"
 
 import { cookieDomainSchema } from "./cookie-domain-schema.js"
@@ -93,9 +93,7 @@ export const AUTH_BASE_PATH = "/auth"
  *
  * @returns Better Auth instance
  */
-export function createAuth(): ReturnType<typeof betterAuth> {
-	const db = createDBClient()
-
+export function createAuth(database: DBClient = createDBClient()): ReturnType<typeof betterAuth> {
 	// LG-1 / RF3: throws in production when SMTP_HOST is unset, rather than
 	// falling back to a transport that prints reset links and delivers nothing.
 	const transporter = createTransport({
@@ -116,7 +114,7 @@ export function createAuth(): ReturnType<typeof betterAuth> {
 	const verificationEnabled = authEnv.EMAIL_VERIFICATION_ENABLED || verificationRequired
 
 	return betterAuth({
-		database: drizzleAdapter(db, {
+		database: drizzleAdapter(database, {
 			provider: "pg",
 			schema: {
 				users,
@@ -362,9 +360,9 @@ export function clearAuthCache(): void {
 	_auth = null
 }
 
-export function getAuth(): ReturnType<typeof betterAuth> {
+export function getAuth(database?: DBClient): ReturnType<typeof betterAuth> {
 	if (!_auth) {
-		_auth = createAuth()
+		_auth = createAuth(database)
 	}
 	return _auth!
 }

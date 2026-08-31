@@ -1,7 +1,8 @@
-import express from "express"
+import { type INestApplication } from "@nestjs/common"
+import express, { type NextFunction, type Request, type Response } from "express"
 import request from "supertest"
 
-import { MAX_REQUEST_BODY_SIZE } from "@/config/app.config"
+import { configureApp, MAX_REQUEST_BODY_SIZE } from "@/config/app.config"
 
 // `app.config` pulls in `@repo/auth`, which pulls the `better-auth` ESM chain
 // this jest config does not transform. Stubbed as the other config specs do —
@@ -23,9 +24,21 @@ jest.mock("@repo/auth", () => ({
 
 function appWithLimits() {
 	const app = express()
-	app.use(express.json({ limit: MAX_REQUEST_BODY_SIZE }))
-	app.use(express.urlencoded({ extended: true, limit: MAX_REQUEST_BODY_SIZE }))
+	const processOn = jest.spyOn(process, "on").mockImplementation(() => process)
+	try {
+		configureApp({
+			getHttpAdapter: () => app,
+			close: async () => undefined,
+		} as unknown as INestApplication)
+	} finally {
+		processOn.mockRestore()
+	}
 	app.post("/echo", (_req, res) => res.status(200).json({ ok: true }))
+	app.post("/api/v1/pisocamp/events", (_req, res) => res.status(200).json({ parsed: true }))
+	app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+		const failure = error as { status?: number; message?: string }
+		response.status(failure.status ?? 500).json({ message: failure.message })
+	})
 	return app
 }
 
@@ -34,12 +47,18 @@ function jsonBodyOf(kb: number) {
 	return { concern: "x".repeat(kb * 1024) }
 }
 
+function rawJsonBodyOfSize(byteLength: number): string {
+	const prefix = '{"padding":"'
+	const suffix = '"}'
+	return `${prefix}${"x".repeat(byteLength - Buffer.byteLength(prefix + suffix))}${suffix}`
+}
+
 describe("request body limits", () => {
 	it("is configured at 100kb", () => {
 		expect(MAX_REQUEST_BODY_SIZE).toBe("100kb")
 	})
 
-	it("rejects an oversized JSON body with 413", async () => {
+	it("keeps the 100 KiB JSON limit on unrelated routes", async () => {
 		const response = await request(appWithLimits()).post("/echo").send(jsonBodyOf(200))
 
 		expect(response.status).toBe(413)
@@ -82,5 +101,46 @@ describe("request body limits", () => {
 			.send({ title: "an ordinary todo" })
 
 		expect(response.status).toBe(200)
+	})
+
+	it("scopes bodies above 100 KiB to the exact analytics ingestion route", async () => {
+		const body = rawJsonBodyOfSize(132_412)
+		const analytics = await request(appWithLimits())
+			.post("/api/v1/pisocamp/events")
+			.set("Content-Type", "application/json")
+			.send(body)
+		const unrelated = await request(appWithLimits())
+			.post("/echo")
+			.set("Content-Type", "application/json")
+			.send(body)
+
+		expect(analytics.status).toBe(200)
+		expect(unrelated.status).toBe(413)
+	})
+
+	it("lets a 524287-byte analytics body reach the route", async () => {
+		const body = rawJsonBodyOfSize(524_287)
+		expect(Buffer.byteLength(body)).toBe(524_287)
+
+		const response = await request(appWithLimits())
+			.post("/api/v1/pisocamp/events")
+			.set("Content-Type", "application/json")
+			.send(body)
+
+		expect(response.status).toBe(200)
+		expect(response.body).toEqual({ parsed: true })
+	})
+
+	it("returns a safe 413 for a 524289-byte analytics body", async () => {
+		const body = rawJsonBodyOfSize(524_289)
+		expect(Buffer.byteLength(body)).toBe(524_289)
+
+		const response = await request(appWithLimits())
+			.post("/api/v1/pisocamp/events")
+			.set("Content-Type", "application/json")
+			.send(body)
+
+		expect(response.status).toBe(413)
+		expect(response.body).toEqual({ message: "Request body exceeds the 512 KiB limit" })
 	})
 })

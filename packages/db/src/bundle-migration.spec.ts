@@ -10,6 +10,8 @@ import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it, type TestContext } from "vitest"
 
 const previousMigrationName = "20260826105155_cm3_content_workflow_foundation"
+const ce1MigrationName = "20260827093021_ce1_bundle_state_and_leases"
+const an1MigrationName = "20260830120000_an1_analytics_event_pipeline"
 const requiredAdminDatabase = "ce1_task2_bundle_admin"
 const databaseName = `ce1_task2_bundle_${process.pid}`
 const upgradeDatabaseName = `ce1_task2_upgrade_${process.pid}`
@@ -198,7 +200,7 @@ afterAll(async () => {
 })
 
 describe.sequential("single additive CE-1 bundle-state migration", () => {
-	it("adds exactly one generated migration after the CM-3 foundation", async () => {
+	it("identifies the CE-1 migration before the later AN-1 migration", async () => {
 		const directories = (await readdir(migrationsFolder, { withFileTypes: true })).filter(
 			entry => entry.isDirectory() && entry.name > previousMigrationName
 		)
@@ -211,7 +213,9 @@ describe.sequential("single additive CE-1 bundle-state migration", () => {
 				// Drizzle may leave an empty parity-probe directory; it is not a migration.
 			}
 		}
-		expect(names).toHaveLength(1)
+		expect(names).toContain(ce1MigrationName)
+		expect(names).toContain(an1MigrationName)
+		expect(names.indexOf(an1MigrationName)).toBeGreaterThan(names.indexOf(ce1MigrationName))
 	})
 
 	it("migrates a fresh dedicated database and safely reapplies the runner", async context => {

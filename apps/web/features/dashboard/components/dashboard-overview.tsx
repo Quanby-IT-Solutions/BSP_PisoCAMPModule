@@ -29,6 +29,7 @@ import {
 import { Skeleton } from "@/core/components/ui/skeleton"
 import { cn } from "@/core/lib/utils"
 import { useIsQueryLoading } from "@/services/tanstack-query/use-query-loading"
+import { ModuleEntryTodayTile } from "@/features/analytics/components/module-entry-today-tile"
 import { canAccess, type AccessProfile } from "@/features/dashboard/lib/access"
 import { getAccessibleNavItems } from "@/features/dashboard/lib/nav-items"
 import { useTodosQuery } from "@/features/todos/api/todos.hooks"
@@ -43,6 +44,9 @@ interface DashboardOverviewProps {
 }
 
 export function DashboardOverview({ user, access }: DashboardOverviewProps) {
+	const canViewAnalytics = canAccess(access, {
+		requiredPermission: "reports.dashboards.view",
+	})
 	const canReadPosts = canAccess(access, { requiredPermission: "posts:read" })
 	const canReadUsers = canAccess(access, {
 		requiredPermission: ["users:read", "users:manage"],
@@ -70,7 +74,11 @@ export function DashboardOverview({ user, access }: DashboardOverviewProps) {
 				{access.roles.length ? (
 					<div className="flex flex-wrap gap-1">
 						{access.roles.map(role => (
-							<Badge key={role} variant="secondary">
+							<Badge
+								key={role}
+								variant="secondary"
+								className="h-auto min-h-5 max-w-full items-start overflow-visible py-1 leading-snug text-pretty break-words whitespace-normal"
+							>
 								{role}
 							</Badge>
 						))}
@@ -85,6 +93,7 @@ export function DashboardOverview({ user, access }: DashboardOverviewProps) {
 					value={access.permissions.length}
 					hint="Granted on your account"
 				/>
+				{canViewAnalytics ? <ModuleEntryTodayTile /> : null}
 				{canReadPosts ? (
 					<StatCard
 						icon={Task01Icon}

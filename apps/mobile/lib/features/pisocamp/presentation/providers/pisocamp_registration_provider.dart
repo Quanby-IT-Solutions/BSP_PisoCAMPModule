@@ -1,6 +1,5 @@
-import 'dart:math';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/utils/uuid_v4.dart';
 import 'package:mobile/features/auth/data/auth_repository.dart';
 import 'package:mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:mobile/features/pisocamp/data/guest_identity_service.dart';
@@ -146,19 +145,6 @@ final pisoCampRegistrationControllerProvider =
             .signUp(email: email, password: password, name: name),
         createProfile: repository.createProfile,
         getDevicePseudoId: identity.getOrCreateId,
-        createId: _createUuidV4,
+        createId: createUuidV4,
       );
     });
-
-String _createUuidV4() {
-  final random = Random.secure();
-  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  final hex = bytes
-      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-      .join();
-  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
-      '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
-      '${hex.substring(20)}';
-}

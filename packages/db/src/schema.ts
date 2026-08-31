@@ -1,7 +1,7 @@
 import { defineRelations, sql } from "drizzle-orm"
 import { bytea, check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core"
 
-import type { PisoCampContentStatus, PisoCampContentType } from "@repo/contracts"
+import type { AnalyticsEvent, PisoCampContentStatus, PisoCampContentType } from "@repo/contracts"
 
 import { createTable } from "./utils/table.js"
 
@@ -304,6 +304,81 @@ export const consentRecords = createTable(
 		index("consent_record_device_purpose_recorded_idx")
 			.on(t.devicePseudoId, t.purpose, t.recordedAt.desc())
 			.where(sql`${t.devicePseudoId} is not null`),
+	]
+)
+
+// ============================================================================
+// PISO CAMP ANALYTICS
+// ============================================================================
+
+/**
+ * Append-only, pseudonymous analytics events. The shared analytics contract
+ * owns canonical JSON byte-size and exact property-shape validation; PostgreSQL
+ * enforces the persisted envelope and closed catalog without storing PII.
+ */
+export const analyticsEvents = createTable(
+	"analytics_event",
+	t => ({
+		eventId: t.uuid("event_id").primaryKey(),
+		schemaVersion: t.integer("schema_version").notNull(),
+		eventName: t.text("event_name").notNull().$type<AnalyticsEvent["eventName"]>(),
+		occurredAt: t.timestamp("occurred_at", { withTimezone: true }).notNull(),
+		subjectPseudoId: t.text("subject_pseudo_id").notNull(),
+		sessionId: t.uuid("session_id").notNull(),
+		accountType: t.text("account_type").notNull().$type<AnalyticsEvent["accountType"]>(),
+		screen: t.text("screen").notNull(),
+		feature: t.text("feature").notNull(),
+		appVersion: t.text("app_version").notNull(),
+		osName: t.text("os_name").notNull().$type<AnalyticsEvent["osName"]>(),
+		osVersion: t.text("os_version").notNull(),
+		deviceCategory: t.text("device_category").notNull().$type<AnalyticsEvent["deviceCategory"]>(),
+		networkState: t.text("network_state").notNull().$type<AnalyticsEvent["networkState"]>(),
+		status: t.text("status").notNull().$type<AnalyticsEvent["status"]>(),
+		properties: t.jsonb("properties").notNull().$type<AnalyticsEvent["properties"]>(),
+		receivedAt: t.timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		check("analytics_event_schema_version_check", sql`${t.schemaVersion} = 1`),
+		check(
+			"analytics_event_name_check",
+			sql`${t.eventName} in ('module_entry', 'account_prompt_shown', 'account_prompt_guest', 'content_view')`
+		),
+		check(
+			"analytics_event_subject_pseudo_id_check",
+			sql`${t.subjectPseudoId} ~ '^[A-Za-z0-9_-]{22}$'`
+		),
+		check("analytics_event_account_type_check", sql`${t.accountType} in ('guest', 'registered')`),
+		check(
+			"analytics_event_catalog_check",
+			sql`(
+				(${t.eventName} = 'module_entry' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'completed')
+				or (${t.eventName} = 'account_prompt_shown' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'account_prompt' and ${t.status} = 'completed')
+				or (${t.eventName} = 'account_prompt_guest' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'account_prompt' and ${t.status} = 'completed')
+				or (${t.eventName} = 'content_view' and ${t.screen} = 'currency_detail' and ${t.feature} = 'currency_education' and ${t.status} = 'completed')
+			)`
+		),
+		check(
+			"analytics_event_app_version_check",
+			sql`${t.appVersion} = btrim(${t.appVersion}) and char_length(${t.appVersion}) between 1 and 64`
+		),
+		check("analytics_event_os_name_check", sql`${t.osName} in ('android', 'ios', 'other')`),
+		check(
+			"analytics_event_os_version_check",
+			sql`${t.osVersion} = btrim(${t.osVersion}) and char_length(${t.osVersion}) between 1 and 96`
+		),
+		check(
+			"analytics_event_device_category_check",
+			sql`${t.deviceCategory} in ('phone', 'tablet', 'other')`
+		),
+		check(
+			"analytics_event_network_state_check",
+			sql`${t.networkState} in ('online', 'offline', 'unknown')`
+		),
+		check("analytics_event_status_check", sql`${t.status} in ('completed', 'failed', 'cancelled')`),
+		check("analytics_event_properties_object_check", sql`jsonb_typeof(${t.properties}) = 'object'`),
+		index("analytics_event_name_occurred_at_idx").on(t.eventName, t.occurredAt),
+		index("analytics_event_subject_occurred_at_idx").on(t.subjectPseudoId, t.occurredAt),
+		index("analytics_event_session_occurred_at_idx").on(t.sessionId, t.occurredAt),
 	]
 )
 
@@ -944,6 +1019,7 @@ export const relations = defineRelations(
 		pisoCampAccountState,
 		privacyNotices,
 		consentRecords,
+		analyticsEvents,
 		pisoCampRegions,
 		pisoCampCities,
 		pisoCampProfiles,

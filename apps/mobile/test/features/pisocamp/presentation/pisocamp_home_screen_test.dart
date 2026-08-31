@@ -13,16 +13,25 @@ import 'package:mobile/features/auth/data/models/session_model.dart';
 import 'package:mobile/features/auth/data/models/user_model.dart';
 import 'package:mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:mobile/features/pisocamp/data/guest_identity_service.dart';
+import 'package:mobile/features/pisocamp/data/analytics_event.dart';
+import 'package:mobile/features/pisocamp/data/analytics_repository.dart';
+import 'package:mobile/features/pisocamp/data/analytics_sync_controller.dart';
+import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/data/consent_local_store.dart';
 import 'package:mobile/features/pisocamp/data/consent_repository.dart';
 import 'package:mobile/features/pisocamp/data/consent_service.dart';
+import 'package:mobile/features/pisocamp/data/encrypted_analytics_queue.dart';
 import 'package:mobile/features/pisocamp/data/pisocamp_repository.dart';
 import 'package:mobile/features/pisocamp/data/pisocamp_profile_repository.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/widgets/account_prompt.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_home_screen.dart';
 import 'package:mobile/services/storage/secure_storage_service.dart';
+import 'package:mobile/shared/widgets/app_button.dart';
 
 void main() {
   const home = PisoCampHome(
@@ -38,7 +47,62 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
   });
 
-  Widget subject({required bool offline, bool authenticated = false}) {
+  testWidgets('account prompt reports one first rendered shown boundary', (
+    tester,
+  ) async {
+    var shown = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AccountPrompt(
+          onCreateAccount: null,
+          onContinueAsGuest: () {},
+          onShown: () => shown += 1,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AccountPrompt(
+          onCreateAccount: null,
+          onContinueAsGuest: () {},
+          onShown: () => shown += 1,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(shown, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AccountPrompt(
+          onCreateAccount: null,
+          onContinueAsGuest: () {},
+          onShown: () => shown += 1,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(shown, 2);
+  });
+
+  Widget subject({
+    required bool offline,
+    bool authenticated = false,
+    AnalyticsSdk? analyticsSdk,
+    AnalyticsSdk Function(Ref)? analyticsSdkFactory,
+    GuestIdentityService? guestIdentityService,
+    Stream<bool>? connectivity,
+    CurrencyBundleSync? currencySync,
+    AnalyticsSyncController? analyticsController,
+    Future<AnalyticsSyncController> Function(Ref)? analyticsControllerFactory,
+    bool accountPromptEnabled = true,
+  }) {
+    final fallbackAnalytics = _testAnalyticsSdk(_AnalyticsQueue());
     return ProviderScope(
       overrides: [
         isAuthenticatedProvider.overrideWith((ref) => authenticated),
@@ -49,17 +113,237 @@ void main() {
               : ConsentGateResult.grantedQueued,
         ),
         guestIdentityServiceProvider.overrideWithValue(
-          GuestIdentityService(SecureStorageService()),
+          guestIdentityService ?? GuestIdentityService(SecureStorageService()),
         ),
         pisoCampHomeProvider.overrideWith(
           (ref) => Stream.value(
-            PisoCampHomeLoadResult(home: home, isOffline: offline),
+            PisoCampHomeLoadResult(
+              home: home,
+              isOffline: offline,
+              accountPromptEnabled: accountPromptEnabled,
+            ),
           ),
         ),
+        if (analyticsSdkFactory != null)
+          analyticsSdkProvider.overrideWith(analyticsSdkFactory)
+        else
+          analyticsSdkProvider.overrideWithValue(
+            analyticsSdk ?? fallbackAnalytics,
+          ),
+        if (connectivity != null)
+          connectivityStatusProvider.overrideWith((ref) => connectivity),
+        if (currencySync != null)
+          currencyBundleSyncProvider.overrideWith((ref) async => currencySync),
+        if (analyticsControllerFactory != null)
+          analyticsSyncControllerProvider.overrideWith(
+            analyticsControllerFactory,
+          )
+        else if (analyticsController != null)
+          analyticsSyncControllerProvider.overrideWith(
+            (ref) async => analyticsController,
+          ),
       ],
       child: const MaterialApp(home: PisoCampHomeScreen()),
     );
   }
+
+  testWidgets('home records one module entry per mounted screen lifetime', (
+    tester,
+  ) async {
+    final queue = _AnalyticsQueue();
+    final sdk = _testAnalyticsSdk(queue);
+    await tester.pumpWidget(subject(offline: false, analyticsSdk: sdk));
+    await tester.pumpAndSettle();
+
+    await tester.binding.setSurfaceSize(const Size(700, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pump();
+
+    expect(
+      queue.events.where((event) => event.intent is ModuleEntryIntent),
+      hasLength(1),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(subject(offline: false, analyticsSdk: sdk));
+    await tester.pumpAndSettle();
+
+    expect(
+      queue.events.where((event) => event.intent is ModuleEntryIntent),
+      hasLength(2),
+    );
+  });
+
+  testWidgets('startup drain is independent when module analytics fails', (
+    tester,
+  ) async {
+    final analyticsQueue = _RecordingAnalyticsQueuePort();
+    final analyticsController = AnalyticsSyncController(
+      queue: analyticsQueue,
+      uploader: _UnusedAnalyticsUploader(),
+      isOnline: () => true,
+    );
+    addTearDown(analyticsController.dispose);
+    final previousReporter = analyticsFailureReporter;
+    final diagnostics = <(String, String)>[];
+    analyticsFailureReporter = (event, code) {
+      diagnostics.add((event, code));
+    };
+    addTearDown(() => analyticsFailureReporter = previousReporter);
+
+    await tester.pumpWidget(
+      subject(
+        offline: false,
+        analyticsSdk: _failingAnalyticsSdk(),
+        analyticsController: analyticsController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(analyticsQueue.reads, 1);
+    expect(diagnostics, contains(('module_entry', 'unexpected')));
+    expect(find.text('Banknotes'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'startup drain survives synchronous module SDK construction failure',
+    (tester) async {
+      final analyticsQueue = _RecordingAnalyticsQueuePort();
+      final analyticsController = AnalyticsSyncController(
+        queue: analyticsQueue,
+        uploader: _UnusedAnalyticsUploader(),
+        isOnline: () => true,
+      );
+      addTearDown(analyticsController.dispose);
+      final previousReporter = analyticsFailureReporter;
+      final diagnostics = <(String, String)>[];
+      analyticsFailureReporter = (event, code) {
+        diagnostics.add((event, code));
+      };
+      addTearDown(() => analyticsFailureReporter = previousReporter);
+
+      await tester.pumpWidget(
+        subject(
+          offline: false,
+          accountPromptEnabled: false,
+          analyticsSdkFactory: (ref) {
+            throw StateError('private sdk construction failure');
+          },
+          analyticsController: analyticsController,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(analyticsQueue.reads, 1);
+      expect(diagnostics, <(String, String)>[('module_entry', 'unexpected')]);
+      expect(diagnostics.toString(), isNot(contains('private')));
+      expect(find.text('Banknotes'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('startup drain survives module enqueue failure', (tester) async {
+    final analyticsQueue = _RecordingAnalyticsQueuePort();
+    final analyticsController = AnalyticsSyncController(
+      queue: analyticsQueue,
+      uploader: _UnusedAnalyticsUploader(),
+      isOnline: () => true,
+    );
+    addTearDown(analyticsController.dispose);
+    final previousReporter = analyticsFailureReporter;
+    final diagnostics = <(String, String)>[];
+    analyticsFailureReporter = (event, code) {
+      diagnostics.add((event, code));
+    };
+    addTearDown(() => analyticsFailureReporter = previousReporter);
+
+    await tester.pumpWidget(
+      subject(
+        offline: false,
+        accountPromptEnabled: false,
+        analyticsSdk: _enqueueFailingAnalyticsSdk(),
+        analyticsController: analyticsController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(analyticsQueue.reads, 1);
+    expect(diagnostics, <(String, String)>[('module_entry', 'enqueueFailed')]);
+    expect(find.text('Banknotes'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'synchronous analytics providers fail closed with stable diagnostics',
+    (tester) async {
+      final previousReporter = analyticsFailureReporter;
+      final diagnostics = <(String, String)>[];
+      analyticsFailureReporter = (event, code) {
+        diagnostics.add((event, code));
+      };
+      addTearDown(() => analyticsFailureReporter = previousReporter);
+
+      await tester.pumpWidget(
+        subject(
+          offline: false,
+          analyticsSdkFactory: (ref) {
+            throw StateError('private sdk construction failure');
+          },
+          analyticsControllerFactory: (ref) {
+            throw StateError('private controller construction failure');
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(diagnostics, <(String, String)>[
+        ('module_entry', 'unexpected'),
+        ('module_entry', 'unexpected'),
+        ('account_prompt_shown', 'unexpected'),
+      ]);
+      expect(diagnostics.toString(), isNot(contains('private')));
+      expect(find.text('Banknotes'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('prompt shown follows rendered prompt lifetimes only', (
+    tester,
+  ) async {
+    final queue = _AnalyticsQueue();
+    final sdk = _testAnalyticsSdk(queue);
+    await tester.pumpWidget(
+      subject(offline: false, analyticsSdk: sdk, accountPromptEnabled: false),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      queue.events.where((event) => event.intent is AccountPromptShownIntent),
+      isEmpty,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(subject(offline: false, analyticsSdk: sdk));
+    await tester.pumpAndSettle();
+    await tester.binding.setSurfaceSize(const Size(500, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pump();
+    expect(
+      queue.events.where((event) => event.intent is AccountPromptShownIntent),
+      hasLength(1),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(subject(offline: false, analyticsSdk: sdk));
+    await tester.pumpAndSettle();
+    expect(
+      queue.events.where((event) => event.intent is AccountPromptShownIntent),
+      hasLength(2),
+    );
+  });
 
   testWidgets('first unauthenticated entry offers optional account choices', (
     tester,
@@ -88,6 +372,220 @@ void main() {
       isTrue,
     );
   });
+
+  testWidgets('guest analytics waits for successful persistence', (
+    tester,
+  ) async {
+    final queue = _AnalyticsQueue();
+    final persistence = _ControlledGuestIdentityService();
+    await tester.pumpWidget(
+      subject(
+        offline: false,
+        analyticsSdk: _testAnalyticsSdk(queue),
+        guestIdentityService: persistence,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue as Guest'));
+    await tester.pump();
+    expect(
+      queue.events.where((event) => event.intent is AccountPromptGuestIntent),
+      isEmpty,
+    );
+    expect(find.text('Continue as Guest'), findsOneWidget);
+
+    persistence.complete();
+    await tester.pumpAndSettle();
+    expect(persistence.persisted, isTrue);
+    expect(
+      queue.events.where((event) => event.intent is AccountPromptGuestIntent),
+      hasLength(1),
+    );
+    expect(find.text('Continue as Guest'), findsNothing);
+  });
+
+  testWidgets('rapid guest taps persist and emit exactly once', (tester) async {
+    final queue = _AnalyticsQueue();
+    final persistence = _ControlledGuestIdentityService();
+    await tester.pumpWidget(
+      subject(
+        offline: false,
+        analyticsSdk: _testAnalyticsSdk(queue),
+        guestIdentityService: persistence,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue as Guest'));
+    await tester.pump();
+
+    final guestControl = find.widgetWithText(AppButton, 'Continue as Guest');
+    expect(guestControl, findsOneWidget);
+    expect(tester.widget<AppButton>(guestControl).onPressed, isNull);
+
+    await tester.tap(find.text('Continue as Guest'));
+    await tester.pump();
+
+    expect(persistence.calls, 1);
+    expect(
+      queue.events.where((event) => event.intent is AccountPromptGuestIntent),
+      isEmpty,
+    );
+
+    persistence.complete();
+    await tester.pumpAndSettle();
+
+    expect(persistence.calls, 1);
+    expect(
+      queue.events.where((event) => event.intent is AccountPromptGuestIntent),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('guest persistence failure resets the continuation guard', (
+    tester,
+  ) async {
+    final queue = _AnalyticsQueue();
+    final persistence = _FailOnceGuestIdentityService();
+    await tester.pumpWidget(
+      subject(
+        offline: false,
+        analyticsSdk: _testAnalyticsSdk(queue),
+        guestIdentityService: persistence,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue as Guest'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue as Guest'));
+    await tester.pumpAndSettle();
+
+    expect(persistence.calls, 2);
+    expect(
+      queue.events.where((event) => event.intent is AccountPromptGuestIntent),
+      hasLength(1),
+    );
+    expect(find.text('Continue as Guest'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pending guest continuation is safe after unmount', (
+    tester,
+  ) async {
+    final persistence = _ControlledGuestIdentityService();
+    await tester.pumpWidget(
+      subject(offline: false, guestIdentityService: persistence),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue as Guest'));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+    persistence.complete();
+    await tester.pump();
+
+    expect(persistence.calls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('guest storage failure emits nothing and keeps UI usable', (
+    tester,
+  ) async {
+    final queue = _AnalyticsQueue();
+    await tester.pumpWidget(
+      subject(
+        offline: false,
+        analyticsSdk: _testAnalyticsSdk(queue),
+        guestIdentityService: _FailingGuestIdentityService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue as Guest'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      queue.events.where((event) => event.intent is AccountPromptGuestIntent),
+      isEmpty,
+    );
+    expect(find.text('Continue as Guest'), findsOneWidget);
+    expect(
+      find.text('Unable to continue as guest. Please try again.'),
+      findsOneWidget,
+    );
+    expect(find.text('Banknotes'), findsOneWidget);
+  });
+
+  testWidgets(
+    'reconnect runs currency and analytics independently then disposes',
+    (tester) async {
+      final connectivity = StreamController<bool>();
+      addTearDown(connectivity.close);
+      final currencySync = _RecordingCurrencySync(failConnectivity: true);
+      final analyticsQueue = _RecordingAnalyticsQueuePort();
+      final analyticsController = AnalyticsSyncController(
+        queue: analyticsQueue,
+        uploader: _UnusedAnalyticsUploader(),
+        isOnline: () => true,
+      );
+      addTearDown(analyticsController.dispose);
+      await tester.pumpWidget(
+        subject(
+          offline: false,
+          connectivity: connectivity.stream,
+          currencySync: currencySync,
+          analyticsController: analyticsController,
+        ),
+      );
+      connectivity.add(false);
+      await tester.pumpAndSettle();
+      connectivity.add(true);
+      await tester.pumpAndSettle();
+
+      expect(currencySync.triggers, <BundleSyncTrigger>[
+        BundleSyncTrigger.startup,
+        BundleSyncTrigger.connectivity,
+      ]);
+      expect(analyticsQueue.reads, 2);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      connectivity.add(false);
+      connectivity.add(true);
+      await tester.pump();
+      expect(currencySync.triggers, hasLength(2));
+      expect(analyticsQueue.reads, 2);
+    },
+  );
+
+  testWidgets(
+    'offline module entry captures offline while content stays usable',
+    (tester) async {
+      final queue = _AnalyticsQueue();
+      await tester.pumpWidget(
+        subject(
+          offline: true,
+          analyticsSdk: _testAnalyticsSdk(
+            queue,
+            networkState: AnalyticsNetworkState.offline,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final entry = queue.events.singleWhere(
+        (event) => event.intent is ModuleEntryIntent,
+      );
+      expect(entry.context.networkState, AnalyticsNetworkState.offline);
+      expect(find.text('Offline'), findsOneWidget);
+      expect(find.text('Banknotes'), findsOneWidget);
+      expect(find.text('Coins'), findsAtLeastNWidgets(1));
+    },
+  );
 
   testWidgets('authenticated entry does not show the account prompt', (
     tester,
@@ -879,5 +1377,159 @@ class _RetryProfileRepository extends PisoCampProfileRepository {
       email: 'existing@example.test',
       profile: null,
     );
+  }
+}
+
+AnalyticsSdk _testAnalyticsSdk(
+  _AnalyticsQueue queue, {
+  AnalyticsNetworkState networkState = AnalyticsNetworkState.online,
+}) => AnalyticsSdk(
+  context: () async => AnalyticsEventContext(
+    subjectPseudoId: 'AbCdEfGhIjKlMnOpQrSt_-',
+    sessionId: '123e4567-e89b-42d3-a456-426614174000',
+    accountType: AnalyticsAccountType.guest,
+    appVersion: '1.0.0+1',
+    osName: AnalyticsOsName.android,
+    osVersion: '14',
+    deviceCategory: AnalyticsDeviceCategory.phone,
+    networkState: networkState,
+  ),
+  queue: () async => queue,
+  scheduleSync: () async {},
+  createEventId: () => '123e4567-e89b-42d3-a456-426614174001',
+  clock: () => DateTime.utc(2026, 8, 31),
+);
+
+AnalyticsSdk _failingAnalyticsSdk() => AnalyticsSdk(
+  context: () async {
+    throw StateError('private module analytics failure');
+  },
+  queue: () async => _AnalyticsQueue(),
+  scheduleSync: () async {},
+);
+
+AnalyticsSdk _enqueueFailingAnalyticsSdk() => AnalyticsSdk(
+  context: () async => const AnalyticsEventContext(
+    subjectPseudoId: 'AbCdEfGhIjKlMnOpQrSt_-',
+    sessionId: '123e4567-e89b-42d3-a456-426614174000',
+    accountType: AnalyticsAccountType.guest,
+    appVersion: '1.0.0+1',
+    osName: AnalyticsOsName.android,
+    osVersion: '14',
+    deviceCategory: AnalyticsDeviceCategory.phone,
+    networkState: AnalyticsNetworkState.online,
+  ),
+  queue: () async => _FailingAnalyticsEventQueue(),
+  scheduleSync: () async {},
+  createEventId: () => '123e4567-e89b-42d3-a456-426614174001',
+  clock: () => DateTime.utc(2026, 8, 31),
+);
+
+final class _AnalyticsQueue implements AnalyticsEventQueue {
+  final List<AnalyticsEvent> events = <AnalyticsEvent>[];
+
+  @override
+  Future<void> enqueue(AnalyticsEvent event) async {
+    events.add(event);
+  }
+}
+
+final class _FailingAnalyticsEventQueue implements AnalyticsEventQueue {
+  @override
+  Future<void> enqueue(AnalyticsEvent event) {
+    throw AnalyticsQueueException('enqueueFailed');
+  }
+}
+
+final class _ControlledGuestIdentityService extends GuestIdentityService {
+  _ControlledGuestIdentityService() : super(SecureStorageService());
+
+  final _release = Completer<void>();
+  bool persisted = false;
+  int calls = 0;
+
+  @override
+  Future<bool> hasContinuedAsGuest() async => false;
+
+  @override
+  Future<void> continueAsGuest() async {
+    calls += 1;
+    await _release.future;
+    persisted = true;
+  }
+
+  void complete() => _release.complete();
+}
+
+final class _FailOnceGuestIdentityService extends GuestIdentityService {
+  _FailOnceGuestIdentityService() : super(SecureStorageService());
+
+  int calls = 0;
+
+  @override
+  Future<bool> hasContinuedAsGuest() async => false;
+
+  @override
+  Future<void> continueAsGuest() async {
+    calls += 1;
+    if (calls == 1) {
+      throw StateError('private first storage failure');
+    }
+  }
+}
+
+final class _FailingGuestIdentityService extends GuestIdentityService {
+  _FailingGuestIdentityService() : super(SecureStorageService());
+
+  @override
+  Future<bool> hasContinuedAsGuest() async => false;
+
+  @override
+  Future<void> continueAsGuest() async {
+    throw StateError('private storage failure');
+  }
+}
+
+final class _RecordingCurrencySync implements CurrencyBundleSync {
+  _RecordingCurrencySync({required this.failConnectivity});
+
+  final bool failConnectivity;
+  final List<BundleSyncTrigger> triggers = <BundleSyncTrigger>[];
+
+  @override
+  BundleSyncState get state => const BundleSyncState.idle();
+
+  @override
+  Stream<BundleSyncState> get states => const Stream.empty();
+
+  @override
+  Future<void> sync(BundleSyncTrigger trigger) async {
+    triggers.add(trigger);
+    if (failConnectivity && trigger == BundleSyncTrigger.connectivity) {
+      throw StateError('private currency sync failure');
+    }
+  }
+}
+
+final class _RecordingAnalyticsQueuePort implements AnalyticsQueuePort {
+  int reads = 0;
+
+  @override
+  Future<void> acknowledge(Iterable<String> eventIds) async {}
+
+  @override
+  Future<List<AnalyticsEvent>> readBatch({
+    int maxEvents = 100,
+    int maxBytes = 512 * 1024,
+  }) async {
+    reads += 1;
+    return const <AnalyticsEvent>[];
+  }
+}
+
+final class _UnusedAnalyticsUploader implements AnalyticsUploadPort {
+  @override
+  Future<List<String>> upload(List<AnalyticsEvent> events) {
+    throw StateError('upload should not be called for an empty queue');
   }
 }

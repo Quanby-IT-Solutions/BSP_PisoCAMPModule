@@ -1,5 +1,6 @@
-import { Logger, type INestApplication } from "@nestjs/common"
+import { Logger, PayloadTooLargeException, type INestApplication } from "@nestjs/common"
 import * as express from "express"
+import type { NextFunction, Request, Response } from "express"
 
 import { parseOriginList } from "@repo/auth"
 
@@ -8,24 +9,56 @@ import { env } from "@/config/env.config"
 const logger = new Logger("AppConfig")
 
 /**
- * Largest request body the app will parse (AB-4 / F-14).
+ * Largest request body unrelated routes will parse (AB-4 / F-14).
  *
  * Both parsers were unbounded, so any endpoint would buffer an arbitrarily
  * large body into memory before a single line of application code ran — a
  * memory-exhaustion path on every mutation route.
  *
- * 100kb is far above the largest legitimate payload this app accepts. The
- * biggest is a support ticket's `concern` field, capped at 5000 characters by
- * the contract (HY-2 tightens that cap); even as 4-byte UTF-8 that is ~20kb,
- * leaving room for the rest of the body and generous headroom.
+ * The anonymous analytics ingestion route has a closed, bounded catalog whose
+ * structurally maximal request is about 132 KiB, so that exact POST route gets
+ * a separate 512 KiB ceiling without relaxing any unrelated route.
  *
- * Nginx is set to 1m rather than 100kb on purpose: the proxy limit counts the
+ * Nginx is set to 1m rather than 512kb on purpose: the proxy limit counts the
  * whole request, so matching the two exactly would let header size decide
  * whether a legitimate body is rejected, and by the wrong layer. The gap means
  * oversized junk dies at the edge while borderline requests get a coherent 413
  * from the app.
  */
 export const MAX_REQUEST_BODY_SIZE = "100kb"
+export const ANALYTICS_REQUEST_BODY_SIZE = "512kb"
+
+const ANALYTICS_INGESTION_PATH = "/api/v1/pisocamp/events"
+
+function isAnalyticsIngestion(request: Request): boolean {
+	return request.method === "POST" && request.path === ANALYTICS_INGESTION_PATH
+}
+
+function isPayloadTooLarge(error: unknown): boolean {
+	if (typeof error !== "object" || error === null) return false
+	const candidate = error as { status?: unknown; statusCode?: unknown; type?: unknown }
+	return (
+		candidate.status === 413 ||
+		candidate.statusCode === 413 ||
+		candidate.type === "entity.too.large"
+	)
+}
+
+function runBodyParser(
+	parser: express.RequestHandler,
+	request: Request,
+	response: Response,
+	next: NextFunction,
+	limitMessage: string
+): void {
+	parser(request, response, error => {
+		if (isPayloadTooLarge(error)) {
+			next(new PayloadTooLargeException(limitMessage))
+			return
+		}
+		next(error)
+	})
+}
 
 /**
  * Configure body parser middleware for non-auth routes
@@ -34,9 +67,29 @@ export const MAX_REQUEST_BODY_SIZE = "100kb"
  */
 function configureBodyParser(app: INestApplication): void {
 	const httpAdapter = app.getHttpAdapter()
-	httpAdapter.use(express.json({ limit: MAX_REQUEST_BODY_SIZE }))
-	httpAdapter.use(express.urlencoded({ extended: true, limit: MAX_REQUEST_BODY_SIZE }))
-	logger.log(`Body parser middleware configured (limit: ${MAX_REQUEST_BODY_SIZE})`)
+	const parsers = {
+		default: {
+			json: express.json({ limit: MAX_REQUEST_BODY_SIZE }),
+			urlencoded: express.urlencoded({ extended: true, limit: MAX_REQUEST_BODY_SIZE }),
+			message: "Request body exceeds the 100 KiB limit",
+		},
+		analytics: {
+			json: express.json({ limit: ANALYTICS_REQUEST_BODY_SIZE }),
+			urlencoded: express.urlencoded({ extended: true, limit: ANALYTICS_REQUEST_BODY_SIZE }),
+			message: "Request body exceeds the 512 KiB limit",
+		},
+	}
+	httpAdapter.use((request: Request, response: Response, next: NextFunction) => {
+		const selected = isAnalyticsIngestion(request) ? parsers.analytics : parsers.default
+		runBodyParser(selected.json, request, response, next, selected.message)
+	})
+	httpAdapter.use((request: Request, response: Response, next: NextFunction) => {
+		const selected = isAnalyticsIngestion(request) ? parsers.analytics : parsers.default
+		runBodyParser(selected.urlencoded, request, response, next, selected.message)
+	})
+	logger.log(
+		`Body parser middleware configured (default: ${MAX_REQUEST_BODY_SIZE}; analytics ingestion: ${ANALYTICS_REQUEST_BODY_SIZE})`
+	)
 }
 
 /**

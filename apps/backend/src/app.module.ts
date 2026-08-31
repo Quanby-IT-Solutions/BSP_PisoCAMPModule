@@ -10,6 +10,7 @@ import { ZodSerializerInterceptor, ZodValidationPipe } from "nestjs-zod"
 
 import { getAuth } from "@repo/auth"
 
+import { db } from "@/common/database/database.client"
 import { HttpExceptionFilter } from "@/common/filters/http-exception.filter"
 import { SentryExceptionFilter } from "@/common/filters/sentry-exception.filter"
 import { buildPinoHttpOptions } from "@/config/pino-logger.config"
@@ -85,7 +86,10 @@ import { env } from "./config/env.config"
 			}),
 		}),
 		// Authentication (controllers disabled - we register versioned routes in setupBetterAuth)
-		AuthModule.forRoot({ auth: getAuth(), disableControllers: true }),
+		// The backend owns one PostgreSQL pool. Inject it into the shared auth
+		// singleton so auth connections follow the same shutdown lifecycle instead
+		// of being hidden in a second package-owned pool.
+		AuthModule.forRoot({ auth: getAuth(db), disableControllers: true }),
 		// oRPC setup
 		ORPCCommonModule,
 		// Shared Redis connection for the throttler and the RBAC cache (AB-2).

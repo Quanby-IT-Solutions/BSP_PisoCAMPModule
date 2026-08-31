@@ -23,17 +23,20 @@ class SentryConstants {
 
   /// Opt-in switch. Defaults to `false` so the absence of build flags means
   /// "off" rather than "half-configured".
-  static const bool _enabledFlag =
-      bool.fromEnvironment('SENTRY_ENABLED', defaultValue: false);
+  static const bool _enabledFlag = bool.fromEnvironment(
+    'SENTRY_ENABLED',
+    defaultValue: false,
+  );
 
   /// Deployment environment tag attached to every event.
-  static const String environment =
-      String.fromEnvironment('SENTRY_ENVIRONMENT', defaultValue: 'development');
+  static const String environment = String.fromEnvironment(
+    'SENTRY_ENVIRONMENT',
+    defaultValue: 'development',
+  );
 
   /// App version, mirrored from `pubspec.yaml`'s `version:` field.
   ///
-  /// The app deliberately carries no `package_info_plus` dependency, and Dart
-  /// cannot read `pubspec.yaml` at runtime, so this is a manually mirrored
+  /// Dart cannot read `pubspec.yaml` at runtime, so this is a manually mirrored
   /// constant. **Keep these two values in sync with `pubspec.yaml` whenever the
   /// version is bumped** — a stale value only mislabels a release tag, it does
   /// not break anything, which is exactly why it is easy to forget.

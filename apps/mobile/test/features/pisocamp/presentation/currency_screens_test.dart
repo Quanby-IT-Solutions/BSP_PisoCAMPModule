@@ -11,10 +11,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/network/connectivity_provider.dart';
+import 'package:mobile/features/pisocamp/data/analytics_event.dart';
 import 'package:mobile/features/pisocamp/data/bundle_client.dart';
 import 'package:mobile/features/pisocamp/data/bundle_store.dart';
 import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/currency_detail_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/currency_list_screen.dart';
 
@@ -311,6 +313,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pump();
       expect(tester.takeException(), isNull);
+      expect(analytics.logicalIds, [document.logicalId]);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     },
@@ -344,6 +347,119 @@ void main() {
     analytics.release.complete();
     await tester.pump();
   });
+
+  testWidgets(
+    'same logical route does not re-emit when catalog source changes',
+    (tester) async {
+      final analytics = _RecordingAnalytics();
+      final document = catalog.documentsFor(CurrencyRouteKind.coins).last;
+      final replacement = await tester.runAsync(() async {
+        return CurrencyCatalogView.load(
+          catalog.snapshot,
+          seedBaseline: await CurrencySeedBaseline.load(loadSeedAsset),
+        );
+      });
+      expect(replacement, isNotNull);
+
+      Widget subject(CurrencyCatalogView source) => ProviderScope(
+        overrides: [contentViewAnalyticsProvider.overrideWithValue(analytics)],
+        child: MaterialApp(
+          home: CurrencyDetailScreen(
+            key: const ValueKey('stable-detail-route'),
+            kind: CurrencyRouteKind.coins,
+            logicalId: document.logicalId,
+            initialCatalog: source,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(subject(catalog));
+      await tester.pumpAndSettle();
+      expect(analytics.logicalIds, [document.logicalId]);
+
+      await tester.pumpWidget(subject(replacement!));
+      await tester.pumpAndSettle();
+      expect(find.text(document.title), findsOneWidget);
+      expect(analytics.logicalIds, [document.logicalId]);
+    },
+  );
+
+  testWidgets('throwing analytics leaves detail visible and reports safely', (
+    tester,
+  ) async {
+    final reports = <(String, String)>[];
+    final original = analyticsFailureReporter;
+    addTearDown(() => analyticsFailureReporter = original);
+    analyticsFailureReporter = (eventName, reason) {
+      reports.add((eventName, reason));
+    };
+    final document = catalog.documentsFor(CurrencyRouteKind.coins).first;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          contentViewAnalyticsProvider.overrideWithValue(_ThrowingAnalytics()),
+        ],
+        child: MaterialApp(
+          home: CurrencyDetailScreen(
+            kind: CurrencyRouteKind.coins,
+            logicalId: document.logicalId,
+            initialCatalog: catalog,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(document.title), findsOneWidget);
+    expect(find.text(document.body), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(reports, <(String, String)>[('content_view', 'unexpected')]);
+    expect(reports.toString(), isNot(contains('private')));
+  });
+
+  testWidgets(
+    'offline content view captures offline while detail stays usable',
+    (tester) async {
+      final queue = _RecordingEventQueue();
+      final sdk = AnalyticsSdk(
+        context: () async => const AnalyticsEventContext(
+          subjectPseudoId: 'AbCdEfGhIjKlMnOpQrSt_-',
+          sessionId: '123e4567-e89b-42d3-a456-426614174000',
+          accountType: AnalyticsAccountType.guest,
+          appVersion: '1.0.0+1',
+          osName: AnalyticsOsName.android,
+          osVersion: '14',
+          deviceCategory: AnalyticsDeviceCategory.phone,
+          networkState: AnalyticsNetworkState.offline,
+        ),
+        queue: () async => queue,
+        scheduleSync: () async {},
+        createEventId: () => '123e4567-e89b-42d3-a456-426614174001',
+      );
+      final document = catalog.documentsFor(CurrencyRouteKind.coins).first;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [analyticsSdkProvider.overrideWithValue(sdk)],
+          child: MaterialApp(
+            home: CurrencyDetailScreen(
+              kind: CurrencyRouteKind.coins,
+              logicalId: document.logicalId,
+              initialCatalog: catalog,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(document.title), findsOneWidget);
+      expect(queue.events, hasLength(1));
+      expect(queue.events.single.intent, isA<ContentViewIntent>());
+      expect(
+        queue.events.single.context.networkState,
+        AnalyticsNetworkState.offline,
+      );
+    },
+  );
 
   testWidgets(
     'detail associates security features and exposes only safe destinations',
@@ -669,6 +785,22 @@ final class _DelayedAnalytics implements ContentViewAnalytics {
     started = true;
     await release.future;
     completed.complete();
+  }
+}
+
+final class _ThrowingAnalytics implements ContentViewAnalytics {
+  @override
+  Future<void> recordOpen(String logicalId) async {
+    throw StateError('private analytics failure');
+  }
+}
+
+final class _RecordingEventQueue implements AnalyticsEventQueue {
+  final List<AnalyticsEvent> events = <AnalyticsEvent>[];
+
+  @override
+  Future<void> enqueue(AnalyticsEvent event) async {
+    events.add(event);
   }
 }
 

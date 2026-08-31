@@ -144,6 +144,23 @@ export {
 	UpdatePisoCampContentInputSchema,
 } from "./modules/v1/pisocamp/content.schema.js"
 
+// AN-1 Piso CAMP analytics event catalog and routes
+export { pisoCampAnalyticsContract } from "./modules/v1/pisocamp/analytics.contract.js"
+export {
+	ANALYTICS_EVENT_NAMES,
+	AnalyticsEventSchema,
+	IngestAnalyticsEventsInputSchema,
+	IngestAnalyticsEventsOutputSchema,
+	ModuleEntryTodaySchema,
+	UuidV4Schema,
+} from "./modules/v1/pisocamp/analytics.schema.js"
+export type {
+	AnalyticsEvent,
+	IngestAnalyticsEventsInput,
+	IngestAnalyticsEventsOutput,
+	ModuleEntryToday,
+} from "./modules/v1/pisocamp/analytics.schema.js"
+
 // CE-1 signed offline bundle protocol
 export { pisoCampBundleContract } from "./modules/v1/pisocamp/bundle.contract.js"
 export {

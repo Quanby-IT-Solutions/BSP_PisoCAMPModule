@@ -456,21 +456,6 @@ final class _ControllerCurrencyBundleSync implements CurrencyBundleSync {
   Future<void> sync(BundleSyncTrigger trigger) => _controller.sync(trigger);
 }
 
-abstract interface class ContentViewAnalytics {
-  Future<void> recordOpen(String logicalId);
-}
-
-final class NoopContentViewAnalytics implements ContentViewAnalytics {
-  const NoopContentViewAnalytics();
-
-  @override
-  Future<void> recordOpen(String logicalId) async {}
-}
-
-final contentViewAnalyticsProvider = Provider<ContentViewAnalytics>(
-  (ref) => const NoopContentViewAnalytics(),
-);
-
 final currencyBundleSyncProvider = FutureProvider<CurrencyBundleSync>((
   ref,
 ) async {
@@ -507,7 +492,8 @@ final currencyBundleSyncStateProvider = StreamProvider<BundleSyncState>((
 final currencyCatalogViewProvider = FutureProvider<CurrencyCatalogView>((
   ref,
 ) async {
-  final snapshot = await ref.watch(activeCurrencyCatalogProvider.future);
+  final readActive = await ref.watch(activeCurrencyCatalogReadProvider.future);
+  final snapshot = await readActive();
   final baseline = await ref.watch(currencySeedBaselineProvider.future);
   return CurrencyCatalogView.load(snapshot, seedBaseline: baseline);
 });

@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract"
 
+import { pisoCampAnalyticsContract } from "./analytics.contract.js"
 import { pisoCampBundleContract } from "./bundle.contract.js"
 import { pisoCampContentContract } from "./content.contract.js"
 import {
@@ -16,6 +17,8 @@ import {
 } from "./pisocamp.schema.js"
 
 export const pisoCampContract = {
+	events: pisoCampAnalyticsContract.events,
+	analytics: pisoCampAnalyticsContract.analytics,
 	bundle: pisoCampBundleContract,
 	admin: {
 		content: pisoCampContentContract,

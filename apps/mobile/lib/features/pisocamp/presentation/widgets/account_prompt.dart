@@ -1,14 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/shared/widgets/app_button.dart';
 
-class AccountPrompt extends StatelessWidget {
+class AccountPrompt extends StatefulWidget {
   const AccountPrompt({
     super.key,
     required this.onCreateAccount,
     required this.onContinueAsGuest,
+    this.onShown,
   });
   final VoidCallback? onCreateAccount;
-  final VoidCallback onContinueAsGuest;
+  final VoidCallback? onContinueAsGuest;
+  final VoidCallback? onShown;
+
+  @override
+  State<AccountPrompt> createState() => _AccountPromptState();
+}
+
+class _AccountPromptState extends State<AccountPrompt> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onShown?.call();
+    });
+  }
 
   @override
   Widget build(BuildContext context) => Column(
@@ -23,7 +38,7 @@ class AccountPrompt extends StatelessWidget {
         button: true,
         label: 'Create Account',
         child: AppButton(
-          onPressed: onCreateAccount,
+          onPressed: widget.onCreateAccount,
           child: const Text('Create Account'),
         ),
       ),
@@ -33,7 +48,7 @@ class AccountPrompt extends StatelessWidget {
         label: 'Continue as Guest',
         child: AppButton(
           isSecondary: true,
-          onPressed: onContinueAsGuest,
+          onPressed: widget.onContinueAsGuest,
           child: const Text('Continue as Guest'),
         ),
       ),

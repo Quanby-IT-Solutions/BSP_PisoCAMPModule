@@ -10,10 +10,13 @@ import 'package:mobile/features/pisocamp/data/consent_local_store.dart';
 import 'package:mobile/features/pisocamp/data/consent_service.dart';
 import 'package:mobile/features/pisocamp/data/pisocamp_profile_repository.dart';
 import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
+import 'package:mobile/features/pisocamp/data/analytics_event.dart';
+import 'package:mobile/features/pisocamp/data/analytics_sync_controller.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/account_prompt.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 
@@ -26,11 +29,14 @@ class PisoCampHomeScreen extends ConsumerStatefulWidget {
 class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
   late Future<bool> _continued;
   bool _creatingAccount = false;
+  bool _continuingAsGuest = false;
   @override
   void initState() {
     super.initState();
     _continued = ref.read(guestIdentityServiceProvider).hasContinuedAsGuest();
     _syncCurrencies(BundleSyncTrigger.startup);
+    _syncAnalytics(AnalyticsSyncTrigger.startup);
+    _emitAnalytics(const ModuleEntryIntent(ModuleEntryPoint.navigation));
   }
 
   void _syncCurrencies(BundleSyncTrigger trigger) {
@@ -42,13 +48,58 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     );
   }
 
-  Future<void> _continue() async {
-    await ref.read(guestIdentityServiceProvider).continueAsGuest();
-    if (mounted) {
-      setState(() {
-        _continued = Future.value(true);
-      });
+  void _syncAnalytics(AnalyticsSyncTrigger trigger) {
+    const intent = ModuleEntryIntent(ModuleEntryPoint.navigation);
+    late Future<AnalyticsSyncController> controller;
+    try {
+      controller = ref.read(analyticsSyncControllerProvider.future);
+    } on Object catch (error) {
+      reportAnalyticsFailure(intent, error);
+      return;
     }
+    emitAnalyticsFuture(intent, () async => (await controller).sync(trigger));
+  }
+
+  void _emitAnalytics(AnalyticsIntent intent) {
+    final sdk = _readAnalyticsSdk(intent);
+    if (sdk != null) emitAnalytics(sdk, intent);
+  }
+
+  AnalyticsSdk? _readAnalyticsSdk(AnalyticsIntent intent) {
+    try {
+      return ref.read(analyticsSdkProvider);
+    } on Object catch (error) {
+      reportAnalyticsFailure(intent, error);
+      return null;
+    }
+  }
+
+  Future<void> _continue() async {
+    if (_continuingAsGuest) return;
+    setState(() => _continuingAsGuest = true);
+    const intent = AccountPromptGuestIntent();
+    final sdk = _readAnalyticsSdk(intent);
+    var persisted = false;
+    try {
+      await ref.read(guestIdentityServiceProvider).continueAsGuest();
+      persisted = true;
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to continue as guest. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      _continuingAsGuest = false;
+      if (mounted) {
+        setState(() {
+          if (persisted) _continued = Future.value(true);
+        });
+      }
+    }
+    if (persisted && sdk != null) emitAnalytics(sdk, intent);
   }
 
   Future<void> _create(bool offline) async {
@@ -96,6 +147,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
       final isAvailable = next.asData?.value;
       if (wasAvailable == false && isAvailable == true) {
         _syncCurrencies(BundleSyncTrigger.connectivity);
+        _syncAnalytics(AnalyticsSyncTrigger.reconnect);
         final home = ref.read(pisoCampHomeProvider).asData?.value;
         if (home?.isOffline == true) {
           ref.invalidate(pisoCampHomeProvider);
@@ -177,7 +229,11 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
                           onCreateAccount: _creatingAccount
                               ? null
                               : () => _create(offline),
-                          onContinueAsGuest: _continue,
+                          onContinueAsGuest: _continuingAsGuest
+                              ? null
+                              : _continue,
+                          onShown: () =>
+                              _emitAnalytics(const AccountPromptShownIntent()),
                         );
                       },
                     ),

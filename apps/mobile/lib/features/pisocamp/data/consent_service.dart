@@ -1,6 +1,5 @@
-import 'dart:math';
-
 import 'package:dio/dio.dart';
+import 'package:mobile/core/utils/uuid_v4.dart';
 import 'package:mobile/features/pisocamp/data/consent_local_store.dart';
 import 'package:mobile/features/pisocamp/data/consent_repository.dart';
 import 'package:mobile/features/pisocamp/data/guest_identity_service.dart';
@@ -40,7 +39,7 @@ class ConsentService {
     this._guestIdentity, {
     String Function()? idGenerator,
     DateTime Function()? clock,
-  }) : _idGenerator = idGenerator ?? _uuidV4,
+  }) : _idGenerator = idGenerator ?? createUuidV4,
        _clock = clock ?? DateTime.now;
 
   final ConsentRepository _repository;
@@ -226,18 +225,3 @@ DateTime _millisecondPrecision(DateTime value) =>
       value.toUtc().millisecondsSinceEpoch,
       isUtc: true,
     );
-
-String _uuidV4() {
-  final random = Random.secure();
-  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  final hex = bytes
-      .map((value) => value.toRadixString(16).padLeft(2, '0'))
-      .join();
-  return '${hex.substring(0, 8)}-'
-      '${hex.substring(8, 12)}-'
-      '${hex.substring(12, 16)}-'
-      '${hex.substring(16, 20)}-'
-      '${hex.substring(20)}';
-}
