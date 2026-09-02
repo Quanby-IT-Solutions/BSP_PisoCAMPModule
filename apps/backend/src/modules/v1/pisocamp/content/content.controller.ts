@@ -127,6 +127,58 @@ export class ContentController {
 		)
 	}
 
+	@StrictThrottle()
+	@RequirePermissions("content.items.publish")
+	@RequireIdempotency({ requestIdField: "requestId", requireActiveAccount: true })
+	@UseInterceptors(IdempotencyInterceptor)
+	@Implement(v1.pisocamp.admin.content.unpublish)
+	async unpublishContent(@Session() session: UserSession) {
+		return implement(v1.pisocamp.admin.content.unpublish).handler(({ input }) =>
+			this.safe("unpublish", () =>
+				this.contentWorkflowService.transition("unpublish", input, session.user.id)
+			)
+		)
+	}
+
+	@StrictThrottle()
+	@RequirePermissions("content.items.publish")
+	@RequireIdempotency({ requestIdField: "requestId", requireActiveAccount: true })
+	@UseInterceptors(IdempotencyInterceptor)
+	@Implement(v1.pisocamp.admin.content.deactivate)
+	async deactivateContent(@Session() session: UserSession) {
+		return implement(v1.pisocamp.admin.content.deactivate).handler(({ input }) =>
+			this.safe("deactivate", () =>
+				this.contentWorkflowService.transition("deactivate", input, session.user.id)
+			)
+		)
+	}
+
+	@StrictThrottle()
+	@RequirePermissions("content.items.publish")
+	@RequireIdempotency({ requestIdField: "requestId", requireActiveAccount: true })
+	@UseInterceptors(IdempotencyInterceptor)
+	@Implement(v1.pisocamp.admin.content.archive)
+	async archiveContent(@Session() session: UserSession) {
+		return implement(v1.pisocamp.admin.content.archive).handler(({ input }) =>
+			this.safe("archive", () =>
+				this.contentWorkflowService.transition("archive", input, session.user.id)
+			)
+		)
+	}
+
+	@StrictThrottle()
+	@RequirePermissions("content.items.publish")
+	@RequireIdempotency({ requestIdField: "requestId", requireActiveAccount: true })
+	@UseInterceptors(IdempotencyInterceptor)
+	@Implement(v1.pisocamp.admin.content.schedule)
+	async scheduleContentPublication(@Session() session: UserSession) {
+		return implement(v1.pisocamp.admin.content.schedule).handler(({ input }) =>
+			this.safe("schedule", () =>
+				this.contentWorkflowService.schedulePublication(input, session.user.id)
+			)
+		)
+	}
+
 	/**
 	 * History is readable by the approver who may act on it.
 	 *

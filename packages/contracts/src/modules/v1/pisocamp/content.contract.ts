@@ -2,7 +2,9 @@ import { oc } from "@orpc/contract"
 
 import {
 	ApprovePisoCampContentInputSchema,
+	ArchivePisoCampContentInputSchema,
 	CreatePisoCampContentInputSchema,
+	DeactivatePisoCampContentInputSchema,
 	ListPisoCampContentInputSchema,
 	ListPisoCampContentOutputSchema,
 	ListPisoCampContentReviewQueueInputSchema,
@@ -12,7 +14,9 @@ import {
 	PisoCampContentReviewDetailSchema,
 	PublishPisoCampContentInputSchema,
 	RejectPisoCampContentInputSchema,
+	SchedulePisoCampContentPublicationInputSchema,
 	SubmitPisoCampContentInputSchema,
+	UnpublishPisoCampContentInputSchema,
 	UpdatePisoCampContentInputSchema,
 } from "./content.schema.js"
 import {
@@ -113,6 +117,42 @@ export const pisoCampContentContract = {
 			tags,
 		})
 		.input(PublishPisoCampContentInputSchema)
+		.output(PisoCampContentReviewDetailSchema),
+	unpublish: oc
+		.route({
+			method: "POST",
+			path: "/admin/pisocamp/content/{itemId}/unpublish",
+			summary: "Withdraw published Piso CAMP content from the next bundle",
+			tags,
+		})
+		.input(UnpublishPisoCampContentInputSchema)
+		.output(PisoCampContentReviewDetailSchema),
+	deactivate: oc
+		.route({
+			method: "POST",
+			path: "/admin/pisocamp/content/{itemId}/deactivate",
+			summary: "Deactivate Piso CAMP content so it is never presented again",
+			tags,
+		})
+		.input(DeactivatePisoCampContentInputSchema)
+		.output(PisoCampContentReviewDetailSchema),
+	archive: oc
+		.route({
+			method: "POST",
+			path: "/admin/pisocamp/content/{itemId}/archive",
+			summary: "Archive deactivated Piso CAMP content as retained read-only history",
+			tags,
+		})
+		.input(ArchivePisoCampContentInputSchema)
+		.output(PisoCampContentReviewDetailSchema),
+	schedule: oc
+		.route({
+			method: "PUT",
+			path: "/admin/pisocamp/content/{itemId}/schedule",
+			summary: "Set or clear the scheduled publication time for approved content",
+			tags,
+		})
+		.input(SchedulePisoCampContentPublicationInputSchema)
 		.output(PisoCampContentReviewDetailSchema),
 	versions: oc
 		.route({

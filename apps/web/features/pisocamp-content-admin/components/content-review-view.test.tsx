@@ -4,11 +4,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ContentReviewView } from "./content-review-view"
 
-const { useReview, useApprove, useReject, usePublish, toastSuccess } = vi.hoisted(() => ({
+const {
+	useReview,
+	useApprove,
+	useReject,
+	usePublish,
+	useUnpublish,
+	useDeactivate,
+	useArchive,
+	useSchedule,
+	toastSuccess,
+} = vi.hoisted(() => ({
 	useReview: vi.fn(),
 	useApprove: vi.fn(),
 	useReject: vi.fn(),
 	usePublish: vi.fn(),
+	useUnpublish: vi.fn(),
+	useDeactivate: vi.fn(),
+	useArchive: vi.fn(),
+	useSchedule: vi.fn(),
 	toastSuccess: vi.fn(),
 }))
 
@@ -18,12 +32,17 @@ vi.mock("@/features/pisocamp-content-admin/api/content.hooks", () => ({
 	useApprovePisoCampContentMutation: () => useApprove(),
 	useRejectPisoCampContentMutation: () => useReject(),
 	usePublishPisoCampContentMutation: () => usePublish(),
+	useUnpublishPisoCampContentMutation: () => useUnpublish(),
+	useDeactivatePisoCampContentMutation: () => useDeactivate(),
+	useArchivePisoCampContentMutation: () => useArchive(),
+	useSchedulePisoCampContentPublicationMutation: () => useSchedule(),
 }))
 
 const detail = {
 	id: "38fd44f4-ebde-49b1-86e0-b6711ccf6756",
 	contentType: "banknote",
 	status: "submitted_for_review",
+	publishAt: null,
 	currentVersion: {
 		id: "d7e9984f-fd54-49d9-bb33-0a7c006c83fd",
 		versionNo: 4,
@@ -68,6 +87,10 @@ describe("ContentReviewView", () => {
 		useApprove.mockReturnValue(mutation())
 		useReject.mockReturnValue(mutation())
 		usePublish.mockReturnValue(mutation())
+		useUnpublish.mockReturnValue(mutation())
+		useDeactivate.mockReturnValue(mutation())
+		useArchive.mockReturnValue(mutation())
+		useSchedule.mockReturnValue(mutation())
 	})
 
 	it("renders loading and focused error/retry states", async () => {

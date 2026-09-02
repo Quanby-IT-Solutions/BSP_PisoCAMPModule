@@ -1,11 +1,13 @@
 import { Injectable } from "@nestjs/common"
 import { randomUUID } from "node:crypto"
 import { ORPCError } from "@orpc/server"
-import { and, asc, count, desc, eq, inArray, max } from "drizzle-orm"
+import { and, asc, count, desc, eq, inArray, isNotNull, lte, max } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 
 import type {
 	ApprovePisoCampContentInput,
+	ArchivePisoCampContentInput,
+	DeactivatePisoCampContentInput,
 	ListPisoCampContentReviewQueueInput,
 	ListPisoCampContentReviewQueueOutput,
 	ListPisoCampContentVersionsInput,
@@ -19,7 +21,9 @@ import type {
 	PublishPisoCampContentInput,
 	RejectPisoCampContentInput,
 	RestorePisoCampContentVersionInput,
+	SchedulePisoCampContentPublicationInput,
 	SubmitPisoCampContentInput,
+	UnpublishPisoCampContentInput,
 } from "@repo/contracts"
 import {
 	PISO_CAMP_CONTENT_DIFF_FIELDS,
@@ -49,20 +53,44 @@ import {
 const RESTORABLE_SOURCE_STATUSES = new Set<string>(PISO_CAMP_RESTORABLE_STATUSES)
 const RESTORE_SOURCE_ITEM_STATUSES = new Set<string>(PISO_CAMP_RESTORE_SOURCE_ITEM_STATUSES)
 
+/**
+ * The single allowed-transition table. Every content type goes through it.
+ *
+ * `deactivate` accepts two origins, which is why `from` is a list: CM-6 lets a
+ * live item be pulled straight out of circulation without the intermediate
+ * unpublish step, so an obsolete note can be withdrawn in one action.
+ */
 const allowedTransitions = {
-	submit: { from: "draft", to: "submitted_for_review" },
-	approve: { from: "submitted_for_review", to: "approved" },
-	reject: { from: "submitted_for_review", to: "draft" },
-	publish: { from: "approved", to: "published" },
+	submit: { from: ["draft"], to: "submitted_for_review" },
+	approve: { from: ["submitted_for_review"], to: "approved" },
+	reject: { from: ["submitted_for_review"], to: "draft" },
+	publish: { from: ["approved"], to: "published" },
+	unpublish: { from: ["published"], to: "unpublished" },
+	deactivate: { from: ["published", "unpublished"], to: "deactivated" },
+	archive: { from: ["deactivated"], to: "archived" },
 } as const satisfies Readonly<
-	Record<PisoCampContentWorkflowAction, { from: PisoCampContentStatus; to: PisoCampContentStatus }>
+	Record<
+		PisoCampContentWorkflowAction,
+		{ from: readonly PisoCampContentStatus[]; to: PisoCampContentStatus }
+	>
 >
+
+/** Transitions that change what the bundle should contain. */
+const BUNDLE_AFFECTING_ACTIONS = new Set<PisoCampContentWorkflowAction>([
+	"publish",
+	"unpublish",
+	"deactivate",
+	"archive",
+])
 
 type TransitionInputByAction = {
 	submit: SubmitPisoCampContentInput
 	approve: ApprovePisoCampContentInput
 	reject: RejectPisoCampContentInput
 	publish: PublishPisoCampContentInput
+	unpublish: UnpublishPisoCampContentInput
+	deactivate: DeactivatePisoCampContentInput
+	archive: ArchivePisoCampContentInput
 }
 
 export interface PisoCampPublishedBundleCandidate {
@@ -179,7 +207,11 @@ export class ContentWorkflowService {
 			}
 
 			const rule = allowedTransitions[action]
-			if (!rule || item.status !== rule.from || current.status !== rule.from) {
+			if (
+				!rule ||
+				!(rule.from as readonly string[]).includes(item.status) ||
+				item.status !== current.status
+			) {
 				throw new ORPCError("CONFLICT", { message: "Content workflow transition is not allowed" })
 			}
 
@@ -187,12 +219,17 @@ export class ContentWorkflowService {
 			const versionId = randomUUID()
 			const versionNo = current.versionNo + 1
 			const comments = input.comments ?? null
+			// A withdrawal keeps the approval and publication provenance of the
+			// version it withdraws: history has to keep saying who approved and who
+			// published the content that was live.
+			const carriesProvenance = action !== "submit" && action !== "reject" && action !== "approve"
 			const approvedBy =
-				action === "approve" ? actorId : action === "publish" ? current.approvedBy : null
-			const approvedAt =
-				action === "approve" ? now : action === "publish" ? current.approvedAt : null
-			const publishedBy = action === "publish" ? actorId : null
-			const publishedAt = action === "publish" ? now : null
+				action === "approve" ? actorId : carriesProvenance ? current.approvedBy : null
+			const approvedAt = action === "approve" ? now : carriesProvenance ? current.approvedAt : null
+			const publishedBy =
+				action === "publish" ? actorId : carriesProvenance ? current.publishedBy : null
+			const publishedAt =
+				action === "publish" ? now : carriesProvenance ? current.publishedAt : null
 
 			await tx.insert(contentVersions).values({
 				id: versionId,
@@ -248,13 +285,24 @@ export class ContentWorkflowService {
 					status: rule.to,
 					currentWorkingVersionId: versionId,
 					updatedAt: now,
+					// A schedule belongs to the approved state it was set in.
+					publishAt: null,
+					publishAtBy: null,
 					...(action === "publish"
 						? { currentPublishedVersionId: versionId, bundlePending: true }
+						: {}),
+					// A withdrawal takes the item out of the bundle, so it must stop
+					// pointing at a published version too.
+					...(action === "unpublish" || action === "deactivate" || action === "archive"
+						? { currentPublishedVersionId: null, bundlePending: true }
 						: {}),
 				})
 				.where(eq(contentItems.id, item.id))
 
-			if (action === "publish") {
+			if (BUNDLE_AFFECTING_ACTIONS.has(action)) {
+				// Keyed on the version this transition created: the request table is
+				// unique per version, and the newly created one is the reason this
+				// rebuild is due.
 				await tx.insert(contentBundleRebuildRequests).values({
 					id: randomUUID(),
 					itemId: item.id,
@@ -275,7 +323,10 @@ export class ContentWorkflowService {
 					oldValue: {
 						sourceVersionId: current.id,
 						sourceVersionNo: current.versionNo,
-						fromState: rule.from,
+						// The state actually left, not the rule's list of allowed
+						// origins: `deactivate` accepts two, and an audit row must say
+						// which one this was.
+						fromState: item.status,
 					},
 					newValue: {
 						targetVersionId: versionId,
@@ -413,7 +464,13 @@ export class ContentWorkflowService {
 
 			await tx
 				.update(contentItems)
-				.set({ status: "approved", currentWorkingVersionId: versionId, updatedAt: now })
+				.set({
+					status: "approved",
+					currentWorkingVersionId: versionId,
+					updatedAt: now,
+					publishAt: null,
+					publishAtBy: null,
+				})
 				.where(eq(contentItems.id, item.id))
 
 			await this.auditService.record(
@@ -441,6 +498,134 @@ export class ContentWorkflowService {
 
 			return this.getReviewDetailFrom(tx, item.id)
 		})
+	}
+
+	/**
+	 * CM-6 scheduled publication.
+	 *
+	 * Sets or clears `publish_at` on an approved item. Nothing is published here:
+	 * the scheduler promotes the item later through {@link transition}, so a
+	 * scheduled publication and a hand-made one leave identical evidence.
+	 */
+	async schedulePublication(
+		input: SchedulePisoCampContentPublicationInput,
+		actorId: string
+	): Promise<PisoCampContentReviewDetail> {
+		return databaseTransactionContext.transaction(async tx => {
+			const [item] = await tx
+				.select()
+				.from(contentItems)
+				.where(eq(contentItems.id, input.itemId))
+				.for("update")
+			if (!item) throw new ORPCError("NOT_FOUND", { message: "Content item not found" })
+			if (!item.currentWorkingVersionId) {
+				throw new ORPCError("CONFLICT", { message: "Content item has no working version" })
+			}
+
+			const [current] = await tx
+				.select()
+				.from(contentVersions)
+				.where(eq(contentVersions.id, item.currentWorkingVersionId))
+			if (!current) throw new ORPCError("CONFLICT", { message: "Working version is missing" })
+			if (current.versionNo !== input.expectedVersionNo) {
+				throw new ORPCError("CONFLICT", { message: "Content changed during review" })
+			}
+			if (item.status !== "approved") {
+				throw new ORPCError("CONFLICT", {
+					message: "Only approved content can be scheduled for publication",
+				})
+			}
+
+			const now = new Date()
+			const publishAt = input.publishAt === null ? null : new Date(input.publishAt)
+			if (publishAt !== null && publishAt.getTime() <= now.getTime()) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "A scheduled publication must be in the future",
+				})
+			}
+
+			await tx
+				.update(contentItems)
+				.set({ publishAt, publishAtBy: publishAt === null ? null : actorId, updatedAt: now })
+				.where(eq(contentItems.id, item.id))
+
+			await this.auditService.record(
+				{
+					domain: "content",
+					action: "content.schedule",
+					actorId,
+					targetType: "content_item",
+					targetId: item.id,
+					oldValue: {
+						publishAt: item.publishAt?.toISOString() ?? null,
+						publishAtBy: item.publishAtBy,
+					},
+					newValue: {
+						publishAt: publishAt?.toISOString() ?? null,
+						publishAtBy: publishAt === null ? null : actorId,
+					},
+				},
+				tx
+			)
+
+			return this.getReviewDetailFrom(tx, item.id)
+		})
+	}
+
+	/**
+	 * Publish every approved item whose scheduled instant has passed.
+	 *
+	 * Idempotent by construction: `transition` clears `publish_at` inside the
+	 * same transaction that publishes, and only an `approved` item is selected,
+	 * so a re-run — or two workers running at once — finds nothing left to do.
+	 * Failures are isolated per item so one bad item cannot stall the rest.
+	 */
+	async publishDueScheduled(now: Date = new Date()): Promise<{
+		published: string[]
+		failed: string[]
+	}> {
+		const due = await db
+			.select({
+				id: contentItems.id,
+				versionNo: contentVersions.versionNo,
+				scheduledBy: contentItems.publishAtBy,
+			})
+			.from(contentItems)
+			.innerJoin(contentVersions, eq(contentItems.currentWorkingVersionId, contentVersions.id))
+			.where(
+				and(
+					eq(contentItems.status, "approved"),
+					isNotNull(contentItems.publishAt),
+					lte(contentItems.publishAt, now)
+				)
+			)
+			.orderBy(asc(contentItems.publishAt), asc(contentItems.id))
+
+		const published: string[] = []
+		const failed: string[] = []
+		for (const candidate of due) {
+			if (!candidate.scheduledBy) {
+				failed.push(candidate.id)
+				continue
+			}
+			try {
+				await this.transition(
+					"publish",
+					{
+						itemId: candidate.id,
+						requestId: randomUUID(),
+						expectedVersionNo: candidate.versionNo,
+					},
+					candidate.scheduledBy
+				)
+				published.push(candidate.id)
+			} catch {
+				// Another worker won the row, or the item moved on. Either way the
+				// next run re-evaluates from the live state.
+				failed.push(candidate.id)
+			}
+		}
+		return { published, failed }
 	}
 
 	/**
@@ -657,6 +842,7 @@ export class ContentWorkflowService {
 				id: contentItems.id,
 				contentType: contentItems.contentType,
 				status: contentItems.status,
+				publishAt: contentItems.publishAt,
 				createdAt: contentItems.createdAt,
 				dateModified: contentItems.updatedAt,
 				creatorId: itemCreator.id,
@@ -700,6 +886,7 @@ export class ContentWorkflowService {
 			id: row.id,
 			contentType: row.contentType,
 			status: row.status,
+			publishAt: row.publishAt?.toISOString() ?? null,
 			currentVersion: {
 				id: row.versionId,
 				versionNo: row.versionNo,

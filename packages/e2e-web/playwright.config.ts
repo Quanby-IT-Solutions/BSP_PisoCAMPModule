@@ -62,7 +62,8 @@ export default defineConfig({
 							storageState: AUTH_FILE,
 						},
 						testMatch: /authenticated\.spec\.ts/,
-						testIgnore: /(cm2-assets|cm4-versions(-shots)?|cm5-preview(-shots)?)\.authenticated\.spec\.ts/,
+						testIgnore:
+							/(cm2-assets|cm4-versions(-shots)?|cm5-preview(-shots)?|cm6-lifecycle)\.authenticated\.spec\.ts/,
 						dependencies: ["setup"],
 					},
 					{
@@ -76,6 +77,13 @@ export default defineConfig({
 						name: "cm4-versions-authenticated",
 						use: { ...devices["Desktop Chrome"] },
 						testMatch: /cm4-versions(-shots)?\.authenticated\.spec\.ts/,
+					},
+					{
+						// CM-6 shares the CM-4/CM-5 acceptance database and signs in
+						// for itself.
+						name: "cm6-lifecycle-authenticated",
+						use: { ...devices["Desktop Chrome"] },
+						testMatch: /cm6-lifecycle\.authenticated\.spec\.ts/,
 					},
 					{
 						// CM-5 signs in for itself against a dedicated acceptance

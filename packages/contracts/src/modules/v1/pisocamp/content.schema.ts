@@ -35,6 +35,10 @@ const DenominationCodeSchema = CatalogCodeSchema
 
 const HTML_MARKUP_PATTERN = /<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>|<![^>]*>|<\?[\s\S]*?\?>/
 
+const UtcTimestampSchema = z.iso
+	.datetime()
+	.refine(value => value.endsWith("Z"), "Timestamp must be serialized in UTC")
+
 const PlainTextSchema = (maximum: number, minimum = 1) =>
 	z
 		.string()
@@ -193,6 +197,9 @@ export const PISO_CAMP_CONTENT_WORKFLOW_ACTIONS = [
 	"approve",
 	"reject",
 	"publish",
+	"unpublish",
+	"deactivate",
+	"archive",
 ] as const
 export const PisoCampContentWorkflowActionSchema = z.enum(PISO_CAMP_CONTENT_WORKFLOW_ACTIONS)
 
@@ -225,6 +232,41 @@ export const PublishPisoCampContentInputSchema = z
 	.object({ ...ContentTransitionCorrelationShape, comments: WorkflowCommentsSchema.optional() })
 	.strict()
 
+/**
+ * CM-6 withdrawal transitions.
+ *
+ * Comments are optional, as on publish: the action itself is the record, and
+ * requiring prose on an emergency withdrawal would slow the one transition
+ * that most needs to be fast.
+ */
+export const UnpublishPisoCampContentInputSchema = z
+	.object({ ...ContentTransitionCorrelationShape, comments: WorkflowCommentsSchema.optional() })
+	.strict()
+
+export const DeactivatePisoCampContentInputSchema = z
+	.object({ ...ContentTransitionCorrelationShape, comments: WorkflowCommentsSchema.optional() })
+	.strict()
+
+export const ArchivePisoCampContentInputSchema = z
+	.object({ ...ContentTransitionCorrelationShape, comments: WorkflowCommentsSchema.optional() })
+	.strict()
+
+/**
+ * CM-6 scheduled publication.
+ *
+ * `publishAt: null` clears a schedule. A future instant is required when one is
+ * set: a past instant would be an immediate publish wearing a schedule's
+ * clothes, which hides the actor behind the scheduler.
+ */
+export const SchedulePisoCampContentPublicationInputSchema = z
+	.object({
+		itemId: z.uuid(),
+		requestId: z.uuid(),
+		expectedVersionNo: z.number().int().positive(),
+		publishAt: UtcTimestampSchema.nullable(),
+	})
+	.strict()
+
 export const ListPisoCampContentInputSchema = z
 	.object({
 		page: z.coerce.number().int().positive().default(1),
@@ -240,9 +282,6 @@ export const ListPisoCampContentInputSchema = z
 const EditorIdentitySchema = z
 	.object({ id: z.string().min(1).max(255), name: PlainTextSchema(200) })
 	.strict()
-const UtcTimestampSchema = z.iso
-	.datetime()
-	.refine(value => value.endsWith("Z"), "Timestamp must be serialized in UTC")
 
 const SummaryCommonShape = {
 	id: z.uuid(),
@@ -339,6 +378,13 @@ const PisoCampContentTransitionMetadataSchema = z.discriminatedUnion("action", [
 	z.object({ action: z.literal("approve"), comments: WorkflowCommentsSchema }).strict(),
 	z.object({ action: z.literal("reject"), comments: WorkflowCommentsSchema }).strict(),
 	z.object({ action: z.literal("publish"), comments: WorkflowCommentsSchema.nullable() }).strict(),
+	z
+		.object({ action: z.literal("unpublish"), comments: WorkflowCommentsSchema.nullable() })
+		.strict(),
+	z
+		.object({ action: z.literal("deactivate"), comments: WorkflowCommentsSchema.nullable() })
+		.strict(),
+	z.object({ action: z.literal("archive"), comments: WorkflowCommentsSchema.nullable() }).strict(),
 ])
 
 const PisoCampContentActorTimestampSchema = z
@@ -359,6 +405,9 @@ export const PisoCampContentReviewVersionSchema = PisoCampContentVersionSchema.e
 			approve: "approved",
 			reject: "draft",
 			publish: "published",
+			unpublish: "unpublished",
+			deactivate: "deactivated",
+			archive: "archived",
 		} as const
 
 		if (version.status !== expectedStatus[version.transition.action]) {
@@ -369,7 +418,7 @@ export const PisoCampContentReviewVersionSchema = PisoCampContentVersionSchema.e
 			})
 		}
 
-		const requiresApproval = version.status === "approved" || version.status === "published"
+		const requiresApproval = version.status !== "draft" && version.status !== "submitted_for_review"
 		if (requiresApproval !== (version.approval !== null)) {
 			context.addIssue({
 				code: "custom",
@@ -378,7 +427,10 @@ export const PisoCampContentReviewVersionSchema = PisoCampContentVersionSchema.e
 			})
 		}
 
-		if ((version.status === "published") !== (version.publication !== null)) {
+		const requiresPublication = ["published", "unpublished", "deactivated", "archived"].includes(
+			version.status
+		)
+		if (requiresPublication !== (version.publication !== null)) {
 			context.addIssue({
 				code: "custom",
 				message: "Publication metadata must match the version status",
@@ -392,6 +444,8 @@ export const PisoCampContentReviewDetailSchema = z
 		id: z.uuid(),
 		contentType: PisoCampContentTypeSchema,
 		status: PisoCampContentStatusSchema,
+		/** CM-6: the scheduled publication instant, when one is set. */
+		publishAt: UtcTimestampSchema.nullable(),
 		currentVersion: PisoCampContentReviewVersionSchema,
 		creator: EditorIdentitySchema,
 		lastEditor: EditorIdentitySchema,
@@ -412,6 +466,13 @@ export const PisoCampContentReviewDetailSchema = z
 				code: "custom",
 				message: "Item and current-version statuses must match",
 				path: ["currentVersion", "status"],
+			})
+		}
+		if (detail.publishAt !== null && detail.status !== "approved") {
+			context.addIssue({
+				code: "custom",
+				message: "Only approved content can carry a scheduled publication",
+				path: ["publishAt"],
 			})
 		}
 	})
@@ -558,3 +619,10 @@ export type ListPisoCampContentReviewQueueOutput = z.infer<
 >
 export type ListPisoCampContentOutput = z.infer<typeof ListPisoCampContentOutputSchema>
 export type PisoCampCurrencyCatalog = z.infer<typeof PisoCampCurrencyCatalogSchema>
+
+export type UnpublishPisoCampContentInput = z.infer<typeof UnpublishPisoCampContentInputSchema>
+export type DeactivatePisoCampContentInput = z.infer<typeof DeactivatePisoCampContentInputSchema>
+export type ArchivePisoCampContentInput = z.infer<typeof ArchivePisoCampContentInputSchema>
+export type SchedulePisoCampContentPublicationInput = z.infer<
+	typeof SchedulePisoCampContentPublicationInputSchema
+>

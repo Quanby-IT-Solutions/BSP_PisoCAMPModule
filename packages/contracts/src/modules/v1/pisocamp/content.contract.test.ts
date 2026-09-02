@@ -143,6 +143,7 @@ describe("CM-3 content workflow contract", () => {
 		const reviewDetail = {
 			...detail,
 			status: "approved",
+			publishAt: null,
 			currentVersion: {
 				...detail.currentVersion,
 				versionNo: 2,

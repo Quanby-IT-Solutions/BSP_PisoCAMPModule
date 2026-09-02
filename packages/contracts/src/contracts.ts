@@ -112,9 +112,11 @@ export type {
 export { pisoCampContentContract } from "./modules/v1/pisocamp/content.contract.js"
 export {
 	ApprovePisoCampContentInputSchema,
+	ArchivePisoCampContentInputSchema,
 	CONTENT_STATUSES,
 	CONTENT_TYPES,
 	CreatePisoCampContentInputSchema,
+	DeactivatePisoCampContentInputSchema,
 	ListPisoCampContentInputSchema,
 	ListPisoCampContentOutputSchema,
 	ListPisoCampContentReviewQueueInputSchema,
@@ -140,8 +142,16 @@ export {
 	PisoCampRelatedLinkOutputSchema,
 	PublishPisoCampContentInputSchema,
 	RejectPisoCampContentInputSchema,
+	SchedulePisoCampContentPublicationInputSchema,
 	SubmitPisoCampContentInputSchema,
+	UnpublishPisoCampContentInputSchema,
 	UpdatePisoCampContentInputSchema,
+} from "./modules/v1/pisocamp/content.schema.js"
+export type {
+	ArchivePisoCampContentInput,
+	DeactivatePisoCampContentInput,
+	SchedulePisoCampContentPublicationInput,
+	UnpublishPisoCampContentInput,
 } from "./modules/v1/pisocamp/content.schema.js"
 
 // AN-1 Piso CAMP analytics event catalog and routes

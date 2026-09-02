@@ -270,6 +270,8 @@ describe("CM-1 content database schema", () => {
 			"currentWorkingVersionId",
 			"currentPublishedVersionId",
 			"bundlePending",
+			"publishAt",
+			"publishAtBy",
 			"createdBy",
 			"lastEditedBy",
 			"createdAt",

@@ -268,6 +268,7 @@ describe("CM-3 workflow schemas", () => {
 		id: itemId,
 		contentType: "banknote",
 		status: "approved",
+		publishAt: null,
 		currentVersion: {
 			id: versionId,
 			versionNo: 3,

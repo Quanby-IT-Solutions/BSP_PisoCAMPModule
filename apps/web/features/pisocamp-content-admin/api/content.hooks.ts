@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import type {
 	ApprovePisoCampContentInput,
+	ArchivePisoCampContentInput,
 	CreatePisoCampContentInput,
+	DeactivatePisoCampContentInput,
 	ListPisoCampContentInput,
 	ListPisoCampContentOutput,
 	ListPisoCampContentReviewQueueInput,
@@ -13,7 +15,9 @@ import type {
 	PisoCampContentReviewDetail,
 	PublishPisoCampContentInput,
 	RejectPisoCampContentInput,
+	SchedulePisoCampContentPublicationInput,
 	SubmitPisoCampContentInput,
+	UnpublishPisoCampContentInput,
 	UpdatePisoCampContentInput,
 } from "@repo/contracts"
 
@@ -137,6 +141,38 @@ export function useRejectPisoCampContentMutation() {
 export function usePublishPisoCampContentMutation() {
 	return useContentTransitionMutation((input: PublishPisoCampContentInput) =>
 		contractClient.pisocamp.admin.content.publish(input, {
+			context: { headers: { "Idempotency-Key": input.requestId } },
+		})
+	)
+}
+
+export function useUnpublishPisoCampContentMutation() {
+	return useContentTransitionMutation((input: UnpublishPisoCampContentInput) =>
+		contractClient.pisocamp.admin.content.unpublish(input, {
+			context: { headers: { "Idempotency-Key": input.requestId } },
+		})
+	)
+}
+
+export function useDeactivatePisoCampContentMutation() {
+	return useContentTransitionMutation((input: DeactivatePisoCampContentInput) =>
+		contractClient.pisocamp.admin.content.deactivate(input, {
+			context: { headers: { "Idempotency-Key": input.requestId } },
+		})
+	)
+}
+
+export function useArchivePisoCampContentMutation() {
+	return useContentTransitionMutation((input: ArchivePisoCampContentInput) =>
+		contractClient.pisocamp.admin.content.archive(input, {
+			context: { headers: { "Idempotency-Key": input.requestId } },
+		})
+	)
+}
+
+export function useSchedulePisoCampContentPublicationMutation() {
+	return useContentTransitionMutation((input: SchedulePisoCampContentPublicationInput) =>
+		contractClient.pisocamp.admin.content.schedule(input, {
 			context: { headers: { "Idempotency-Key": input.requestId } },
 		})
 	)

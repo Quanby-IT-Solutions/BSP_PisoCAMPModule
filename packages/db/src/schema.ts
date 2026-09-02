@@ -526,6 +526,22 @@ export const contentItems = createTable(
 		currentWorkingVersionId: t.uuid("current_working_version_id"),
 		currentPublishedVersionId: t.uuid("current_published_version_id"),
 		bundlePending: t.boolean("bundle_pending").notNull().default(false),
+		/**
+		 * CM-6 scheduled publication.
+		 *
+		 * Only meaningful on an `approved` item: the scheduler promotes it through
+		 * the same transition service a person would use. Cleared by every
+		 * transition, so a schedule can never outlive the state it was set in.
+		 */
+		publishAt: t.timestamp("publish_at", { withTimezone: true }),
+		/**
+		 * Who scheduled it.
+		 *
+		 * The scheduler publishes on this person's authority rather than as a
+		 * synthetic system account, so the audit trail names an accountable
+		 * approver instead of a robot.
+		 */
+		publishAtBy: t.text("publish_at_by").references(() => users.id, { onDelete: "restrict" }),
 		createdBy: t
 			.text("created_by")
 			.notNull()
@@ -547,7 +563,14 @@ export const contentItems = createTable(
 			"content_item_status_check",
 			sql`${t.status} in ('draft', 'submitted_for_review', 'approved', 'published', 'unpublished', 'deactivated', 'archived')`
 		),
+		check(
+			"content_item_publish_at_check",
+			sql`(${t.publishAt} is null) = (${t.publishAtBy} is null) and (${t.publishAt} is null or ${t.status} = 'approved')`
+		),
 		index("content_item_list_idx").on(t.status, t.contentType, t.updatedAt.desc()),
+		index("content_item_publish_at_idx")
+			.on(t.publishAt)
+			.where(sql`${t.publishAt} is not null`),
 		index("content_item_created_by_idx").on(t.createdBy, t.createdAt.desc()),
 	]
 )
@@ -590,7 +613,9 @@ export const contentVersions = createTable(
 		publishedAt: t.timestamp("published_at", { withTimezone: true }),
 		transitionAction: t
 			.text("transition_action")
-			.$type<"submit" | "approve" | "reject" | "publish">(),
+			.$type<
+				"submit" | "approve" | "reject" | "publish" | "unpublish" | "deactivate" | "archive"
+			>(),
 		transitionComments: t.text("transition_comments"),
 	}),
 	t => [
@@ -654,7 +679,7 @@ export const contentVersions = createTable(
 		),
 		check(
 			"content_version_transition_action_check",
-			sql`${t.transitionAction} is null or ${t.transitionAction} in ('submit', 'approve', 'reject', 'publish')`
+			sql`${t.transitionAction} is null or ${t.transitionAction} in ('submit', 'approve', 'reject', 'publish', 'unpublish', 'deactivate', 'archive')`
 		),
 		check(
 			"content_version_transition_comments_check",
@@ -673,6 +698,9 @@ export const contentVersions = createTable(
 					or (${t.transitionAction} = 'approve' and ${t.status} = 'approved' and ${t.transitionComments} is not null)
 					or (${t.transitionAction} = 'reject' and ${t.status} = 'draft' and ${t.transitionComments} is not null)
 					or (${t.transitionAction} = 'publish' and ${t.status} = 'published')
+					or (${t.transitionAction} = 'unpublish' and ${t.status} = 'unpublished')
+					or (${t.transitionAction} = 'deactivate' and ${t.status} = 'deactivated')
+					or (${t.transitionAction} = 'archive' and ${t.status} = 'archived')
 				))
 			)`
 		),

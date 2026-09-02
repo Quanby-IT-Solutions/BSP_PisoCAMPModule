@@ -35,6 +35,7 @@ import {
 	usePublishPisoCampContentMutation,
 	useRejectPisoCampContentMutation,
 } from "@/features/pisocamp-content-admin/api/content.hooks"
+import { ContentLifecycleActions } from "@/features/pisocamp-content-admin/components/content-lifecycle-actions"
 
 const MANILA_DATE_FORMATTER = new Intl.DateTimeFormat("en-PH", {
 	year: "numeric",
@@ -309,6 +310,8 @@ export function ContentReviewView({
 					<WorkflowMetadata detail={detail} />
 				</CardContent>
 			</Card>
+
+			<ContentLifecycleActions canPublish={canPublish} detail={detail} />
 
 			{canRestore ? (
 				<Button

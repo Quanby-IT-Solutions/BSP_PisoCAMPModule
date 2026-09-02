@@ -99,6 +99,17 @@ export const env = createEnv({
 		PISOCAMP_BUNDLE_LEASE_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
 		PISOCAMP_BUNDLE_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(50),
 
+		// CM-6 scheduled publication. Opt-in for the same reason the bundle worker
+		// is: an environment that is not meant to publish on its own must not
+		// start doing so merely by being deployed.
+		PISOCAMP_SCHEDULE_WORKER_ENABLED: booleanFromEnv.optional().default(false),
+		PISOCAMP_SCHEDULE_POLL_INTERVAL_MS: z.coerce
+			.number()
+			.int()
+			.min(5_000)
+			.max(300_000)
+			.default(60_000),
+
 		// CM-5 pre-publication preview grants. Optional: when unset the signing
 		// key is HKDF-derived from BETTER_AUTH_SECRET with a preview-specific
 		// label, so preview works in every existing environment without a new
