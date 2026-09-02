@@ -345,9 +345,15 @@ export const analyticsEvents = createTable(
 	}),
 	t => [
 		check("analytics_event_schema_version_check", sql`${t.schemaVersion} = 1`),
+		// Every name the contract declares. A name added to the catalog without
+		// being added here is an event the device emits and the server refuses,
+		// which is why `analytics-catalog.spec.ts` inserts one of each.
 		check(
 			"analytics_event_name_check",
-			sql`${t.eventName} in ('module_entry', 'account_prompt_shown', 'account_prompt_guest', 'content_view')`
+			sql`${t.eventName} in ('module_entry', 'account_prompt_shown', 'account_prompt_guest',
+				'content_view', 'feature_use', 'link_open', 'trivia_prompt_shown',
+				'trivia_prompt_answered', 'trivia_prompt_skipped', 'survey_prompt_shown',
+				'survey_declined', 'survey_submitted')`
 		),
 		check(
 			"analytics_event_subject_pseudo_id_check",
@@ -361,6 +367,10 @@ export const analyticsEvents = createTable(
 				or (${t.eventName} = 'account_prompt_shown' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'account_prompt' and ${t.status} = 'completed')
 				or (${t.eventName} = 'account_prompt_guest' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'account_prompt' and ${t.status} = 'completed')
 				or (${t.eventName} = 'content_view' and ${t.screen} = 'currency_detail' and ${t.feature} = 'currency_education' and ${t.status} = 'completed')
+				or (${t.eventName} = 'link_open' and ${t.screen} = 'currency_detail' and ${t.feature} = 'currency_education' and ${t.status} = 'completed')
+				or (${t.eventName} = 'feature_use' and ${t.screen} in ('coin_3d_viewer', 'tactile_viewer', 'tilt_viewer') and ${t.feature} in ('3d_coin', 'haptic', 'tilt') and ${t.status} = 'completed')
+				or (${t.eventName} in ('trivia_prompt_shown', 'trivia_prompt_answered', 'trivia_prompt_skipped') and ${t.screen} = 'trivia_prompt' and ${t.feature} = 'trivia' and ${t.status} = 'completed')
+				or (${t.eventName} in ('survey_prompt_shown', 'survey_declined', 'survey_submitted') and ${t.screen} = 'survey_prompt' and ${t.feature} = 'survey' and ${t.status} = 'completed')
 			)`
 		),
 		check(
@@ -1068,6 +1078,102 @@ export const surveyQuestions = createTable(
 				and (${t.highLabel} is null or (${t.highLabel} = btrim(${t.highLabel}) and char_length(${t.highLabel}) between 1 and 100))`
 		),
 		index("survey_question_version_idx").on(t.contentVersionId, t.position),
+	]
+)
+
+/**
+ * EV-2 survey response.
+ *
+ * The primary key is the **client's** `response_id`, the same idempotency shape
+ * RF-2 uses everywhere else: a queued response re-sent after a dropped
+ * connection lands once.
+ *
+ * `consent_record_id` is not decoration. A response exists only because someone
+ * was shown a privacy notice and agreed to it, and the row names which grant
+ * that was, so a withdrawal can find what it covered.
+ */
+export const surveyResponses = createTable(
+	"survey_response",
+	t => ({
+		responseId: t.uuid("response_id").primaryKey(),
+		contentItemId: t.uuid("content_item_id").notNull(),
+		contentVersionId: t.uuid("content_version_id").notNull(),
+		consentRecordId: t
+			.uuid("consent_record_id")
+			.notNull()
+			.references(() => consentRecords.id, { onDelete: "restrict" }),
+		/** Exactly one of these, the same subject shape consent itself uses. */
+		accountId: t.text("account_id").references(() => users.id, { onDelete: "restrict" }),
+		devicePseudoId: t.text("device_pseudo_id"),
+		submittedAt: t.timestamp("submitted_at", { withTimezone: true }).notNull(),
+		receivedAt: t.timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		foreignKey({
+			columns: [t.contentItemId, t.contentVersionId],
+			foreignColumns: [contentVersions.itemId, contentVersions.id],
+			name: "survey_response_version_fkey",
+		}).onDelete("restrict"),
+		check(
+			"survey_response_subject_xor_check",
+			sql`(${t.accountId} is not null) <> (${t.devicePseudoId} is not null)`
+		),
+		check(
+			"survey_response_device_pseudo_id_check",
+			sql`${t.devicePseudoId} is null or ${t.devicePseudoId} ~ '^[A-Za-z0-9_-]{22}$'`
+		),
+		index("survey_response_item_idx").on(t.contentItemId, t.submittedAt.desc()),
+		index("survey_response_consent_idx").on(t.consentRecordId),
+	]
+)
+
+/**
+ * One answer within a response.
+ *
+ * A row per question rather than a JSONB blob, because AN-6 reports one
+ * question at a time and a response references a question by id. Which of the
+ * three value columns is filled is decided by the question's kind, which the
+ * service checks against `survey_question` before writing; the constraint here
+ * is that exactly one shape is present.
+ */
+export const surveyAnswers = createTable(
+	"survey_answer",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		responseId: t
+			.uuid("response_id")
+			.notNull()
+			.references(() => surveyResponses.responseId, { onDelete: "cascade" }),
+		questionId: t
+			.uuid("question_id")
+			.notNull()
+			.references(() => surveyQuestions.id, { onDelete: "restrict" }),
+		/** A rating or an NPS score. */
+		scaleValue: t.integer("scale_value"),
+		/** A written answer. */
+		textValue: t.text("text_value"),
+		/** An optional question the person chose not to answer. */
+		skipped: t.boolean("skipped").notNull().default(false),
+	}),
+	t => [
+		unique("survey_answer_response_question_unique").on(t.responseId, t.questionId),
+		check(
+			"survey_answer_shape_check",
+			sql`(
+				(${t.skipped} and ${t.scaleValue} is null and ${t.textValue} is null)
+				or (not ${t.skipped} and ${t.scaleValue} is not null and ${t.textValue} is null)
+				or (not ${t.skipped} and ${t.scaleValue} is null and ${t.textValue} is not null)
+			)`
+		),
+		check(
+			"survey_answer_scale_check",
+			sql`${t.scaleValue} is null or ${t.scaleValue} between 0 and 10`
+		),
+		check(
+			"survey_answer_text_check",
+			sql`${t.textValue} is null or (${t.textValue} = btrim(${t.textValue}) and char_length(${t.textValue}) between 1 and 1000)`
+		),
+		index("survey_answer_question_idx").on(t.questionId),
 	]
 )
 

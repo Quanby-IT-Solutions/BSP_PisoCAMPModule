@@ -32,6 +32,14 @@
 		"./pisocamp-content": {
 			"types": "./dist/modules/v1/pisocamp/content.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/content.schema.js"
+		},
+		"./pisocamp-analytics": {
+			"types": "./dist/modules/v1/pisocamp/analytics.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/analytics.schema.js"
+		},
+		"./pisocamp-survey-response": {
+			"types": "./dist/modules/v1/pisocamp/survey-response.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/survey-response.schema.js"
 		}
 	},
 	"scripts": {

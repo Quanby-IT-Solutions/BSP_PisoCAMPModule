@@ -267,6 +267,19 @@ export const PisoCampSurveyQuestionSchema = z.discriminatedUnion("kind", [
 	TextQuestionSchema,
 ])
 
+/**
+ * A published question, which carries its id.
+ *
+ * An editor never supplies one — a question's identity is the database's — but
+ * a response has to name the question it answers, so the id travels with the
+ * survey into the bundle.
+ */
+export const PisoCampSurveyQuestionOutputSchema = z.union([
+	z.object({ id: z.uuid(), ...RatingQuestionSchema.shape }).strict(),
+	z.object({ id: z.uuid(), ...NpsQuestionSchema.shape }).strict(),
+	z.object({ id: z.uuid(), ...TextQuestionSchema.shape }).strict(),
+])
+
 export const MAX_SURVEY_QUESTIONS = 20
 
 /**
@@ -832,6 +845,9 @@ export type ListPisoCampContentInput = z.infer<typeof ListPisoCampContentInputSc
 export type PisoCampSurveyPurpose = z.infer<typeof PisoCampSurveyPurposeSchema>
 export type PisoCampSurveyQuestionKind = z.infer<typeof PisoCampSurveyQuestionKindSchema>
 export type PisoCampSurveyQuestion = z.infer<typeof PisoCampSurveyQuestionSchema>
+export type PisoCampSurveyQuestionOutput = z.infer<
+	typeof PisoCampSurveyQuestionOutputSchema
+>
 export type PisoCampContentSummary = z.infer<typeof PisoCampContentSummarySchema>
 export type PisoCampContentVersion = z.infer<typeof PisoCampContentVersionSchema>
 export type PisoCampContentDetail = z.infer<typeof PisoCampContentDetailSchema>

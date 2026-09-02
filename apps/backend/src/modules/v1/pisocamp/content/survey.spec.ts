@@ -339,8 +339,18 @@ describe("EV-1 surveys through the content workflow", () => {
 				contentType: "survey",
 				purpose: "usefulness",
 				subjectContentItemId: null,
-				questions: [ratingQuestion, textQuestion],
 			})
+			// With their ids: EV-2's response names the question it answers, and a
+			// document without them would be a survey nobody could answer.
+			const stored = await db
+				.select()
+				.from(surveyQuestions)
+				.where(eq(surveyQuestions.contentVersionId, candidates[0]!.versionId))
+				.orderBy(surveyQuestions.position)
+			expect(document.questions).toEqual([
+				{ id: stored[0]!.id, ...ratingQuestion },
+				{ id: stored[1]!.id, ...textQuestion },
+			])
 			// The trivia keys belong to a question document, and a client that
 			// checks its keys exactly must not see them here.
 			expect(document).not.toHaveProperty("choices")

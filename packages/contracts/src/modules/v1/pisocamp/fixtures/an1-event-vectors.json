@@ -115,5 +115,70 @@
 			"linkType": "external",
 			"logicalId": "catalog.ngc-banknotes.php-20"
 		}
+	},
+	{
+		"schemaVersion": 1,
+		"eventId": "2a5e6f70-8192-4ca3-8db4-c5d6e7f8a9b1",
+		"eventName": "survey_prompt_shown",
+		"occurredAt": "2026-08-30T01:02:09.000Z",
+		"subjectPseudoId": "AbCdEfGhIjKlMnOpQrStUv",
+		"sessionId": "f6635d24-b4d1-4f63-8a06-4026fa4e8fd6",
+		"accountType": "guest",
+		"screen": "survey_prompt",
+		"feature": "survey",
+		"appVersion": "1.0.0+1",
+		"osName": "ios",
+		"osVersion": "iOS 18",
+		"deviceCategory": "phone",
+		"networkState": "online",
+		"status": "completed",
+		"properties": {
+			"logicalId": "content.3f3d4c0e-9f7c-4f3a-9d8e-8b2b0a1c5d61",
+			"purpose": "satisfaction"
+		}
+	},
+	{
+		"schemaVersion": 1,
+		"eventId": "3b6f7081-92a3-4db4-8ec5-d6e7f8a9b0c2",
+		"eventName": "survey_declined",
+		"occurredAt": "2026-08-30T01:02:10.000Z",
+		"subjectPseudoId": "AbCdEfGhIjKlMnOpQrStUv",
+		"sessionId": "f6635d24-b4d1-4f63-8a06-4026fa4e8fd6",
+		"accountType": "guest",
+		"screen": "survey_prompt",
+		"feature": "survey",
+		"appVersion": "1.0.0+1",
+		"osName": "ios",
+		"osVersion": "iOS 18",
+		"deviceCategory": "phone",
+		"networkState": "online",
+		"status": "completed",
+		"properties": {
+			"logicalId": "content.3f3d4c0e-9f7c-4f3a-9d8e-8b2b0a1c5d61",
+			"purpose": "satisfaction",
+			"stage": "notice"
+		}
+	},
+	{
+		"schemaVersion": 1,
+		"eventId": "4c708192-a3b4-4ec5-8fd6-e7f8a9b0c1d3",
+		"eventName": "survey_submitted",
+		"occurredAt": "2026-08-30T01:02:11.000Z",
+		"subjectPseudoId": "AbCdEfGhIjKlMnOpQrStUv",
+		"sessionId": "f6635d24-b4d1-4f63-8a06-4026fa4e8fd6",
+		"accountType": "guest",
+		"screen": "survey_prompt",
+		"feature": "survey",
+		"appVersion": "1.0.0+1",
+		"osName": "ios",
+		"osVersion": "iOS 18",
+		"deviceCategory": "phone",
+		"networkState": "online",
+		"status": "completed",
+		"properties": {
+			"logicalId": "content.3f3d4c0e-9f7c-4f3a-9d8e-8b2b0a1c5d61",
+			"purpose": "satisfaction",
+			"answeredCount": 3
+		}
 	}
 ]

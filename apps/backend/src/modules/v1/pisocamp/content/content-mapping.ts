@@ -9,6 +9,7 @@ import type {
 	PisoCampContentDraft,
 	PisoCampRelatedLinkOutput,
 	PisoCampSurveyQuestion,
+	PisoCampSurveyQuestionOutput,
 } from "@repo/contracts"
 import {
 	contentItems,
@@ -95,6 +96,21 @@ export function toSurveyQuestionValues(
 	}))
 }
 
+/** Drops the id a published question carries, leaving the draft shape. */
+export function stripQuestionId(
+	question: PisoCampSurveyQuestionOutput
+): PisoCampSurveyQuestion {
+	return question.kind === "text"
+		? { kind: "text", prompt: question.prompt, required: question.required }
+		: {
+				kind: question.kind,
+				prompt: question.prompt,
+				required: question.required,
+				lowLabel: question.lowLabel,
+				highLabel: question.highLabel,
+			}
+}
+
 export function toContentVersionValues(content: PisoCampContentDraft) {
 	return {
 		contentType: content.contentType,
@@ -141,7 +157,7 @@ export const triviaDetailColumns = {
 export interface SurveyDetailRow {
 	surveyPurpose: "topic" | "satisfaction" | "feature" | "application" | "nps" | "usefulness" | null
 	surveySubjectContentItemId: string | null
-	surveyQuestions: PisoCampSurveyQuestion[] | null
+	surveyQuestions: PisoCampSurveyQuestionOutput[] | null
 }
 
 /** The survey columns every version select joins. Questions are their own read. */
@@ -162,8 +178,8 @@ export const childDetailColumns = { ...triviaDetailColumns, ...surveyDetailColum
 export async function selectSurveyQuestionsByVersionIds(
 	database: ContentDatabase,
 	versionIds: readonly string[]
-): Promise<Map<string, PisoCampSurveyQuestion[]>> {
-	const grouped = new Map(versionIds.map(id => [id, [] as PisoCampSurveyQuestion[]]))
+): Promise<Map<string, PisoCampSurveyQuestionOutput[]>> {
+	const grouped = new Map(versionIds.map(id => [id, [] as PisoCampSurveyQuestionOutput[]]))
 	if (!versionIds.length) return grouped
 	const rows = await database
 		.select()
@@ -173,8 +189,9 @@ export async function selectSurveyQuestionsByVersionIds(
 	for (const row of rows) {
 		grouped.get(row.contentVersionId)?.push(
 			row.kind === "text"
-				? { kind: "text", prompt: row.prompt, required: row.required }
+				? { id: row.id, kind: "text", prompt: row.prompt, required: row.required }
 				: {
+						id: row.id,
 						kind: row.kind,
 						prompt: row.prompt,
 						required: row.required,
@@ -191,7 +208,7 @@ export async function withSurveyQuestionsFor<T extends { contentType: string }>(
 	database: ContentDatabase,
 	versionId: string,
 	row: T
-): Promise<T & { surveyQuestions: PisoCampSurveyQuestion[] | null }> {
+): Promise<T & { surveyQuestions: PisoCampSurveyQuestionOutput[] | null }> {
 	if (row.contentType !== "survey") return { ...row, surveyQuestions: null }
 	const grouped = await selectSurveyQuestionsByVersionIds(database, [versionId])
 	return { ...row, surveyQuestions: grouped.get(versionId) ?? [] }
@@ -241,7 +258,11 @@ export function fromContentVersion(row: ContentVersionRow): PisoCampContentDraft
 			body: row.body!,
 			purpose: row.surveyPurpose!,
 			subjectContentItemId: row.surveySubjectContentItemId,
-			questions: row.surveyQuestions ?? [],
+			// The draft shape an editor works in has no ids: identity belongs to
+			// the row, and a form that echoed one back could try to move it.
+			questions: (row.surveyQuestions ?? []).map(question =>
+				stripQuestionId(question)
+			),
 		}
 	}
 	if (row.contentType === "security_feature") {

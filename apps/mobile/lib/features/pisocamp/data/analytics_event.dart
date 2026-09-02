@@ -243,6 +243,102 @@ final class LinkOpenIntent extends AnalyticsIntent {
   };
 }
 
+/// EV-2 survey purposes, as the contract states them.
+const Set<String> kSurveyPurposes = {
+  'topic',
+  'satisfaction',
+  'feature',
+  'application',
+  'nps',
+  'usefulness',
+};
+
+/// Where a refusal happened: at the prompt, or at the privacy notice.
+enum SurveyDeclineStage { prompt, notice }
+
+final class SurveyPromptShownIntent extends AnalyticsIntent {
+  const SurveyPromptShownIntent({
+    required this.logicalId,
+    required this.purpose,
+  });
+
+  final String logicalId;
+  final String purpose;
+
+  @override
+  String get eventName => 'survey_prompt_shown';
+
+  @override
+  String get screen => 'survey_prompt';
+
+  @override
+  String get feature => 'survey';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+    'purpose': purpose,
+  };
+}
+
+final class SurveyDeclinedIntent extends AnalyticsIntent {
+  const SurveyDeclinedIntent({
+    required this.logicalId,
+    required this.purpose,
+    required this.stage,
+  });
+
+  final String logicalId;
+  final String purpose;
+  final SurveyDeclineStage stage;
+
+  @override
+  String get eventName => 'survey_declined';
+
+  @override
+  String get screen => 'survey_prompt';
+
+  @override
+  String get feature => 'survey';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+    'purpose': purpose,
+    'stage': stage.name,
+  };
+}
+
+final class SurveySubmittedIntent extends AnalyticsIntent {
+  const SurveySubmittedIntent({
+    required this.logicalId,
+    required this.purpose,
+    required this.answeredCount,
+  });
+
+  final String logicalId;
+  final String purpose;
+
+  /// How many questions were answered, never what any answer was.
+  final int answeredCount;
+
+  @override
+  String get eventName => 'survey_submitted';
+
+  @override
+  String get screen => 'survey_prompt';
+
+  @override
+  String get feature => 'survey';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+    'purpose': purpose,
+    'answeredCount': answeredCount,
+  };
+}
+
 final class TriviaPromptShownIntent extends AnalyticsIntent {
   const TriviaPromptShownIntent({
     required this.logicalId,
@@ -611,6 +707,51 @@ AnalyticsIntent _parseIntent({
         correct: _requiredBool(properties, 'correct'),
         openedTopic: _requiredBool(properties, 'openedTopic'),
       );
+    case 'survey_prompt_shown':
+      _requireExactKeys(properties, const <String>{'logicalId', 'purpose'});
+      _requireSurveyCatalog(screen, feature);
+      return SurveyPromptShownIntent(
+        logicalId: _requiredBoundedString(properties, 'logicalId', 128),
+        purpose: _requiredSurveyPurpose(properties),
+      );
+    case 'survey_declined':
+      _requireExactKeys(properties, const <String>{
+        'logicalId',
+        'purpose',
+        'stage',
+      });
+      _requireSurveyCatalog(screen, feature);
+      final stage = _requiredString(properties, 'stage');
+      if (stage != 'prompt' && stage != 'notice') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidField,
+        );
+      }
+      return SurveyDeclinedIntent(
+        logicalId: _requiredBoundedString(properties, 'logicalId', 128),
+        purpose: _requiredSurveyPurpose(properties),
+        stage: stage == 'prompt'
+            ? SurveyDeclineStage.prompt
+            : SurveyDeclineStage.notice,
+      );
+    case 'survey_submitted':
+      _requireExactKeys(properties, const <String>{
+        'logicalId',
+        'purpose',
+        'answeredCount',
+      });
+      _requireSurveyCatalog(screen, feature);
+      final answered = properties['answeredCount'];
+      if (answered is! int || answered < 0 || answered > 20) {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidShape,
+        );
+      }
+      return SurveySubmittedIntent(
+        logicalId: _requiredBoundedString(properties, 'logicalId', 128),
+        purpose: _requiredSurveyPurpose(properties),
+        answeredCount: answered,
+      );
     case 'feature_use':
       _requireExactKeys(properties, const <String>{'logicalId'});
       // An unknown or mislabelled feature is a catalog problem, not a
@@ -630,6 +771,24 @@ AnalyticsIntent _parseIntent({
         AnalyticsValidationReason.invalidCatalog,
       );
   }
+}
+
+void _requireSurveyCatalog(String screen, String feature) {
+  if (screen != 'survey_prompt' || feature != 'survey') {
+    throw const AnalyticsValidationException(
+      AnalyticsValidationReason.invalidCatalog,
+    );
+  }
+}
+
+String _requiredSurveyPurpose(Map<String, Object?> properties) {
+  final purpose = _requiredString(properties, 'purpose');
+  if (!kSurveyPurposes.contains(purpose)) {
+    throw const AnalyticsValidationException(
+      AnalyticsValidationReason.invalidField,
+    );
+  }
+  return purpose;
 }
 
 void _requireExactKeys(Map<String, Object?> value, Set<String> expected) {

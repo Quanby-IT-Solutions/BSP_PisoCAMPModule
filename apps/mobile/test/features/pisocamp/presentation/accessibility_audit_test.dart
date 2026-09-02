@@ -22,6 +22,11 @@ import 'package:mobile/features/pisocamp/presentation/widgets/coin_viewer.dart';
 
 import '../data/bundle_test_support.dart';
 import '../../../support/accessibility_checklist.dart';
+import 'package:mobile/features/pisocamp/data/survey_document.dart';
+import 'package:mobile/features/pisocamp/presentation/widgets/survey_prompt.dart';
+
+import '../data/survey_document_test.dart'
+    show ratingQuestion, surveyBytes, textQuestion;
 
 /// A sync that never touches the network or the filesystem, so the audit
 /// measures the screen rather than the platform underneath it.
@@ -72,6 +77,7 @@ const List<String> kAuditedScreens = [
   'Coin 3D viewer',
   'Tactile viewer',
   'Tilt viewer',
+  'Survey prompt',
 ];
 
 void main() {
@@ -168,6 +174,28 @@ void main() {
       kind: CurrencyRouteKind.banknotes,
       logicalId: banknote.logicalId,
       sensorAvailable: false,
+    ),
+    // EV-2's prompt is a widget rather than a route, and it is registered all
+    // the same: what the checklist audits is a surface a person meets.
+    'Survey prompt': Scaffold(
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: SurveyPrompt(
+            survey: SurveyDocument.parsePublished(
+              surveyBytes(questions: [ratingQuestion(), textQuestion()]),
+            ),
+            consent: SurveyConsentGate(
+              alreadyGranted: true,
+              noticeTitle: 'How we use your answers',
+              noticeBody:
+                  'Your answers are kept apart from anything that names you.',
+              onDecision: ({required bool granted}) async => granted,
+            ),
+            onFinished: (_) {},
+          ),
+        ),
+      ),
     ),
   }[name]!;
 

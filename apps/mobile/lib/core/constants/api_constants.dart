@@ -94,6 +94,11 @@ class ApiConstants {
   static String get pisoCampTriviaResponses =>
       '$versionedUrl/pisocamp/trivia/responses';
 
+  // EV-2 survey responses. Consent-gated: the server refuses a submission from
+  // a subject with no current grant, whoever they are.
+  static String get pisoCampSurveyResponses =>
+      '$versionedUrl/pisocamp/surveys/responses';
+
   // CM-5 pre-publication preview. Reached only from a preview build and only
   // with a signed, short-lived grant; the responses are never cached.
   static String get pisoCampPreview => '$versionedUrl/pisocamp/preview';

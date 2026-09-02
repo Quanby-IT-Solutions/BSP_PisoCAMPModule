@@ -57,7 +57,9 @@ export function renderPublishedContentResources(
 						? {
 								purpose: content.purpose,
 								subjectContentItemId: content.subjectContentItemId ?? null,
-								questions: content.questions,
+								// With their ids: a response has to name the question it
+								// answers, and the draft shape does not carry one.
+								questions: candidate.surveyQuestions ?? [],
 							}
 						: {}),
 					relatedLinks: candidate.relatedLinks,

@@ -18,6 +18,7 @@ import type {
 	PisoCampContentStatus,
 	PisoCampContentWorkflowAction,
 	PisoCampRelatedLinkOutput,
+	PisoCampSurveyQuestionOutput,
 	PublishPisoCampContentInput,
 	RejectPisoCampContentInput,
 	RestorePisoCampContentVersionInput,
@@ -105,6 +106,14 @@ export interface PisoCampPublishedBundleCandidate {
 	versionNo: number
 	content: PisoCampContentDraft
 	relatedLinks: PisoCampRelatedLinkOutput[]
+	/**
+	 * A survey's questions with their ids, and null for anything else.
+	 *
+	 * Separate from `content` because the draft shape deliberately has no ids —
+	 * an editor does not own them — while a device does need them: EV-2's
+	 * response names the question it answers.
+	 */
+	surveyQuestions: PisoCampSurveyQuestionOutput[] | null
 }
 
 /**
@@ -1090,6 +1099,7 @@ export class ContentWorkflowService {
 					surveyQuestions: questionsByVersionId.get(row.versionId) ?? null,
 				}),
 				relatedLinks: linksByVersionId.get(row.versionId) ?? [],
+				surveyQuestions: questionsByVersionId.get(row.versionId) ?? null,
 			})),
 			exclusions: excluded.map(row => ({
 				itemId: row.itemId,

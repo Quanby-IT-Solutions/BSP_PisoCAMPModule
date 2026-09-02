@@ -145,6 +145,7 @@ export {
 	PisoCampRelatedLinkOutputSchema,
 	PisoCampSurveyPurposeSchema,
 	PisoCampSurveyQuestionKindSchema,
+	PisoCampSurveyQuestionOutputSchema,
 	PisoCampSurveyQuestionSchema,
 	PublishPisoCampContentInputSchema,
 	SURVEY_PURPOSES,
@@ -294,6 +295,21 @@ export type {
 	PisoCampBundleManifestEntry,
 } from "./modules/v1/pisocamp/bundle.schema.js"
 
+// EV-2 survey responses
+export {
+	IngestSurveyResponsesInputSchema,
+	IngestSurveyResponsesOutputSchema,
+	MAX_SURVEY_RESPONSE_BATCH,
+	PisoCampSurveyAnswerSchema,
+	PisoCampSurveyResponseSchema,
+} from "./modules/v1/pisocamp/survey-response.schema.js"
+export type {
+	IngestSurveyResponsesInput,
+	IngestSurveyResponsesOutput,
+	PisoCampSurveyAnswer,
+	PisoCampSurveyResponse,
+} from "./modules/v1/pisocamp/survey-response.schema.js"
+
 // GM-3 trivia responses
 export {
 	IngestTriviaResponsesInputSchema,
@@ -349,6 +365,7 @@ export type {
 	PisoCampSurveyPurpose,
 	PisoCampSurveyQuestion,
 	PisoCampSurveyQuestionKind,
+	PisoCampSurveyQuestionOutput,
 	PublishPisoCampContentInput,
 	RejectPisoCampContentInput,
 	SubmitPisoCampContentInput,

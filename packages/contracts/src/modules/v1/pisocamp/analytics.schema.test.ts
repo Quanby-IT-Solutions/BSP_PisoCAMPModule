@@ -86,6 +86,9 @@ describe("AN-1 analytics event catalog", () => {
 			"trivia_prompt_shown",
 			"trivia_prompt_answered",
 			"trivia_prompt_skipped",
+			"survey_prompt_shown",
+			"survey_declined",
+			"survey_submitted",
 		])
 	})
 

@@ -14,7 +14,8 @@ describe("renderPublishedContentResources", () => {
 					body: "Optional details",
 					primaryUrl: "https://www.bsp.gov.ph/currency",
 				},
-				relatedLinks: [
+				surveyQuestions: null,
+		relatedLinks: [
 					{
 						id: "33333333-3333-4333-8333-333333333333",
 						position: 0,
@@ -66,6 +67,7 @@ describe("renderPublishedContentResources", () => {
 				summary: "Summary",
 				body: "Body",
 			},
+			surveyQuestions: null,
 			relatedLinks: [],
 		})
 

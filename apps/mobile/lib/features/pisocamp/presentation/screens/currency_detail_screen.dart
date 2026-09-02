@@ -8,6 +8,9 @@ import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/link_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/data/survey_document.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/survey_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/widgets/survey_prompt.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/zoomable_currency_image.dart';
 
 class CurrencyDetailScreen extends ConsumerStatefulWidget {
@@ -32,6 +35,12 @@ class _CurrencyDetailScreenState extends ConsumerState<CurrencyDetailScreen> {
   late Future<_ResolvedDetail?> _detail;
   int _generation = 0;
   String? _recordedLogicalId;
+
+  /// EV-2's seeded trigger: the survey for the topic just read, if there is
+  /// one. Held here so it is offered once per visit rather than per rebuild.
+  SurveyDocument? _survey;
+  SurveyConsentStanding? _standing;
+  String? _offeredForItemId;
 
   @override
   void initState() {
@@ -79,6 +88,10 @@ class _CurrencyDetailScreenState extends ConsumerState<CurrencyDetailScreen> {
             .recordOpen(document.logicalId),
       );
     }
+    // A seed document has no content item id; only a published one does, and
+    // only a published topic can be the subject of a survey.
+    final itemId = document.contentItemId;
+    if (itemId != null) unawaited(_offerSurvey(catalog, itemId));
     return _ResolvedDetail(
       catalog: catalog,
       document: document,
@@ -86,10 +99,92 @@ class _CurrencyDetailScreenState extends ConsumerState<CurrencyDetailScreen> {
     );
   }
 
+  /// Offers the survey whose subject is this topic.
+  ///
+  /// Silent on failure by design: a survey is an offer, and a module that
+  /// could not make one is not a module that should show an error.
+  Future<void> _offerSurvey(CurrencyCatalogView catalog, String itemId) async {
+    if (_offeredForItemId == itemId) return;
+    _offeredForItemId = itemId;
+    try {
+      final survey = surveyForCompletedTopic(catalog.surveys, itemId);
+      if (survey == null || !mounted) return;
+      final standing = await ref
+          .read(surveyConsentCoordinatorProvider)
+          .standing();
+      // No notice means consent cannot be asked for at all, so the survey is
+      // not offered rather than offered and then abandoned.
+      if (!mounted || (!standing.granted && standing.notice == null)) return;
+      await ref.read(surveyPromptCoordinatorProvider).recordShown(survey);
+      if (!mounted) return;
+      setState(() {
+        _survey = survey;
+        _standing = standing;
+      });
+    } on Object {
+      // No survey this time.
+    }
+  }
+
+  Future<void> _finishSurvey(
+    SurveyDocument survey,
+    SurveyPromptResult result,
+  ) async {
+    final standing = _standing;
+    setState(() {
+      _survey = null;
+      _standing = null;
+    });
+    try {
+      await ref
+          .read(surveyPromptCoordinatorProvider)
+          .record(survey, result, consentRecordId: standing?.consentRecordId);
+    } on Object {
+      // The answer is queued or it is not; either way the module carries on.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final survey = _survey;
+    final standing = _standing;
     return Scaffold(
       appBar: AppBar(title: Text(widget.kind.title)),
+      bottomSheet: survey == null || standing == null
+          ? null
+          // A sheet, so the topic underneath stays readable: the survey is an
+          // offer, and declining it costs one tap.
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: SurveyPrompt(
+                  survey: survey,
+                  consent: SurveyConsentGate(
+                    alreadyGranted: standing.granted,
+                    noticeTitle: standing.notice?.title ?? 'Privacy notice',
+                    noticeBody: standing.notice?.body ?? '',
+                    onDecision: ({required bool granted}) async {
+                      final notice = standing.notice;
+                      if (notice == null) return false;
+                      final recordId = await ref
+                          .read(surveyConsentCoordinatorProvider)
+                          .record(notice: notice, granted: granted);
+                      if (recordId == null) return false;
+                      setState(
+                        () => _standing = SurveyConsentStanding(
+                          granted: true,
+                          consentRecordId: recordId,
+                          notice: notice,
+                        ),
+                      );
+                      return true;
+                    },
+                  ),
+                  onFinished: (result) =>
+                      unawaited(_finishSurvey(survey, result)),
+                ),
+              ),
+            ),
       body: FutureBuilder<_ResolvedDetail?>(
         future: _detail,
         builder: (context, snapshot) {

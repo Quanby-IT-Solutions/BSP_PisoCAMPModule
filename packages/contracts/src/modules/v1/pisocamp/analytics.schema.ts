@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { SURVEY_PURPOSES } from "./content.schema.js"
+
 import { DevicePseudoIdSchema } from "./pisocamp.schema.js"
 
 const EVENT_MAX_BYTES = 8 * 1024
@@ -26,6 +28,9 @@ export const ANALYTICS_EVENT_NAMES = [
 	"trivia_prompt_shown",
 	"trivia_prompt_answered",
 	"trivia_prompt_skipped",
+	"survey_prompt_shown",
+	"survey_declined",
+	"survey_submitted",
 ] as const
 
 /**
@@ -133,6 +138,48 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 				logicalId: z.string().trim().min(1).max(128),
 				category: z.string().trim().min(1).max(64),
 				difficulty: z.enum(["easy", "medium", "hard"]),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("survey_prompt_shown"),
+		screen: z.literal("survey_prompt"),
+		feature: z.literal("survey"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				logicalId: z.string().trim().min(1).max(128),
+				purpose: z.enum(SURVEY_PURPOSES),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("survey_declined"),
+		screen: z.literal("survey_prompt"),
+		feature: z.literal("survey"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				logicalId: z.string().trim().min(1).max(128),
+				purpose: z.enum(SURVEY_PURPOSES),
+				// Declining the prompt and declining the notice are different
+				// refusals, and only the second one means a notice was read.
+				stage: z.enum(["prompt", "notice"]),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("survey_submitted"),
+		screen: z.literal("survey_prompt"),
+		feature: z.literal("survey"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				logicalId: z.string().trim().min(1).max(128),
+				purpose: z.enum(SURVEY_PURPOSES),
+				// How many questions were answered, never what any answer was:
+				// an answer is the person's own words and analytics carries none.
+				answeredCount: z.number().int().min(0).max(20),
 			})
 			.strict(),
 	}).strict(),

@@ -7,6 +7,7 @@ import 'package:mobile/features/pisocamp/data/bundle_store.dart';
 import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/data/coin_model.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
+import 'package:mobile/features/pisocamp/data/survey_document.dart';
 import 'package:mobile/features/pisocamp/data/trivia_question_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/bundle_provider.dart';
 
@@ -190,8 +191,10 @@ final class CurrencyCatalogView {
     required Map<String, _VerifiedBundleResource> images,
     required Map<String, _VerifiedBundleResource> models,
     required List<TriviaQuestionDocument> triviaQuestions,
+    required List<SurveyDocument> surveys,
   }) : documents = List.unmodifiable(documents),
        triviaQuestions = List.unmodifiable(triviaQuestions),
+       surveys = List.unmodifiable(surveys),
        _securityFeatures =
            Map.unmodifiable(<String, List<CurrencyContentDocument>>{
              for (final entry in securityFeatures.entries)
@@ -208,6 +211,11 @@ final class CurrencyCatalogView {
   /// else. Only published and active questions reach a device, so this list is
   /// the pool: there is nothing further to filter.
   final List<TriviaQuestionDocument> triviaQuestions;
+
+  /// EV-2's published surveys, read from the same verified snapshot. A survey
+  /// travels with the bundle because it is offered offline.
+  final List<SurveyDocument> surveys;
+
   final Map<String, List<CurrencyContentDocument>> _securityFeatures;
   final Map<String, _VerifiedBundleResource> _images;
   final Map<String, _VerifiedBundleResource> _models;
@@ -321,6 +329,17 @@ final class CurrencyCatalogView {
         // Not a question, or not a readable one. Either way it is not offered.
       }
     }
+    final surveys = <SurveyDocument>[];
+    for (final bytes in publishedBytes) {
+      try {
+        surveys.add(SurveyDocument.parsePublished(bytes));
+      } on Object {
+        // Not a survey, or not a readable one. Either way it is not offered.
+      }
+    }
+    surveys.sort(
+      (left, right) => left.contentItemId.compareTo(right.contentItemId),
+    );
     triviaQuestions.sort(
       (left, right) => left.contentItemId.compareTo(right.contentItemId),
     );
@@ -358,6 +377,7 @@ final class CurrencyCatalogView {
       images: images,
       models: models,
       triviaQuestions: triviaQuestions,
+      surveys: surveys,
     );
   }
 
