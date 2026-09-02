@@ -557,7 +557,7 @@ export const contentItems = createTable(
 		unique("content_item_id_type_unique").on(t.id, t.contentType),
 		check(
 			"content_item_type_check",
-			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question')`
+			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question', 'survey')`
 		),
 		check(
 			"content_item_status_check",
@@ -646,7 +646,7 @@ export const contentVersions = createTable(
 		check("content_version_number_check", sql`${t.versionNo} > 0`),
 		check(
 			"content_version_type_check",
-			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question')`
+			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question', 'survey')`
 		),
 		check(
 			"content_version_status_check",
@@ -661,6 +661,7 @@ export const contentVersions = createTable(
 				or (${t.contentType} = 'advisory' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
 				or (${t.contentType} = 'link' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.primaryUrl} is not null)
 				or (${t.contentType} = 'trivia_question' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
+				or (${t.contentType} = 'survey' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
 			)`
 		),
 		check(
@@ -954,6 +955,119 @@ export const triviaQuestionDetails = createTable(
 		index("trivia_question_detail_selection_idx")
 			.on(t.category, t.difficulty)
 			.where(sql`${t.active}`),
+	]
+)
+
+/**
+ * EV-1 survey detail.
+ *
+ * A survey is a content item, so its title, summary and body are the version's
+ * and the workflow versions, diffs and audits them without knowing what a
+ * survey is. What a survey has that other content does not is a purpose and a
+ * subject.
+ *
+ * `subjectContentItemId` is the topic or feature the survey evaluates. It is a
+ * column rather than a related link because EV-3 has to find the survey for a
+ * topic that was just completed, and searching a generic link list for that is
+ * a different question than asking a survey what it is about.
+ */
+export const surveyDetails = createTable(
+	"survey_detail",
+	t => ({
+		contentVersionId: t.uuid("content_version_id").primaryKey(),
+		contentItemId: t.uuid("content_item_id").notNull(),
+		purpose: t
+			.text("purpose")
+			.notNull()
+			.$type<"topic" | "satisfaction" | "feature" | "application" | "nps" | "usefulness">(),
+		/** The topic or feature this survey is about, when it is about one. */
+		subjectContentItemId: t
+			.uuid("subject_content_item_id")
+			.references(() => contentItems.id, { onDelete: "restrict" }),
+	}),
+	t => [
+		foreignKey({
+			columns: [t.contentItemId, t.contentVersionId],
+			foreignColumns: [contentVersions.itemId, contentVersions.id],
+			name: "survey_detail_version_fkey",
+		}).onDelete("cascade"),
+		check(
+			"survey_detail_purpose_check",
+			sql`${t.purpose} in ('topic', 'satisfaction', 'feature', 'application', 'nps', 'usefulness')`
+		),
+		// A survey about itself would make EV-3's trigger a loop.
+		check("survey_detail_subject_check", sql`${t.subjectContentItemId} <> ${t.contentItemId}`),
+		index("survey_detail_item_idx").on(t.contentItemId),
+		index("survey_detail_subject_idx").on(t.subjectContentItemId),
+	]
+)
+
+/**
+ * EV-1 survey question.
+ *
+ * A child table rather than JSONB — unlike a trivia question's choices —
+ * because EV-2's responses reference a question by id, and AN-6 reports one
+ * question at a time.
+ *
+ * The scale bounds and the NPS bands are stored on the row and pinned by CHECK
+ * to the values the SRD states: promoter 9-10, passive 7-8, detractor 0-6.
+ * Storing them makes the banding data a report can read rather than arithmetic
+ * every reader has to repeat, and the constraint is what stops it drifting.
+ */
+export const surveyQuestions = createTable(
+	"survey_question",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		contentVersionId: t.uuid("content_version_id").notNull(),
+		contentItemId: t.uuid("content_item_id").notNull(),
+		position: t.integer("position").notNull(),
+		kind: t.text("kind").notNull().$type<"rating" | "nps" | "text">(),
+		prompt: t.text("prompt").notNull(),
+		required: t.boolean("required").notNull(),
+		/** Inclusive bounds of a scaled answer; null for a text question. */
+		scaleMin: t.integer("scale_min"),
+		scaleMax: t.integer("scale_max"),
+		/** The wording shown at each end of a scale. */
+		lowLabel: t.text("low_label"),
+		highLabel: t.text("high_label"),
+		/** Lowest score counted as a promoter, and as a passive. */
+		npsPromoterMin: t.integer("nps_promoter_min"),
+		npsPassiveMin: t.integer("nps_passive_min"),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		foreignKey({
+			columns: [t.contentItemId, t.contentVersionId],
+			foreignColumns: [contentVersions.itemId, contentVersions.id],
+			name: "survey_question_version_fkey",
+		}).onDelete("cascade"),
+		unique("survey_question_version_position_unique").on(t.contentVersionId, t.position),
+		check("survey_question_position_check", sql`${t.position} between 0 and 19`),
+		check("survey_question_kind_check", sql`${t.kind} in ('rating', 'nps', 'text')`),
+		check(
+			"survey_question_prompt_check",
+			sql`${t.prompt} = btrim(${t.prompt}) and char_length(${t.prompt}) between 1 and 300 and ${t.prompt} !~ '<!--|</?[A-Za-z]|<!|<\\?'`
+		),
+		check(
+			"survey_question_shape_check",
+			sql`(
+				(${t.kind} = 'rating' and ${t.scaleMin} = 1 and ${t.scaleMax} = 5
+					and ${t.lowLabel} is not null and ${t.highLabel} is not null
+					and ${t.npsPromoterMin} is null and ${t.npsPassiveMin} is null)
+				or (${t.kind} = 'nps' and ${t.scaleMin} = 0 and ${t.scaleMax} = 10
+					and ${t.lowLabel} is not null and ${t.highLabel} is not null
+					and ${t.npsPromoterMin} = 9 and ${t.npsPassiveMin} = 7)
+				or (${t.kind} = 'text' and ${t.scaleMin} is null and ${t.scaleMax} is null
+					and ${t.lowLabel} is null and ${t.highLabel} is null
+					and ${t.npsPromoterMin} is null and ${t.npsPassiveMin} is null)
+			)`
+		),
+		check(
+			"survey_question_label_check",
+			sql`(${t.lowLabel} is null or (${t.lowLabel} = btrim(${t.lowLabel}) and char_length(${t.lowLabel}) between 1 and 100))
+				and (${t.highLabel} is null or (${t.highLabel} = btrim(${t.highLabel}) and char_length(${t.highLabel}) between 1 and 100))`
+		),
+		index("survey_question_version_idx").on(t.contentVersionId, t.position),
 	]
 )
 

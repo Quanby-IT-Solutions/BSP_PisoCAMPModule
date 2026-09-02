@@ -44,6 +44,7 @@ import {
 	buildCreateContentRequest,
 	buildUpdateContentRequest,
 	createEmptyContentForm,
+	emptySurveyQuestion,
 	emptyTriviaChoice,
 	getOrCreateRequestId,
 	type ContentFormErrors,
@@ -125,6 +126,20 @@ function formValuesFromDetail(detail: PisoCampContentDetail): ContentFormValues 
 				? content.denominationCode
 				: "",
 		primaryUrl: content.contentType === "link" ? content.primaryUrl : "",
+		purpose: content.contentType === "survey" ? content.purpose : "",
+		subjectContentItemId:
+			content.contentType === "survey" ? (content.subjectContentItemId ?? "") : "",
+		questions:
+			content.contentType === "survey"
+				? content.questions.map((question, index) => ({
+						clientId: `question-${index}`,
+						kind: question.kind,
+						prompt: question.prompt,
+						required: question.required,
+						lowLabel: question.kind === "text" ? "" : question.lowLabel,
+						highLabel: question.kind === "text" ? "" : question.highLabel,
+					}))
+				: [emptySurveyQuestion()],
 		featureLevel: content.contentType === "security_feature" ? content.featureLevel : "",
 		hotspotX:
 			content.contentType === "security_feature" && content.hotspot
@@ -317,6 +332,7 @@ function ContentFormEditor({
 	const hotspotRef = useRef<HTMLInputElement>(null)
 	const categoryRef = useRef<HTMLInputElement>(null)
 	const difficultyRef = useRef<HTMLButtonElement>(null)
+	const purposeRef = useRef<HTMLButtonElement>(null)
 	const relatedControlRefs = useRef(new Map<string, HTMLElement>())
 	const leaveDirtyHistory = useRef<(navigate: () => void) => void>(navigate => navigate())
 	const ownsDirtyHistoryGuard = useRef(false)
@@ -515,6 +531,7 @@ function ContentFormEditor({
 			["hotspot", hotspotRef],
 			["category", categoryRef],
 			["difficulty", difficultyRef],
+			["purpose", purposeRef],
 			["primaryUrl", primaryUrlRef],
 		]
 		const regularTarget = focusTargets.find(([key]) => nextErrors[key])?.[1].current
@@ -631,6 +648,7 @@ function ContentFormEditor({
 							hotspotRef={hotspotRef}
 							categoryRef={categoryRef}
 							difficultyRef={difficultyRef}
+							purposeRef={purposeRef}
 							onChange={changeValues}
 						/>
 						<RelatedLinksEditor

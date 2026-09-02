@@ -15,10 +15,16 @@ import {
 	changeContentType,
 	changeCurrencySeries,
 	getDenominationOptions,
+	emptySurveyQuestion,
 	emptyTriviaChoice,
 	getSeriesOptions,
+	isSurveyPurpose,
+	MAXIMUM_SURVEY_QUESTIONS,
 	MAXIMUM_TRIVIA_CHOICES,
+	MINIMUM_SURVEY_QUESTIONS,
 	MINIMUM_TRIVIA_CHOICES,
+	SURVEY_PURPOSE_OPTIONS,
+	SURVEY_QUESTION_KIND_OPTIONS,
 	type ContentFormErrors,
 	type ContentFormValues,
 } from "@/features/pisocamp-content-admin/lib/content-form"
@@ -30,6 +36,7 @@ const CONTENT_TYPE_OPTIONS: readonly { value: PisoCampContentType; label: string
 	{ value: "security_feature", label: "Security feature" },
 	{ value: "link", label: "Link" },
 	{ value: "trivia_question", label: "Trivia question" },
+	{ value: "survey", label: "Survey" },
 ]
 
 const TRIVIA_DIFFICULTY_OPTIONS = [
@@ -38,8 +45,10 @@ const TRIVIA_DIFFICULTY_OPTIONS = [
 	{ value: "hard", label: "Hard" },
 ] as const
 
+// min-h-11, not min-h-8: a select that reflows to two lines is still a touch
+// target, and 32px plus padding came out at 38px on a 320px screen.
 const REFLOW_SELECT_TRIGGER_CLASS =
-	"h-auto min-h-8 w-full max-w-full min-w-0 whitespace-normal py-2"
+	"h-auto min-h-11 w-full max-w-full min-w-0 whitespace-normal py-2"
 const REFLOW_SELECT_VALUE_CLASS = "min-w-0 whitespace-normal break-words line-clamp-none"
 
 function isContentType(value: unknown): value is PisoCampContentType {
@@ -58,6 +67,7 @@ interface ContentTypeFieldsProps {
 	hotspotRef: React.RefObject<HTMLInputElement | null>
 	categoryRef: React.RefObject<HTMLInputElement | null>
 	difficultyRef: React.RefObject<HTMLButtonElement | null>
+	purposeRef: React.RefObject<HTMLButtonElement | null>
 	denominationRef: React.RefObject<HTMLButtonElement | null>
 	onChange: (values: ContentFormValues) => void
 }
@@ -74,6 +84,7 @@ export function ContentTypeFields({
 	hotspotRef,
 	categoryRef,
 	difficultyRef,
+	purposeRef,
 	denominationRef,
 	onChange,
 }: ContentTypeFieldsProps) {
@@ -318,6 +329,15 @@ export function ContentTypeFields({
 				/>
 			) : null}
 
+			{values.contentType === "survey" ? (
+				<SurveyFields
+					values={values}
+					errors={errors}
+					purposeRef={purposeRef}
+					onChange={onChange}
+				/>
+			) : null}
+
 			{values.contentType === "link" ? (
 				<TextField
 					id="primary-url"
@@ -537,6 +557,223 @@ function TriviaQuestionFields({
 				/>
 				<span>Active - an inactive question stays published but is never offered to anyone.</span>
 			</label>
+		</div>
+	)
+}
+
+/**
+ * EV-1 survey fields.
+ *
+ * The scales belong to the answer type, so an editor picks a type and words its
+ * ends rather than inventing bounds: two surveys that both asked "rate this 1
+ * to N" with different N could not be reported together.
+ */
+function SurveyFields({
+	values,
+	errors,
+	purposeRef,
+	onChange,
+}: {
+	values: ContentFormValues
+	errors: ContentFormErrors
+	purposeRef: React.RefObject<HTMLButtonElement | null>
+	onChange: (values: ContentFormValues) => void
+}) {
+	function setQuestions(questions: ContentFormValues["questions"]) {
+		onChange({ ...values, questions })
+	}
+
+	function updateQuestion(index: number, patch: Partial<ContentFormValues["questions"][number]>) {
+		setQuestions(
+			values.questions.map((question, position) =>
+				position === index ? { ...question, ...patch } : question
+			)
+		)
+	}
+
+	return (
+		<div className="w-full max-w-full min-w-0 space-y-4">
+			<div className="grid min-w-0 gap-4 sm:grid-cols-2">
+				<Field className="max-w-full min-w-0">
+					<FieldLabel htmlFor="survey-purpose">Purpose</FieldLabel>
+					<Select
+						name="purpose"
+						value={values.purpose || null}
+						onValueChange={value => {
+							if (isSurveyPurpose(value)) onChange({ ...values, purpose: value })
+						}}
+					>
+						<SelectTrigger
+							ref={purposeRef}
+							id="survey-purpose"
+							wrapValue
+							className={REFLOW_SELECT_TRIGGER_CLASS}
+							aria-invalid={errors.purpose ? true : undefined}
+							aria-describedby={errors.purpose ? "survey-purpose-error" : undefined}
+						>
+							<SelectValue className={REFLOW_SELECT_VALUE_CLASS}>
+								{SURVEY_PURPOSE_OPTIONS.find(option => option.value === values.purpose)?.label ??
+									"Select a purpose"}
+							</SelectValue>
+						</SelectTrigger>
+						<SelectContent>
+							{SURVEY_PURPOSE_OPTIONS.map(option => (
+								<SelectItem key={option.value} value={option.value}>
+									{option.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+					<FieldError id="survey-purpose-error">{errors.purpose}</FieldError>
+				</Field>
+				<Field className="max-w-full min-w-0">
+					<FieldLabel htmlFor="survey-subject">Subject content ID</FieldLabel>
+					<Input
+						id="survey-subject"
+						name="subjectContentItemId"
+						autoComplete="off"
+						className="min-h-11 max-w-full min-w-0"
+						value={values.subjectContentItemId}
+						onChange={event => onChange({ ...values, subjectContentItemId: event.target.value })}
+						aria-invalid={errors.subjectContentItemId ? true : undefined}
+						aria-describedby={
+							errors.subjectContentItemId ? "survey-subject-error" : "survey-subject-help"
+						}
+					/>
+					<p id="survey-subject-help" className="text-muted-foreground text-sm">
+						The topic or feature this survey is about. Leave blank for a survey about the module
+						as a whole.
+					</p>
+					<FieldError id="survey-subject-error">{errors.subjectContentItemId}</FieldError>
+				</Field>
+			</div>
+
+			<fieldset className="w-full max-w-full min-w-0 space-y-3">
+				<legend className="text-sm font-medium">Questions</legend>
+				<p className="text-muted-foreground text-sm">
+					Between {MINIMUM_SURVEY_QUESTIONS} and {MAXIMUM_SURVEY_QUESTIONS} questions, asked in
+					this order.
+				</p>
+				{values.questions.map((question, index) => (
+					<div
+						key={question.clientId}
+						className="w-full max-w-full min-w-0 space-y-3 rounded-md border p-3"
+					>
+						<div className="grid min-w-0 gap-3 sm:grid-cols-2">
+							<Field className="max-w-full min-w-0">
+								<FieldLabel htmlFor={`survey-question-${index}-prompt`}>
+									Question {index + 1}
+								</FieldLabel>
+								<Input
+									id={`survey-question-${index}-prompt`}
+									name={`questions.${index}.prompt`}
+									autoComplete="off"
+									className="min-h-11 w-full min-w-0"
+									value={question.prompt}
+									onChange={event => updateQuestion(index, { prompt: event.target.value })}
+								/>
+							</Field>
+							<Field className="max-w-full min-w-0">
+								<FieldLabel htmlFor={`survey-question-${index}-kind`}>Answer type</FieldLabel>
+								<Select
+									name={`questions.${index}.kind`}
+									value={question.kind}
+									onValueChange={value => {
+										if (value === "rating" || value === "nps" || value === "text") {
+											updateQuestion(index, { kind: value })
+										}
+									}}
+								>
+									<SelectTrigger
+										id={`survey-question-${index}-kind`}
+										wrapValue
+										className={REFLOW_SELECT_TRIGGER_CLASS}
+									>
+										<SelectValue className={REFLOW_SELECT_VALUE_CLASS}>
+											{
+												SURVEY_QUESTION_KIND_OPTIONS.find(
+													option => option.value === question.kind
+												)?.label
+											}
+										</SelectValue>
+									</SelectTrigger>
+									<SelectContent>
+										{SURVEY_QUESTION_KIND_OPTIONS.map(option => (
+											<SelectItem key={option.value} value={option.value}>
+												{option.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</Field>
+						</div>
+
+						{question.kind === "text" ? null : (
+							<div className="grid min-w-0 gap-3 sm:grid-cols-2">
+								<Field className="max-w-full min-w-0">
+									<FieldLabel htmlFor={`survey-question-${index}-low`}>
+										Wording at {question.kind === "nps" ? "0" : "1"}
+									</FieldLabel>
+									<Input
+										id={`survey-question-${index}-low`}
+										name={`questions.${index}.lowLabel`}
+										autoComplete="off"
+										className="min-h-11 w-full min-w-0"
+										value={question.lowLabel}
+										onChange={event => updateQuestion(index, { lowLabel: event.target.value })}
+									/>
+								</Field>
+								<Field className="max-w-full min-w-0">
+									<FieldLabel htmlFor={`survey-question-${index}-high`}>
+										Wording at {question.kind === "nps" ? "10" : "5"}
+									</FieldLabel>
+									<Input
+										id={`survey-question-${index}-high`}
+										name={`questions.${index}.highLabel`}
+										autoComplete="off"
+										className="min-h-11 w-full min-w-0"
+										value={question.highLabel}
+										onChange={event => updateQuestion(index, { highLabel: event.target.value })}
+									/>
+								</Field>
+							</div>
+						)}
+
+						<div className="flex max-w-full min-w-0 flex-wrap items-center gap-3">
+							<label className="flex min-h-11 items-center gap-2 text-sm">
+								<input
+									type="checkbox"
+									className="size-4"
+									checked={question.required}
+									onChange={event => updateQuestion(index, { required: event.target.checked })}
+								/>
+								Answer required
+							</label>
+							<Button
+								type="button"
+								variant="outline"
+								className="min-h-11 touch-manipulation"
+								disabled={values.questions.length <= MINIMUM_SURVEY_QUESTIONS}
+								onClick={() =>
+									setQuestions(values.questions.filter((_, position) => position !== index))
+								}
+							>
+								Remove question {index + 1}
+							</Button>
+						</div>
+					</div>
+				))}
+				<FieldError id="survey-questions-error">{errors.questions}</FieldError>
+				<Button
+					type="button"
+					variant="outline"
+					className="min-h-11 touch-manipulation"
+					disabled={values.questions.length >= MAXIMUM_SURVEY_QUESTIONS}
+					onClick={() => setQuestions([...values.questions, emptySurveyQuestion()])}
+				>
+					Add question
+				</Button>
+			</fieldset>
 		</div>
 	)
 }

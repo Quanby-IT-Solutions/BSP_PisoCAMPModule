@@ -28,6 +28,10 @@
 		"./pisocamp-content-audit": {
 			"types": "./dist/modules/v1/pisocamp/content-audit.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/content-audit.schema.js"
+		},
+		"./pisocamp-content": {
+			"types": "./dist/modules/v1/pisocamp/content.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/content.schema.js"
 		}
 	},
 	"scripts": {

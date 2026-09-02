@@ -487,6 +487,42 @@ function ContentSpecificFields({ detail }: { detail: PisoCampContentReviewDetail
 		)
 	}
 	if (content.contentType === "advisory") return null
+	if (content.contentType === "survey") {
+		return (
+			<dl className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+				<div>
+					<dt className="text-muted-foreground text-sm">Purpose</dt>
+					<dd className="break-words">{content.purpose}</dd>
+				</div>
+				<div>
+					<dt className="text-muted-foreground text-sm">Subject</dt>
+					<dd className="break-words" translate="no">
+						{content.subjectContentItemId ?? "The module as a whole"}
+					</dd>
+				</div>
+				<div className="sm:col-span-2">
+					{/* An approver has to read the questions as a person will be asked
+					    them, scale wording included, or there is nothing to approve. */}
+					<dt className="text-muted-foreground text-sm">Questions</dt>
+					<dd>
+						<ol className="min-w-0 list-decimal space-y-1 pl-5">
+							{content.questions.map(question => (
+								<li key={question.prompt} className="break-words">
+									{question.prompt}
+									{question.required ? " — required" : " — optional"}
+									{question.kind === "text"
+										? " — written answer"
+										: question.kind === "nps"
+											? ` — 0 to 10, "${question.lowLabel}" to "${question.highLabel}"`
+											: ` — 1 to 5, "${question.lowLabel}" to "${question.highLabel}"`}
+								</li>
+							))}
+						</ol>
+					</dd>
+				</div>
+			</dl>
+		)
+	}
 	if (content.contentType === "trivia_question") {
 		return (
 			<dl className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">

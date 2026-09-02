@@ -132,6 +132,7 @@
 			"^@repo/contracts/pisocamp-preview$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/preview.schema.ts",
 			"^@repo/contracts/pisocamp-version-history$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/version-history.schema.ts",
 			"^@repo/contracts/pisocamp-content-audit$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/content-audit.schema.ts",
+			"^@repo/contracts/pisocamp-content$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/content.schema.ts",
 			"^@repo/db/(.*)$": "<rootDir>/../../../packages/db/src/$1",
 			"^@repo/auth/(.*)$": "<rootDir>/../../../packages/auth/src/$1",
 			"^@repo/contracts$": "<rootDir>/../../../packages/contracts/src",

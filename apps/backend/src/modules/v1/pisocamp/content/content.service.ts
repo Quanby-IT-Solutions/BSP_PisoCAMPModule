@@ -10,6 +10,7 @@ import type {
 	PisoCampContentSummary,
 	PisoCampRelatedLinkInput,
 	PisoCampRelatedLinkOutput,
+	PisoCampSurveyPurpose,
 } from "@repo/contracts"
 import {
 	contentItems,
@@ -17,6 +18,8 @@ import {
 	pisoCampCurrencyDenominations,
 	pisoCampCurrencySeries,
 	relatedLinks,
+	surveyDetails,
+	surveyQuestions,
 	triviaQuestionDetails,
 	users,
 } from "@repo/db/schema"
@@ -32,8 +35,10 @@ import type { V1Inputs } from "@/config/contract-types"
 import { copyVersionAssets } from "../assets/version-assets"
 import {
 	fromContentVersion,
+	toSurveyDetailValues,
+	toSurveyQuestionValues,
 	toTriviaDetailValues,
-	withTriviaDetail,
+	withChildDetails,
 	type ContentVersionRow,
 	getContentDetail,
 	selectContentLinks,
@@ -72,7 +77,7 @@ export class ContentService {
 				createdBy: actorId,
 				...this.toVersionValues(input.content),
 			})
-			await this.insertTriviaDetail(tx, input.content, {
+			await this.insertChildDetails(tx, input.content, {
 				contentItemId: itemId,
 				contentVersionId: versionId,
 			})
@@ -134,7 +139,7 @@ export class ContentService {
 				createdBy: actorId,
 				...this.toVersionValues(input.content),
 			})
-			await this.insertTriviaDetail(tx, input.content, {
+			await this.insertChildDetails(tx, input.content, {
 				contentItemId: item.id,
 				contentVersionId: versionId,
 			})
@@ -149,7 +154,7 @@ export class ContentService {
 				.set({ currentWorkingVersionId: versionId, lastEditedBy: actorId, updatedAt: new Date() })
 				.where(eq(contentItems.id, item.id))
 			const changedFields = this.changedFields(
-				await withTriviaDetail(tx, current),
+				await withChildDetails(tx, current),
 				oldLinks,
 				input.content,
 				input.relatedLinks
@@ -186,6 +191,7 @@ export class ContentService {
 				: undefined,
 			input.category ? eq(triviaQuestionDetails.category, input.category) : undefined,
 			input.difficulty ? eq(triviaQuestionDetails.difficulty, input.difficulty) : undefined,
+			input.purpose ? eq(surveyDetails.purpose, input.purpose) : undefined,
 			input.search
 				? sql`to_tsvector('simple', ${contentVersions.title} || ' ' || ${contentVersions.summary}) @@ plainto_tsquery('simple', ${input.search})`
 				: undefined,
@@ -202,6 +208,11 @@ export class ContentService {
 			triviaCategory: triviaQuestionDetails.category,
 			triviaDifficulty: triviaQuestionDetails.difficulty,
 			triviaActive: triviaQuestionDetails.active,
+			surveyPurpose: surveyDetails.purpose,
+			surveyQuestionCount: sql<number>`(
+				select count(*)::int from ${surveyQuestions}
+				where ${surveyQuestions.contentVersionId} = ${contentVersions.id}
+			)`,
 			creatorId: creator.id,
 			creatorName: creator.name,
 			editorId: editor.id,
@@ -219,6 +230,7 @@ export class ContentService {
 				triviaQuestionDetails,
 				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 			)
+			.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
 			.where(where)
 			.orderBy(desc(contentItems.updatedAt), asc(contentItems.id))
 			.limit(limit)
@@ -231,6 +243,7 @@ export class ContentService {
 				triviaQuestionDetails,
 				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 			)
+			.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
 			.where(where)
 		return {
 			items: rows.map(row => this.toSummary(row)),
@@ -299,14 +312,20 @@ export class ContentService {
 		return fromContentVersion(row)
 	}
 
-	private async insertTriviaDetail(
+	/** Writes whichever child rows the content type has, and none otherwise. */
+	private async insertChildDetails(
 		tx: DatabaseTransaction,
 		content: PisoCampContentDraft,
 		identity: { contentItemId: string; contentVersionId: string }
 	) {
-		const values = toTriviaDetailValues(content, identity)
-		if (values === null) return
-		await tx.insert(triviaQuestionDetails).values(values)
+		const trivia = toTriviaDetailValues(content, identity)
+		if (trivia !== null) await tx.insert(triviaQuestionDetails).values(trivia)
+		const survey = toSurveyDetailValues(content, identity)
+		if (survey !== null) {
+			await tx.insert(surveyDetails).values(survey)
+			const questions = toSurveyQuestionValues(content, identity)
+			if (questions?.length) await tx.insert(surveyQuestions).values(questions)
+		}
 	}
 
 	private async insertLinks(
@@ -354,7 +373,10 @@ export class ContentService {
 			"featureLevel",
 			"hotspot",
 			"primaryUrl",
+			"purpose",
+			"questions",
 			"seriesCode",
+			"subjectContentItemId",
 			"summary",
 			"title",
 		]
@@ -388,6 +410,8 @@ export class ContentService {
 		triviaCategory: string | null
 		triviaDifficulty: "easy" | "medium" | "hard" | null
 		triviaActive: boolean | null
+		surveyPurpose: PisoCampSurveyPurpose | null
+		surveyQuestionCount: number
 		creatorId: string
 		creatorName: string
 		editorId: string
@@ -414,6 +438,13 @@ export class ContentService {
 				category: row.triviaCategory!,
 				difficulty: row.triviaDifficulty!,
 				active: row.triviaActive ?? true,
+			} as PisoCampContentSummary
+		}
+		if (row.contentType === "survey") {
+			return {
+				...common,
+				purpose: row.surveyPurpose!,
+				questionCount: row.surveyQuestionCount,
 			} as PisoCampContentSummary
 		}
 		return {

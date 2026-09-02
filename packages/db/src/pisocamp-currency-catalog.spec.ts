@@ -24,7 +24,7 @@ const expectedDenominationCodes = {
 } as const
 
 describe("CM-1 frozen content vocabulary and currency catalog", () => {
-	it("uses the exact six content types and seven lifecycle states", () => {
+	it("uses the exact seven content types and seven lifecycle states", () => {
 		expect(CONTENT_TYPES).toEqual([
 			"banknote",
 			"coin",
@@ -32,6 +32,7 @@ describe("CM-1 frozen content vocabulary and currency catalog", () => {
 			"advisory",
 			"link",
 			"trivia_question",
+			"survey",
 		])
 		expect(CONTENT_STATUSES).toEqual([
 			"draft",

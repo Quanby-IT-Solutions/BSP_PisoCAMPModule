@@ -50,6 +50,16 @@ export function renderPublishedContentResources(
 								choices: content.choices,
 							}
 						: {}),
+					// EV-1 fields, and only for a survey. A survey travels with its
+					// questions because EV-2 presents it offline, and a survey with
+					// no questions is nothing to present.
+					...(content.contentType === "survey"
+						? {
+								purpose: content.purpose,
+								subjectContentItemId: content.subjectContentItemId ?? null,
+								questions: content.questions,
+							}
+						: {}),
 					relatedLinks: candidate.relatedLinks,
 				}),
 				"utf8"

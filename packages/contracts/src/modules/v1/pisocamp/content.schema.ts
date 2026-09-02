@@ -7,6 +7,7 @@ export const CONTENT_TYPES = [
 	"advisory",
 	"link",
 	"trivia_question",
+	"survey",
 ] as const
 export const PisoCampContentTypeSchema = z.enum(CONTENT_TYPES)
 
@@ -198,6 +199,123 @@ const TriviaQuestionDraftSchema = z
 		}
 	})
 
+export const SURVEY_PURPOSES = [
+	"topic",
+	"satisfaction",
+	"feature",
+	"application",
+	"nps",
+	"usefulness",
+] as const
+export const PisoCampSurveyPurposeSchema = z.enum(SURVEY_PURPOSES)
+
+export const SURVEY_QUESTION_KINDS = ["rating", "nps", "text"] as const
+export const PisoCampSurveyQuestionKindSchema = z.enum(SURVEY_QUESTION_KINDS)
+
+/**
+ * The scales a survey question is answered on, per the SRD.
+ *
+ * Constants of the kind rather than fields an editor fills in: a rating that
+ * ran 1-7 on one survey and 1-5 on another could not be reported together, and
+ * an NPS that did not run 0-10 would not be an NPS.
+ */
+export const SURVEY_SCALES = {
+	rating: { min: 1, max: 5 },
+	nps: { min: 0, max: 10 },
+} as const
+
+/**
+ * NPS grouping, per the SRD: promoter 9-10, passive 7-8, detractor 0-6.
+ *
+ * Stated once and stored with each question, so a report reads the banding
+ * rather than repeating the arithmetic.
+ */
+export const NPS_BANDS = { promoterMin: 9, passiveMin: 7 } as const
+
+export const npsBandFor = (score: number): "promoter" | "passive" | "detractor" =>
+	score >= NPS_BANDS.promoterMin
+		? "promoter"
+		: score >= NPS_BANDS.passiveMin
+			? "passive"
+			: "detractor"
+
+const SurveyPromptSchema = PlainTextSchema(300)
+const ScaleLabelSchema = PlainTextSchema(100)
+
+const ScaledQuestionShape = {
+	prompt: SurveyPromptSchema,
+	required: z.boolean(),
+	// Both ends are worded, because a bare 1-5 means different things to
+	// different people and AN-019 asks for the wording to be documented.
+	lowLabel: ScaleLabelSchema,
+	highLabel: ScaleLabelSchema,
+}
+
+const RatingQuestionSchema = z
+	.object({ kind: z.literal("rating"), ...ScaledQuestionShape })
+	.strict()
+
+const NpsQuestionSchema = z.object({ kind: z.literal("nps"), ...ScaledQuestionShape }).strict()
+
+const TextQuestionSchema = z
+	.object({ kind: z.literal("text"), prompt: SurveyPromptSchema, required: z.boolean() })
+	.strict()
+
+export const PisoCampSurveyQuestionSchema = z.discriminatedUnion("kind", [
+	RatingQuestionSchema,
+	NpsQuestionSchema,
+	TextQuestionSchema,
+])
+
+export const MAX_SURVEY_QUESTIONS = 20
+
+/**
+ * EV-1 survey.
+ *
+ * A survey is content: its title is what a person is asked to take part in and
+ * its body is the explanation, so CM-3 versions, diffs, audits and publishes it
+ * with no knowledge of surveys at all. Purpose, subject and questions are what
+ * a survey has that other content does not.
+ */
+const SurveyDraftSchema = z
+	.object({
+		contentType: z.literal("survey"),
+		title: TitleSchema,
+		summary: SummarySchema,
+		body: BodySchema,
+		purpose: PisoCampSurveyPurposeSchema,
+		/** The topic or feature this survey evaluates, when it evaluates one. */
+		subjectContentItemId: z.uuid().nullish(),
+		questions: z.array(PisoCampSurveyQuestionSchema).min(1).max(MAX_SURVEY_QUESTIONS),
+	})
+	.strict()
+	.superRefine((survey, context) => {
+		const prompts = new Set(survey.questions.map(question => question.prompt))
+		if (prompts.size !== survey.questions.length) {
+			context.addIssue({
+				code: "custom",
+				message: "Questions must be distinct",
+				path: ["questions"],
+			})
+		}
+		// An NPS survey that asks nobody the NPS question cannot be reported as
+		// one, and AN-6 reads the purpose to decide how to report it.
+		if (survey.purpose === "nps" && !survey.questions.some(question => question.kind === "nps")) {
+			context.addIssue({
+				code: "custom",
+				message: "An NPS survey must ask the NPS question",
+				path: ["questions"],
+			})
+		}
+		if (survey.questions.filter(question => question.kind === "nps").length > 1) {
+			context.addIssue({
+				code: "custom",
+				message: "A survey asks the NPS question at most once",
+				path: ["questions"],
+			})
+		}
+	})
+
 const AdvisoryDraftSchema = z
 	.object({
 		contentType: z.literal("advisory"),
@@ -224,6 +342,7 @@ export const PisoCampContentDraftSchema = z.discriminatedUnion("contentType", [
 	AdvisoryDraftSchema,
 	LinkDraftSchema,
 	TriviaQuestionDraftSchema,
+	SurveyDraftSchema,
 ])
 
 const ExternalRelatedLinkInputSchema = z
@@ -366,6 +485,8 @@ export const ListPisoCampContentInputSchema = z
 		// hard it is, not by series and denomination.
 		category: CatalogCodeSchema.optional(),
 		difficulty: PisoCampTriviaDifficultySchema.optional(),
+		// EV-1: surveys are browsed by what they are for.
+		purpose: PisoCampSurveyPurposeSchema.optional(),
 		search: PlainTextSchema(160).optional(),
 	})
 	.strict()
@@ -423,6 +544,14 @@ export const PisoCampContentSummarySchema = z.discriminatedUnion("contentType", 
 			category: CatalogCodeSchema,
 			difficulty: PisoCampTriviaDifficultySchema,
 			active: z.boolean(),
+		})
+		.strict(),
+	z
+		.object({
+			...SummaryCommonShape,
+			contentType: z.literal("survey"),
+			purpose: PisoCampSurveyPurposeSchema,
+			questionCount: z.number().int().min(1).max(MAX_SURVEY_QUESTIONS),
 		})
 		.strict(),
 ])
@@ -700,6 +829,9 @@ export type ApprovePisoCampContentInput = z.infer<typeof ApprovePisoCampContentI
 export type RejectPisoCampContentInput = z.infer<typeof RejectPisoCampContentInputSchema>
 export type PublishPisoCampContentInput = z.infer<typeof PublishPisoCampContentInputSchema>
 export type ListPisoCampContentInput = z.infer<typeof ListPisoCampContentInputSchema>
+export type PisoCampSurveyPurpose = z.infer<typeof PisoCampSurveyPurposeSchema>
+export type PisoCampSurveyQuestionKind = z.infer<typeof PisoCampSurveyQuestionKindSchema>
+export type PisoCampSurveyQuestion = z.infer<typeof PisoCampSurveyQuestionSchema>
 export type PisoCampContentSummary = z.infer<typeof PisoCampContentSummarySchema>
 export type PisoCampContentVersion = z.infer<typeof PisoCampContentVersionSchema>
 export type PisoCampContentDetail = z.infer<typeof PisoCampContentDetailSchema>

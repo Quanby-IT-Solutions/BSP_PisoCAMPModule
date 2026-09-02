@@ -1,8 +1,11 @@
 import {
 	CreatePisoCampContentInputSchema,
+	MAX_SURVEY_QUESTIONS,
+	SURVEY_PURPOSES,
 	UpdatePisoCampContentInputSchema,
 	type CreatePisoCampContentInput,
 	type PisoCampContentType,
+	type PisoCampSurveyPurpose,
 	type UpdatePisoCampContentInput,
 } from "@repo/contracts"
 
@@ -10,6 +13,16 @@ export interface TriviaChoiceFormValue {
 	clientId: string
 	label: string
 	correct: boolean
+}
+
+export interface SurveyQuestionFormValue {
+	clientId: string
+	kind: "rating" | "nps" | "text"
+	prompt: string
+	required: boolean
+	/** Only meaningful on a scaled question; kept while the editor switches kind. */
+	lowLabel: string
+	highLabel: string
 }
 
 export interface RelatedLinkFormValue {
@@ -37,7 +50,38 @@ export interface ContentFormValues {
 	difficulty: "" | "easy" | "medium" | "hard"
 	choices: TriviaChoiceFormValue[]
 	active: boolean
+	/** Surveys only; "" until the editor has chosen what the survey is for. */
+	purpose: "" | PisoCampSurveyPurpose
+	/** The topic or feature the survey evaluates, as typed. Optional. */
+	subjectContentItemId: string
+	questions: SurveyQuestionFormValue[]
 	relatedLinks: RelatedLinkFormValue[]
+}
+
+export const SURVEY_PURPOSE_OPTIONS: readonly {
+	value: PisoCampSurveyPurpose
+	label: string
+}[] = [
+	{ value: "topic", label: "Topic" },
+	{ value: "satisfaction", label: "Satisfaction" },
+	{ value: "feature", label: "Feature" },
+	{ value: "application", label: "Application" },
+	{ value: "nps", label: "Net promoter score" },
+	{ value: "usefulness", label: "Usefulness" },
+]
+
+export const SURVEY_QUESTION_KIND_OPTIONS = [
+	{ value: "rating", label: "Rating (1-5)" },
+	{ value: "nps", label: "Net promoter score (0-10)" },
+	{ value: "text", label: "Written answer" },
+] as const
+
+/** The most and fewest questions a survey may ask, from the contract. */
+export const MAXIMUM_SURVEY_QUESTIONS = MAX_SURVEY_QUESTIONS
+export const MINIMUM_SURVEY_QUESTIONS = 1
+
+export function isSurveyPurpose(value: unknown): value is PisoCampSurveyPurpose {
+	return SURVEY_PURPOSES.some(purpose => purpose === value)
 }
 
 /**
@@ -139,6 +183,21 @@ export function emptyTriviaChoice(
 	return { clientId: generate(), label: "", correct: false }
 }
 
+export function emptySurveyQuestion(
+	generate: () => string = () => crypto.randomUUID()
+): SurveyQuestionFormValue {
+	// A rating is the commonest question and the one an editor is most likely
+	// to want first; the kind can be changed without losing the prompt.
+	return {
+		clientId: generate(),
+		kind: "rating",
+		prompt: "",
+		required: true,
+		lowLabel: "",
+		highLabel: "",
+	}
+}
+
 /** The most choices a question may offer, from the contract. */
 export const MAXIMUM_TRIVIA_CHOICES = 6
 export const MINIMUM_TRIVIA_CHOICES = 2
@@ -161,6 +220,11 @@ export function createEmptyContentForm(contentType: PisoCampContentType): Conten
 		// list makes the editor guess how many to add.
 		choices: [emptyTriviaChoice(), emptyTriviaChoice()],
 		active: true,
+		purpose: "",
+		subjectContentItemId: "",
+		// One blank question, because a survey needs at least one and an empty
+		// list makes the editor guess where to start.
+		questions: [emptySurveyQuestion()],
 		relatedLinks: [],
 	}
 }
@@ -206,6 +270,8 @@ export function changeContentType(
 		...values,
 		contentType,
 		primaryUrl: contentType === "link" ? values.primaryUrl : "",
+		purpose: contentType === "survey" ? values.purpose : ("" as const),
+		subjectContentItemId: contentType === "survey" ? values.subjectContentItemId : "",
 		seriesCode: supportsCurrency && seriesIsValid ? values.seriesCode : "",
 		denominationCode: supportsCurrency && seriesIsValid ? values.denominationCode : "",
 	}
@@ -253,6 +319,29 @@ function rawContent(values: ContentFormValues) {
 			active: values.active,
 		}
 	}
+	if (values.contentType === "survey") {
+		return {
+			...common,
+			contentType: values.contentType,
+			purpose: values.purpose,
+			// Left out rather than sent blank: no subject is a survey about the
+			// module, and "" is not an identifier.
+			...(values.subjectContentItemId.trim()
+				? { subjectContentItemId: values.subjectContentItemId.trim() }
+				: {}),
+			questions: values.questions.map(question =>
+				question.kind === "text"
+					? { kind: question.kind, prompt: question.prompt, required: question.required }
+					: {
+							kind: question.kind,
+							prompt: question.prompt,
+							required: question.required,
+							lowLabel: question.lowLabel,
+							highLabel: question.highLabel,
+						}
+			),
+		}
+	}
 	if (values.contentType === "link") {
 		return {
 			contentType: values.contentType,
@@ -284,6 +373,9 @@ function friendlyFieldName(key: string) {
 			category: "Category",
 			difficulty: "Difficulty",
 			choices: "Choices",
+			purpose: "Purpose",
+			questions: "Questions",
+			subjectContentItemId: "Subject",
 			relatedLinks: "Related links",
 		}[key] ?? "Field"
 	)
@@ -321,6 +413,16 @@ function errorsFromIssues(
 			errors[key] = "Enter a valid HTTPS URL."
 			continue
 		}
+		if (key === "questions") {
+			// The contract names the rule that was broken; a generic "invalid"
+			// would leave an editor guessing which question is wrong.
+			errors[key] = issue.message
+			continue
+		}
+		if (key === "subjectContentItemId") {
+			errors[key] = "Enter the ID of the topic or feature, or leave it blank."
+			continue
+		}
 		if (key === "choices") {
 			// The contract reports the reason precisely; a generic "invalid" here
 			// would tell an editor nothing about which rule they broke.
@@ -336,6 +438,7 @@ function errorsFromIssues(
 			((key === "seriesCode" || key === "denominationCode") && !values[key]) ||
 			(key === "featureLevel" && !values.featureLevel) ||
 			(key === "difficulty" && !values.difficulty) ||
+			(key === "purpose" && !values.purpose) ||
 			(key === "category" && !values.category)
 		errors[key] = required ? `${friendlyFieldName(key)} is required.` : issue.message
 	}

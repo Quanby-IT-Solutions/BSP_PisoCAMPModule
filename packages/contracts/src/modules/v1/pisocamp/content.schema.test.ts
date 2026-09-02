@@ -16,6 +16,11 @@ import {
 	CONTENT_FEATURE_LEVELS,
 	CONTENT_STATUSES,
 	CONTENT_TYPES,
+	NPS_BANDS,
+	npsBandFor,
+	SURVEY_PURPOSES,
+	SURVEY_QUESTION_KINDS,
+	SURVEY_SCALES,
 	TRIVIA_DIFFICULTIES,
 	CreatePisoCampContentInputSchema,
 	ListPisoCampContentInputSchema,
@@ -110,6 +115,7 @@ describe("CM-1 draft input schemas", () => {
 			"advisory",
 			"link",
 			"trivia_question",
+			"survey",
 		])
 		expect([...CONTENT_STATUSES]).toEqual([
 			"draft",
@@ -850,6 +856,167 @@ describe("GM-1 trivia questions", () => {
 				summary: "An advisory",
 				body: "Body copy.",
 				category: "security-features",
+			}).success
+		).toBe(false)
+	})
+})
+
+describe("EV-1 surveys", () => {
+	const rating = {
+		kind: "rating",
+		prompt: "How clear was this topic?",
+		required: true,
+		lowLabel: "Not clear at all",
+		highLabel: "Very clear",
+	} as const
+	const nps = {
+		kind: "nps",
+		prompt: "How likely are you to recommend Piso CAMP?",
+		required: true,
+		lowLabel: "Not at all likely",
+		highLabel: "Extremely likely",
+	} as const
+	const text = { kind: "text", prompt: "What would you change?", required: false } as const
+
+	const survey = {
+		contentType: "survey",
+		title: "How did we do?",
+		summary: "A short evaluation shown after a topic.",
+		body: "Answering is optional and takes less than a minute.",
+		purpose: "satisfaction",
+		subjectContentItemId: null,
+		questions: [rating, text],
+	} as const
+
+	it("is a content type like any other", () => {
+		expect([...CONTENT_TYPES]).toContain("survey")
+		expect([...SURVEY_PURPOSES]).toEqual([
+			"topic",
+			"satisfaction",
+			"feature",
+			"application",
+			"nps",
+			"usefulness",
+		])
+		expect([...SURVEY_QUESTION_KINDS]).toEqual(["rating", "nps", "text"])
+		expect(PisoCampContentDraftSchema.safeParse(survey).success).toBe(true)
+	})
+
+	it("states the scales and the NPS grouping the SRD fixes", () => {
+		expect(SURVEY_SCALES).toEqual({ rating: { min: 1, max: 5 }, nps: { min: 0, max: 10 } })
+		expect(NPS_BANDS).toEqual({ promoterMin: 9, passiveMin: 7 })
+		// Promoter 9-10, passive 7-8, detractor 0-6, at every boundary.
+		expect([10, 9].map(npsBandFor)).toEqual(["promoter", "promoter"])
+		expect([8, 7].map(npsBandFor)).toEqual(["passive", "passive"])
+		expect([6, 0].map(npsBandFor)).toEqual(["detractor", "detractor"])
+	})
+
+	it("takes between one and twenty questions", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({ ...survey, questions: [] }).success
+		).toBe(false)
+		const many = Array.from({ length: 20 }, (_value, index) => ({
+			...text,
+			prompt: `Question ${index}`,
+		}))
+		expect(PisoCampContentDraftSchema.safeParse({ ...survey, questions: many }).success).toBe(true)
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				...survey,
+				questions: [...many, { ...text, prompt: "One too many" }],
+			}).success
+		).toBe(false)
+	})
+
+	it("refuses a repeated prompt, which a response could not be attributed to", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({ ...survey, questions: [rating, rating] }).success
+		).toBe(false)
+	})
+
+	it("requires an NPS survey to ask the NPS question, and only once", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({ ...survey, purpose: "nps", questions: [rating] })
+				.success
+		).toBe(false)
+		expect(
+			PisoCampContentDraftSchema.safeParse({ ...survey, purpose: "nps", questions: [nps] }).success
+		).toBe(true)
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				...survey,
+				questions: [nps, { ...nps, prompt: "And again?" }],
+			}).success
+		).toBe(false)
+	})
+
+	it("words both ends of a scale, and neither end of a text answer", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				...survey,
+				questions: [{ kind: "rating", prompt: rating.prompt, required: true }],
+			}).success
+		).toBe(false)
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				...survey,
+				questions: [{ ...text, lowLabel: "Low", highLabel: "High" }],
+			}).success
+		).toBe(false)
+	})
+
+	it("refuses a scale an editor tried to choose", () => {
+		// The bounds belong to the kind: a rating that ran 1-7 on one survey and
+		// 1-5 on another could not be reported together.
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				...survey,
+				questions: [{ ...rating, scaleMin: 1, scaleMax: 7 }],
+			}).success
+		).toBe(false)
+	})
+
+	it("refuses markup in a prompt and an unknown question kind", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				...survey,
+				questions: [{ ...text, prompt: "<b>Tell us</b>" }],
+			}).success
+		).toBe(false)
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				...survey,
+				questions: [{ kind: "ranking", prompt: "Order these", required: false }],
+			}).success
+		).toBe(false)
+	})
+
+	it("takes an optional subject and refuses one that is not an id", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				...survey,
+				subjectContentItemId: "3f3d4c0e-9f7c-4f3a-9d8e-8b2b0a1c5d61",
+			}).success
+		).toBe(true)
+		const withoutSubject = Object.fromEntries(
+			Object.entries(survey).filter(([key]) => key !== "subjectContentItemId")
+		)
+		expect(PisoCampContentDraftSchema.safeParse(withoutSubject).success).toBe(true)
+		expect(
+			PisoCampContentDraftSchema.safeParse({ ...survey, subjectContentItemId: "the topic" })
+				.success
+		).toBe(false)
+	})
+
+	it("refuses survey fields on any other content type", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				contentType: "advisory",
+				title: survey.title,
+				summary: survey.summary,
+				body: survey.body,
+				purpose: "topic",
+				questions: [text],
 			}).success
 		).toBe(false)
 	})

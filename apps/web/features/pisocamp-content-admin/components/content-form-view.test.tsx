@@ -94,9 +94,11 @@ function HistoryRouteHarness() {
 async function chooseSelect(
 	user: ReturnType<typeof userEvent.setup>,
 	name: RegExp,
-	option: string
+	option: string,
+	// Which control, when a repeating group offers more than one by that name.
+	index = 0
 ) {
-	const trigger = screen.getByRole("combobox", { name })
+	const trigger = screen.getAllByRole("combobox", { name })[index]!
 	expect(trigger).toHaveAttribute("data-slot", "select-trigger")
 	await user.click(trigger)
 	await user.click(await screen.findByRole("option", { name: option }))
@@ -854,5 +856,170 @@ describe("ContentFormView trivia questions", () => {
 
 		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
 		expect(create.mock.calls[0]?.[0]).toMatchObject({ content: { active: false } })
+	})
+})
+
+describe("ContentFormView surveys", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		useDetail.mockReturnValue({ isPending: false, isError: false, data: detail, refetch: vi.fn() })
+		useCreate.mockReturnValue(mutation())
+		useUpdate.mockReturnValue(mutation())
+		useSubmit.mockReturnValue(mutation())
+	})
+
+	async function chooseSurvey(user: ReturnType<typeof userEvent.setup>) {
+		await chooseSelect(user, /content type/i, "Survey")
+	}
+
+	async function fillCommon(user: ReturnType<typeof userEvent.setup>) {
+		await user.type(screen.getByLabelText(/^title/i), "How did we do?")
+		await user.type(screen.getByLabelText(/^summary/i), "A short evaluation after a topic.")
+		await user.type(screen.getByLabelText(/^body/i), "Answering is optional.")
+		await chooseSelect(user, /purpose/i, "Satisfaction")
+	}
+
+	it("asks for survey fields only for a survey", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+
+		expect(screen.queryByRole("combobox", { name: /purpose/i })).not.toBeInTheDocument()
+
+		await chooseSurvey(user)
+		expect(screen.getByRole("combobox", { name: /purpose/i })).toBeInTheDocument()
+		expect(screen.getByLabelText(/subject content id/i)).toBeInTheDocument()
+		expect(screen.getByRole("group", { name: /questions/i })).toBeInTheDocument()
+	})
+
+	it("starts with the one question a survey needs, and will not remove it", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+		await chooseSurvey(user)
+
+		expect(screen.getByLabelText("Question 1")).toBeInTheDocument()
+		expect(screen.getByRole("button", { name: "Remove question 1" })).toBeDisabled()
+	})
+
+	it("words both ends of a scale and asks for neither on a written answer", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+		await chooseSurvey(user)
+
+		// A rating runs 1 to 5, so the wording is asked for at 1 and at 5.
+		expect(screen.getByLabelText("Wording at 1")).toBeInTheDocument()
+		expect(screen.getByLabelText("Wording at 5")).toBeInTheDocument()
+
+		await chooseSelect(user, /answer type/i, "Net promoter score (0-10)")
+		expect(screen.getByLabelText("Wording at 0")).toBeInTheDocument()
+		expect(screen.getByLabelText("Wording at 10")).toBeInTheDocument()
+
+		await chooseSelect(user, /answer type/i, "Written answer")
+		expect(screen.queryByLabelText(/^wording at/i)).not.toBeInTheDocument()
+	})
+
+	it("adds questions up to twenty and no further", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+		await chooseSurvey(user)
+
+		const add = screen.getByRole("button", { name: "Add question" })
+		for (let index = 0; index < 19; index += 1) await user.click(add)
+
+		expect(screen.getByLabelText("Question 20")).toBeInTheDocument()
+		expect(add).toBeDisabled()
+	})
+
+	it("sends the whole survey, with its purpose and questions in order", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseSurvey(user)
+		await fillCommon(user)
+		await user.type(screen.getByLabelText("Question 1"), "How clear was this topic?")
+		await user.type(screen.getByLabelText("Wording at 1"), "Not clear at all")
+		await user.type(screen.getByLabelText("Wording at 5"), "Very clear")
+		await user.click(screen.getByRole("button", { name: "Add question" }))
+		await chooseSelect(user, /answer type/i, "Written answer", 1)
+		await user.type(screen.getByLabelText("Question 2"), "What would you change?")
+		await user.click(screen.getAllByRole("checkbox", { name: /answer required/i })[1]!)
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+		expect(create.mock.calls[0]?.[0]).toMatchObject({
+			content: {
+				contentType: "survey",
+				purpose: "satisfaction",
+				questions: [
+					{
+						kind: "rating",
+						prompt: "How clear was this topic?",
+						required: true,
+						lowLabel: "Not clear at all",
+						highLabel: "Very clear",
+					},
+					{ kind: "text", prompt: "What would you change?", required: false },
+				],
+			},
+		})
+	})
+
+	it("leaves the subject out rather than sending a blank one", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseSurvey(user)
+		await fillCommon(user)
+		await user.type(screen.getByLabelText("Question 1"), "How clear was this topic?")
+		await user.type(screen.getByLabelText("Wording at 1"), "Not clear at all")
+		await user.type(screen.getByLabelText("Wording at 5"), "Very clear")
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+		expect(create.mock.calls[0]?.[0].content).not.toHaveProperty("subjectContentItemId")
+	})
+
+	it("refuses an NPS survey that never asks the NPS question, and says why", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseSurvey(user)
+		await user.type(screen.getByLabelText(/^title/i), "Would you recommend us?")
+		await user.type(screen.getByLabelText(/^summary/i), "A short evaluation.")
+		await user.type(screen.getByLabelText(/^body/i), "Answering is optional.")
+		await chooseSelect(user, /purpose/i, "Net promoter score")
+		await user.type(screen.getByLabelText("Question 1"), "How clear was this topic?")
+		await user.type(screen.getByLabelText("Wording at 1"), "Not clear at all")
+		await user.type(screen.getByLabelText("Wording at 5"), "Very clear")
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		expect(create).not.toHaveBeenCalled()
+		expect(
+			await screen.findByText("An NPS survey must ask the NPS question")
+		).toBeInTheDocument()
+	})
+
+	it("says a purpose is required rather than failing silently", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseSurvey(user)
+		await user.type(screen.getByLabelText(/^title/i), "How did we do?")
+		await user.type(screen.getByLabelText(/^summary/i), "A short evaluation.")
+		await user.type(screen.getByLabelText(/^body/i), "Answering is optional.")
+		await user.type(screen.getByLabelText("Question 1"), "How clear was this topic?")
+		await user.type(screen.getByLabelText("Wording at 1"), "Not clear at all")
+		await user.type(screen.getByLabelText("Wording at 5"), "Very clear")
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		expect(create).not.toHaveBeenCalled()
+		expect(await screen.findByText("Purpose is required.")).toBeInTheDocument()
 	})
 })

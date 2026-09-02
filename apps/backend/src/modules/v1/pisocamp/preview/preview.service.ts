@@ -19,7 +19,7 @@ import { selectVersionAssets } from "../assets/version-assets"
 import {
 	fromContentVersion,
 	selectContentLinks,
-	withTriviaDetail,
+	withChildDetails,
 } from "../content/content-mapping"
 import {
 	PreviewTokenError,
@@ -187,7 +187,7 @@ export class PreviewService {
 			versionNo: version.versionNo,
 			status: version.status as PisoCampPreviewableStatus,
 			contentType: version.contentType,
-			content: fromContentVersion(await withTriviaDetail(db, version)),
+			content: fromContentVersion(await withChildDetails(db, version)),
 			relatedLinks,
 			assets: attachments.map(entry => ({
 				role: entry.role,

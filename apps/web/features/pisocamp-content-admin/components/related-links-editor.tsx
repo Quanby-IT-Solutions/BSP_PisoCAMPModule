@@ -26,8 +26,10 @@ const LINK_KIND_OPTIONS: readonly { value: RelatedLinkFormValue["kind"]; label: 
 	{ value: "topic", label: "Content topic" },
 ]
 
+// min-h-11, not min-h-8: a select that reflows to two lines is still a touch
+// target, and 32px plus padding came out at 38px on a 320px screen.
 const REFLOW_SELECT_TRIGGER_CLASS =
-	"h-auto min-h-8 w-full max-w-full min-w-0 whitespace-normal py-2"
+	"h-auto min-h-11 w-full max-w-full min-w-0 whitespace-normal py-2"
 const REFLOW_SELECT_VALUE_CLASS = "min-w-0 whitespace-normal break-words line-clamp-none"
 const REFLOW_ACTION_CLASS = "h-auto min-h-7 w-full whitespace-normal sm:w-auto"
 

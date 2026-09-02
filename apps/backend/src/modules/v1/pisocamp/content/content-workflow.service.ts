@@ -35,6 +35,8 @@ import {
 	contentItems,
 	contentVersions,
 	relatedLinks,
+	surveyDetails,
+	surveyQuestions,
 	triviaQuestionDetails,
 	users,
 } from "@repo/db/schema"
@@ -46,7 +48,9 @@ import { db } from "@/common/database/database.client"
 import { copyVersionAssets, selectVersionAssets } from "../assets/version-assets"
 import {
 	fromContentVersion,
-	triviaDetailColumns,
+	childDetailColumns,
+	selectSurveyQuestionsByVersionIds,
+	withSurveyQuestionsFor,
 	selectContentLinks,
 	selectContentLinksByVersionIds,
 	type ContentDatabase,
@@ -136,26 +140,53 @@ function carriedContentFields(source: typeof contentVersions.$inferSelect) {
 }
 
 /**
- * Carries a version's GM-1 child row forward.
+ * Carries a version's child rows forward.
  *
  * A transition creates a new version row, and a question whose choices did not
- * come with it would be a question with no answers. Copied here so the workflow
- * needs to know only that some content types have a child row, not what one is.
+ * come with it would be a question with no answers -- as would a survey with no
+ * questions. Copied here so the workflow needs to know only that some content
+ * types have child rows, not what one is.
  */
-async function copyTriviaDetail(
+async function copyChildDetails(
 	tx: ContentDatabase,
 	input: { contentItemId: string; sourceVersionId: string; targetVersionId: string }
 ): Promise<void> {
-	const [detail] = await tx
+	const [trivia] = await tx
 		.select()
 		.from(triviaQuestionDetails)
 		.where(eq(triviaQuestionDetails.contentVersionId, input.sourceVersionId))
-	if (!detail) return
-	await tx.insert(triviaQuestionDetails).values({
-		...detail,
+	if (trivia) {
+		await tx.insert(triviaQuestionDetails).values({
+			...trivia,
+			contentVersionId: input.targetVersionId,
+			contentItemId: input.contentItemId,
+		})
+	}
+	const [survey] = await tx
+		.select()
+		.from(surveyDetails)
+		.where(eq(surveyDetails.contentVersionId, input.sourceVersionId))
+	if (!survey) return
+	await tx.insert(surveyDetails).values({
+		...survey,
 		contentVersionId: input.targetVersionId,
 		contentItemId: input.contentItemId,
 	})
+	const questions = await tx
+		.select()
+		.from(surveyQuestions)
+		.where(eq(surveyQuestions.contentVersionId, input.sourceVersionId))
+		.orderBy(asc(surveyQuestions.position))
+	if (!questions.length) return
+	await tx.insert(surveyQuestions).values(
+		questions.map(question => ({
+			...question,
+			id: randomUUID(),
+			contentVersionId: input.targetVersionId,
+			contentItemId: input.contentItemId,
+			createdAt: undefined,
+		}))
+	)
 }
 
 const itemCreator = alias(users, "workflow_item_creator")
@@ -304,7 +335,7 @@ export class ContentWorkflowService {
 				transitionAction: action,
 				transitionComments: comments,
 			})
-			await copyTriviaDetail(tx, {
+			await copyChildDetails(tx, {
 				contentItemId: item.id,
 				sourceVersionId: current.id,
 				targetVersionId: versionId,
@@ -486,7 +517,7 @@ export class ContentWorkflowService {
 			// Assets, choices and links come from the SOURCE, not the working
 			// version: restoring copy while keeping the current attachments would
 			// produce a combination nobody ever approved.
-			await copyTriviaDetail(tx, {
+			await copyChildDetails(tx, {
 				contentItemId: item.id,
 				sourceVersionId: source.id,
 				targetVersionId: versionId,
@@ -727,7 +758,7 @@ export class ContentWorkflowService {
 				featureLevel: contentVersions.featureLevel,
 				hotspotXPermille: contentVersions.hotspotXPermille,
 				hotspotYPermille: contentVersions.hotspotYPermille,
-				...triviaDetailColumns,
+				...childDetailColumns,
 				createdAt: contentVersions.createdAt,
 				creatorId: versionCreator.id,
 				creatorName: versionCreator.name,
@@ -749,6 +780,7 @@ export class ContentWorkflowService {
 				triviaQuestionDetails,
 				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 			)
+			.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
 			.where(eq(contentVersions.itemId, item.id))
 			.orderBy(desc(contentVersions.versionNo))
 			.limit(limit)
@@ -924,7 +956,7 @@ export class ContentWorkflowService {
 				featureLevel: contentVersions.featureLevel,
 				hotspotXPermille: contentVersions.hotspotXPermille,
 				hotspotYPermille: contentVersions.hotspotYPermille,
-				...triviaDetailColumns,
+				...childDetailColumns,
 				versionCreatedAt: contentVersions.createdAt,
 				transitionAction: contentVersions.transitionAction,
 				transitionComments: contentVersions.transitionComments,
@@ -948,6 +980,7 @@ export class ContentWorkflowService {
 				triviaQuestionDetails,
 				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 			)
+			.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
 			.where(eq(contentItems.id, itemId))
 		if (!row) throw new ORPCError("NOT_FOUND", { message: "Content item not found" })
 		if (!row.transitionAction) {
@@ -962,7 +995,9 @@ export class ContentWorkflowService {
 				id: row.versionId,
 				versionNo: row.versionNo,
 				status: row.versionStatus,
-				content: fromContentVersion(row),
+				content: fromContentVersion(
+					await withSurveyQuestionsFor(database, row.versionId, row)
+				),
 				relatedLinks: await selectContentLinks(database, row.versionId),
 				createdBy: { id: row.versionCreatorId, name: row.versionCreatorName },
 				createdAt: row.versionCreatedAt.toISOString(),
@@ -1013,7 +1048,7 @@ export class ContentWorkflowService {
 				featureLevel: contentVersions.featureLevel,
 				hotspotXPermille: contentVersions.hotspotXPermille,
 				hotspotYPermille: contentVersions.hotspotYPermille,
-				...triviaDetailColumns,
+				...childDetailColumns,
 			})
 			.from(contentItems)
 			.innerJoin(
@@ -1027,6 +1062,7 @@ export class ContentWorkflowService {
 				triviaQuestionDetails,
 				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 			)
+			.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
 			.where(and(eq(contentItems.status, "published"), eq(contentVersions.status, "published")))
 			.orderBy(asc(contentItems.id))
 		// GM-1: an inactive question is withheld from the bundle exactly as a
@@ -1040,12 +1076,19 @@ export class ContentWorkflowService {
 			database,
 			included.map(row => row.versionId)
 		)
+		const questionsByVersionId = await selectSurveyQuestionsByVersionIds(
+			database,
+			included.filter(row => row.contentType === "survey").map(row => row.versionId)
+		)
 		return {
 			candidates: included.map(row => ({
 				itemId: row.itemId,
 				versionId: row.versionId,
 				versionNo: row.versionNo,
-				content: fromContentVersion(row),
+				content: fromContentVersion({
+					...row,
+					surveyQuestions: questionsByVersionId.get(row.versionId) ?? null,
+				}),
 				relatedLinks: linksByVersionId.get(row.versionId) ?? [],
 			})),
 			exclusions: excluded.map(row => ({

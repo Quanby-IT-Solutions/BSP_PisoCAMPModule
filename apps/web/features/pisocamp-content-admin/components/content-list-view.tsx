@@ -47,6 +47,16 @@ const CONTENT_TYPE_FILTERS: readonly {
 	{ value: "advisory", label: "Advisory" },
 	{ value: "link", label: "Link" },
 	{ value: "trivia_question", label: "Trivia question" },
+	{ value: "survey", label: "Survey" },
+]
+const PURPOSE_FILTERS: readonly { value: string; label: string }[] = [
+	{ value: "all", label: "All purposes" },
+	{ value: "topic", label: "Topic" },
+	{ value: "satisfaction", label: "Satisfaction" },
+	{ value: "feature", label: "Feature" },
+	{ value: "application", label: "Application" },
+	{ value: "nps", label: "Net promoter score" },
+	{ value: "usefulness", label: "Usefulness" },
 ]
 const STATUS_FILTERS: readonly { value: PisoCampContentStatus | "all"; label: string }[] = [
 	{ value: "all", label: "All statuses" },
@@ -88,6 +98,12 @@ function isTriviaDifficulty(value: unknown): value is "easy" | "medium" | "hard"
 	return value === "easy" || value === "medium" || value === "hard"
 }
 
+function isSurveyPurpose(
+	value: unknown
+): value is "topic" | "satisfaction" | "feature" | "application" | "nps" | "usefulness" {
+	return PURPOSE_FILTERS.some(option => option.value !== "all" && option.value === value)
+}
+
 function positivePage(value: string | null) {
 	const page = Number(value)
 	return Number.isInteger(page) && page > 0 ? page : 1
@@ -114,6 +130,11 @@ export function ContentListView() {
 	const difficultyParam = searchParams.get("difficulty")
 	const difficulty =
 		showsQuestions && isTriviaDifficulty(difficultyParam) ? difficultyParam : undefined
+	// EV-1: surveys are browsed by what they are for, on the same principle.
+	const showsSurveys = contentType === "survey"
+	const purposeParam = searchParams.get("purpose")
+	const purpose =
+		showsSurveys && isSurveyPurpose(purposeParam) ? purposeParam : undefined
 	const content = usePisoCampContentListQuery({
 		page,
 		limit: 20,
@@ -121,6 +142,7 @@ export function ContentListView() {
 		...(status ? { status } : {}),
 		...(category ? { category } : {}),
 		...(difficulty ? { difficulty } : {}),
+		...(purpose ? { purpose } : {}),
 		...(search ? { search } : {}),
 	})
 
@@ -286,6 +308,33 @@ export function ContentListView() {
 							</SelectContent>
 						</Select>
 					</div>
+				</div>
+			) : null}
+
+			{showsSurveys ? (
+				<div className="min-w-0 space-y-2">
+					<Label htmlFor="content-purpose-filter">Purpose</Label>
+					<Select
+						name="purpose"
+						value={purpose ?? "all"}
+						onValueChange={value => {
+							if (typeof value !== "string") return
+							updateUrl({ purpose: value === "all" ? undefined : value, page: undefined })
+						}}
+					>
+						<SelectTrigger id="content-purpose-filter" wrapValue className="w-full sm:max-w-xs">
+							<SelectValue>
+								{PURPOSE_FILTERS.find(option => option.value === (purpose ?? "all"))?.label}
+							</SelectValue>
+						</SelectTrigger>
+						<SelectContent>
+							{PURPOSE_FILTERS.map(option => (
+								<SelectItem key={option.value} value={option.value}>
+									{option.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
 				</div>
 			) : null}
 
