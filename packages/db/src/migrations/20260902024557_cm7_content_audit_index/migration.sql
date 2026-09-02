@@ -1,0 +1,1 @@
+CREATE INDEX "audit_log_target_idx" ON "audit_log" ("target_type","target_id","created_at" DESC NULLS LAST);

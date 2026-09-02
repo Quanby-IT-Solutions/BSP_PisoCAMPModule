@@ -78,12 +78,14 @@ export function ContentReviewView({
 	canPreview = false,
 	canPublish,
 	canRestore = false,
+	canViewAudit = false,
 	itemId,
 }: {
 	canApprove: boolean
 	canPreview?: boolean
 	canPublish: boolean
 	canRestore?: boolean
+	canViewAudit?: boolean
 	itemId: string
 }) {
 	const review = usePisoCampContentReviewDetailQuery({ itemId })
@@ -312,6 +314,16 @@ export function ContentReviewView({
 			</Card>
 
 			<ContentLifecycleActions canPublish={canPublish} detail={detail} />
+
+			{canViewAudit ? (
+				<Button
+					variant="outline"
+					className="min-h-11 touch-manipulation transition-colors"
+					render={<Link href={`/pisocamp/content/${detail.id}/audit`} />}
+				>
+					View Audit History
+				</Button>
+			) : null}
 
 			{canRestore ? (
 				<Button

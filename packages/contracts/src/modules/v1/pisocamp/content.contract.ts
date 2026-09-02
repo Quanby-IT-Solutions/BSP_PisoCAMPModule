@@ -1,6 +1,10 @@
 import { oc } from "@orpc/contract"
 
 import {
+	ListPisoCampContentAuditInputSchema,
+	ListPisoCampContentAuditOutputSchema,
+} from "./content-audit.schema.js"
+import {
 	ApprovePisoCampContentInputSchema,
 	ArchivePisoCampContentInputSchema,
 	CreatePisoCampContentInputSchema,
@@ -154,6 +158,15 @@ export const pisoCampContentContract = {
 		})
 		.input(SchedulePisoCampContentPublicationInputSchema)
 		.output(PisoCampContentReviewDetailSchema),
+	audit: oc
+		.route({
+			method: "GET",
+			path: "/admin/pisocamp/content/{itemId}/audit",
+			summary: "List the complete change and approval history of one content item",
+			tags,
+		})
+		.input(ListPisoCampContentAuditInputSchema)
+		.output(ListPisoCampContentAuditOutputSchema),
 	versions: oc
 		.route({
 			method: "GET",

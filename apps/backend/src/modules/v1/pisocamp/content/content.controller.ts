@@ -10,6 +10,7 @@ import { RequirePermissions } from "@/shared/decorators/require-permissions.deco
 import { StrictThrottle } from "@/shared/decorators/strict-throttle.decorator"
 import { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
 
+import { ContentAuditService } from "./content-audit.service"
 import { ContentWorkflowService } from "./content-workflow.service"
 import { ContentService } from "./content.service"
 
@@ -18,6 +19,7 @@ export class ContentController {
 	constructor(
 		private readonly contentService: ContentService,
 		private readonly contentWorkflowService: ContentWorkflowService,
+		private readonly contentAuditService: ContentAuditService,
 		private readonly logger: Logger
 	) {}
 
@@ -176,6 +178,14 @@ export class ContentController {
 			this.safe("schedule", () =>
 				this.contentWorkflowService.schedulePublication(input, session.user.id)
 			)
+		)
+	}
+
+	@RequirePermissions("content.audit.view")
+	@Implement(v1.pisocamp.admin.content.audit)
+	async listContentAudit() {
+		return implement(v1.pisocamp.admin.content.audit).handler(({ input }) =>
+			this.safe("audit", () => this.contentAuditService.list(input))
 		)
 	}
 

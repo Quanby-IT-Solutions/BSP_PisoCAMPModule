@@ -376,4 +376,18 @@ describe("ContentReviewView", () => {
 		rerender(<ContentReviewView itemId={detail.id} canApprove canPublish={false} />)
 		expect(screen.queryByRole("link", { name: "View Version History" })).not.toBeInTheDocument()
 	})
+
+	it("links to audit history only for a holder of content.audit.view", () => {
+		const { rerender } = render(
+			<ContentReviewView itemId={detail.id} canApprove canViewAudit canPublish={false} />
+		)
+
+		expect(screen.getByRole("link", { name: "View Audit History" })).toHaveAttribute(
+			"href",
+			`/pisocamp/content/${detail.id}/audit`
+		)
+
+		rerender(<ContentReviewView itemId={detail.id} canApprove canPublish={false} />)
+		expect(screen.queryByRole("link", { name: "View Audit History" })).not.toBeInTheDocument()
+	})
 })

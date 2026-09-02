@@ -5,6 +5,7 @@ import { env } from "@/config/env.config"
 import { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
 import { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 
+import { ContentAuditService } from "./content-audit.service"
 import { ContentScheduleWorker } from "./content-schedule.worker"
 import { ContentWorkflowService } from "./content-workflow.service"
 import { ContentController } from "./content.controller"
@@ -16,6 +17,7 @@ import { ContentService } from "./content.service"
 	providers: [
 		ContentService,
 		ContentWorkflowService,
+		ContentAuditService,
 		IdempotencyService,
 		IdempotencyInterceptor,
 		{

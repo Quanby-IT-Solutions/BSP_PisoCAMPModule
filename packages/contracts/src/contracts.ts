@@ -209,6 +209,21 @@ export type {
 	UploadPisoCampAssetOutput,
 } from "./modules/v1/pisocamp/asset.schema.js"
 
+// CM-7 per-item content audit history
+export {
+	ListPisoCampContentAuditInputSchema,
+	ListPisoCampContentAuditOutputSchema,
+	PISO_CAMP_CONTENT_AUDIT_ACTIONS,
+	PisoCampContentAuditActionSchema,
+	PisoCampContentAuditEntrySchema,
+} from "./modules/v1/pisocamp/content-audit.schema.js"
+export type {
+	ListPisoCampContentAuditInput,
+	ListPisoCampContentAuditOutput,
+	PisoCampContentAuditAction,
+	PisoCampContentAuditEntry,
+} from "./modules/v1/pisocamp/content-audit.schema.js"
+
 // CM-4 version history and restore protocol
 export {
 	ListPisoCampContentVersionsInputSchema,

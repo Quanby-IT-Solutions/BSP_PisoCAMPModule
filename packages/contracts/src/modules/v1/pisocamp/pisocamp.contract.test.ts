@@ -38,6 +38,7 @@ describe("Piso CAMP consent contract", () => {
 			"deactivate",
 			"archive",
 			"schedule",
+			"audit",
 			"versions",
 			"restore",
 		])

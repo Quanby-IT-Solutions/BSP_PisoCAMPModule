@@ -6,6 +6,7 @@ import { IDEMPOTENCY_REQUIREMENT_KEY } from "@/shared/decorators/require-idempot
 import { REQUIRED_PERMISSIONS_KEY } from "@/shared/decorators/require-permissions.decorator"
 import { STRICT_THROTTLE_KEY } from "@/shared/decorators/strict-throttle.decorator"
 
+import { ContentAuditService } from "./content-audit.service"
 import { ContentWorkflowService } from "./content-workflow.service"
 import { ContentController } from "./content.controller"
 import { ContentService } from "./content.service"
@@ -106,6 +107,7 @@ describe("ContentController", () => {
 		getReviewDetail: jest.fn(),
 		transition: jest.fn(),
 	}
+	const audit = { list: jest.fn() }
 	const logger = { error: jest.fn() }
 	let controller: ContentController
 	beforeEach(async () => {
@@ -114,6 +116,7 @@ describe("ContentController", () => {
 			providers: [
 				{ provide: ContentService, useValue: service },
 				{ provide: ContentWorkflowService, useValue: workflow },
+				{ provide: ContentAuditService, useValue: audit },
 				{ provide: Logger, useValue: logger },
 			],
 		}).compile()

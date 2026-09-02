@@ -24,6 +24,10 @@
 		"./pisocamp-version-history": {
 			"types": "./dist/modules/v1/pisocamp/version-history.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/version-history.schema.js"
+		},
+		"./pisocamp-content-audit": {
+			"types": "./dist/modules/v1/pisocamp/content-audit.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/content-audit.schema.js"
 		}
 	},
 	"scripts": {

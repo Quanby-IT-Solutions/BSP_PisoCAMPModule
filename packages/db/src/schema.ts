@@ -1138,6 +1138,8 @@ export const auditLog = createTable(
 		// The read endpoint is strictly reverse-chronological.
 		index("audit_log_created_at_idx").on(t.createdAt),
 		index("audit_log_actor_id_idx").on(t.actorId),
+		// CM-7 reads the trail scoped to one target, newest first.
+		index("audit_log_target_idx").on(t.targetType, t.targetId, t.createdAt.desc()),
 	]
 )
 
