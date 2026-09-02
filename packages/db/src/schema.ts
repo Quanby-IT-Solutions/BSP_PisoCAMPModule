@@ -1583,6 +1583,72 @@ export const relatedLinks = createTable(
 )
 
 // ============================================================================
+// AN-8 REPORT FRAMEWORK
+// ============================================================================
+
+/**
+ * One report a person can run (AN-8, §4.2-K).
+ *
+ * The registry lives in `@repo/contracts`; these rows are the database's copy
+ * of it, upserted at start-up so a run can point at a real definition. Adding
+ * a KPI is a registry entry, not a migration.
+ */
+export const reportDefinitions = createTable("report_definition", t => ({
+	key: t.text("key").primaryKey(),
+	name: t.text("name").notNull(),
+	description: t.text("description").notNull(),
+	/** The table the figures come from, shown on the report itself. */
+	dataSource: t.text("data_source").notNull(),
+	/** The subset of the approved filter list this report can apply. */
+	supportedFilters: t.jsonb("supported_filters").notNull().$type<string[]>(),
+	createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: t.timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}))
+
+/**
+ * One generation of one report.
+ *
+ * The result is stored, not recomputed on read: a historical report has to say
+ * the same thing next month as it said today, and AN-9 exports this row rather
+ * than running the query again.
+ *
+ * The id is minted by the client, as RF-2 does elsewhere, so a retry after a
+ * lost response returns the first run instead of generating a second.
+ */
+export const reportRuns = createTable(
+	"report_run",
+	t => ({
+		id: t.uuid("id").primaryKey(),
+		definitionKey: t
+			.text("definition_key")
+			.notNull()
+			.references(() => reportDefinitions.key, { onDelete: "restrict" }),
+		/** Who ran it. Null only once the account has been deleted. */
+		requestedBy: t.text("requested_by").references(() => users.id, { onDelete: "set null" }),
+		fromDate: t.date("from_date").notNull(),
+		toDate: t.date("to_date").notNull(),
+		filters: t.jsonb("filters").notNull().$type<Record<string, unknown>>(),
+		/** True when the report was withheld rather than computed. */
+		suppressed: t.boolean("suppressed").notNull().default(false),
+		suppressionReason: t.text("suppression_reason"),
+		result: t.jsonb("result").$type<unknown>(),
+		generatedAt: t.timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		check("report_run_range_check", sql`${t.fromDate} <= ${t.toDate}`),
+		// A withheld report has a reason and no figures; a computed one is the
+		// other way round. Either half alone would be a report nobody can read.
+		check(
+			"report_run_suppression_check",
+			sql`(${t.suppressed} and ${t.suppressionReason} is not null and ${t.result} is null)
+				or (not ${t.suppressed} and ${t.suppressionReason} is null and ${t.result} is not null)`
+		),
+		index("report_run_generated_at_idx").on(t.generatedAt.desc()),
+		index("report_run_definition_idx").on(t.definitionKey, t.generatedAt.desc()),
+	]
+)
+
+// ============================================================================
 // AUDIT LOG
 // ============================================================================
 
@@ -1670,6 +1736,8 @@ export const relations = defineRelations(
 		contentBundleChannels,
 		contentBundleRebuildRequests,
 		relatedLinks,
+		reportDefinitions,
+		reportRuns,
 		auditLog,
 	},
 	r => ({

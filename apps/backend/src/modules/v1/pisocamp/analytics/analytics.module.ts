@@ -22,6 +22,6 @@ import { SessionizerService } from "./sessionizer.service"
 		SessionizerService,
 		PisoCampAdminConfigService,
 	],
-	exports: [SessionizerService],
+	exports: [SessionizerService, EngagementService, RetentionService, AdoptionService],
 })
 export class AnalyticsModule {}

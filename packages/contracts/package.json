@@ -41,6 +41,10 @@
 			"types": "./dist/modules/v1/pisocamp/adoption.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/adoption.schema.js"
 		},
+		"./pisocamp-report": {
+			"types": "./dist/modules/v1/pisocamp/report.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/report.schema.js"
+		},
 		"./pisocamp-retention": {
 			"types": "./dist/modules/v1/pisocamp/retention.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/retention.schema.js"

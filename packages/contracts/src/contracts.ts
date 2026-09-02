@@ -312,6 +312,34 @@ export type {
 	KeyActionEvent,
 } from "./modules/v1/pisocamp/adoption.schema.js"
 
+// AN-8 the parameter-driven report framework
+export {
+	ActivitySummarySchema,
+	DEMOGRAPHIC_FILTER_KEYS,
+	GenerateReportInputSchema,
+	ListReportDefinitionsOutputSchema,
+	ListReportRunsInputSchema,
+	ListReportRunsOutputSchema,
+	REPORT_DEFINITIONS,
+	REPORT_FILTER_KEYS,
+	ReportDefinitionKeySchema,
+	ReportDefinitionSchema,
+	ReportFilterKeySchema,
+	ReportFiltersSchema,
+	ReportResultSchema,
+	ReportRunSchema,
+} from "./modules/v1/pisocamp/report.schema.js"
+export type {
+	ActivitySummary,
+	GenerateReportInput,
+	ReportDefinition,
+	ReportDefinitionKey,
+	ReportFilterKey,
+	ReportFilters,
+	ReportResult,
+	ReportRun,
+} from "./modules/v1/pisocamp/report.schema.js"
+
 // AN-4 retention, churn and lifetime
 export {
 	CohortRetentionSchema,

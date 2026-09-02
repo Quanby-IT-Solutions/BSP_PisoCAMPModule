@@ -2,9 +2,12 @@ import { Injectable } from "@nestjs/common"
 import { sql } from "drizzle-orm"
 
 import { ADOPTION_FEATURES, KEY_ACTION_EVENTS } from "@repo/contracts/pisocamp-adoption"
+import type { ReportFilters } from "@repo/contracts/pisocamp-report"
 
 import { db } from "@/common/database/database.client"
 import type { V1Inputs, V1Outputs } from "@/config/contract-types"
+
+import { eventFilters, eventRange } from "../reports/report-filters"
 
 const MANILA = "Asia/Manila"
 
@@ -50,7 +53,7 @@ export class AdoptionService {
 	 * analytics carries.
 	 */
 	async summary(
-		input: V1Inputs["pisocamp"]["analytics"]["adoption"]
+		input: V1Inputs["pisocamp"]["analytics"]["adoption"] & { filters?: ReportFilters }
 	): Promise<Summary> {
 		const keyActionEvents = [...KEY_ACTION_EVENTS]
 		// Interpolated one at a time: a JS array reaches PostgreSQL as a record,
@@ -59,10 +62,11 @@ export class AdoptionService {
 			keyActionEvents.map(name => sql`${name}`),
 			sql`, `
 		)
-		const range = sql`
-			e.occurred_at >= ((${input.from}::date)::timestamp at time zone ${MANILA})
-			and e.occurred_at < (((${input.to}::date + 1)::timestamp) at time zone ${MANILA})
-		`
+		// AN-8 runs this report with filters; the dashboard runs it without. One
+		// predicate either way, so there is only one query to be right about.
+		const range = sql`${eventRange(input.from, input.to)} and ${eventFilters(
+			input.filters ?? {}
+		)}`
 
 		const [creation] = (
 			await db.execute<{ prompted: string; registered: string }>(sql`

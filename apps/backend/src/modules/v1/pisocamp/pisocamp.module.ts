@@ -26,6 +26,7 @@ import {
 import { PisoCampController } from "./pisocamp.controller"
 import { PisoCampService } from "./pisocamp.service"
 import { PreviewModule } from "./preview/preview.module"
+import { ReportsModule } from "./reports/reports.module"
 import { SurveysModule } from "./surveys/surveys.module"
 import { TriviaModule } from "./trivia/trivia.module"
 
@@ -39,6 +40,7 @@ import { TriviaModule } from "./trivia/trivia.module"
 		BundleModule,
 		TriviaModule,
 		SurveysModule,
+		ReportsModule,
 	],
 	controllers: [PisoCampController, PisoCampProfileController],
 	providers: [
