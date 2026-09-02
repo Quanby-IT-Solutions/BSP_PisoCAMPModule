@@ -9,6 +9,7 @@ import 'package:mobile/features/pisocamp/presentation/providers/analytics_provid
 import 'package:mobile/features/pisocamp/presentation/providers/link_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 import 'package:mobile/features/pisocamp/data/survey_document.dart';
+import 'package:mobile/features/pisocamp/data/survey_triggers.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/survey_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/survey_prompt.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/zoomable_currency_image.dart';
@@ -107,7 +108,13 @@ class _CurrencyDetailScreenState extends ConsumerState<CurrencyDetailScreen> {
     if (_offeredForItemId == itemId) return;
     _offeredForItemId = itemId;
     try {
-      final survey = surveyForCompletedTopic(catalog.surveys, itemId);
+      final survey = await ref
+          .read(surveyTriggerCoordinatorProvider)
+          .fire(
+            trigger: SurveyTriggerType.topicCompletion,
+            surveys: catalog.surveys,
+            subjectContentItemId: itemId,
+          );
       if (survey == null || !mounted) return;
       final standing = await ref
           .read(surveyConsentCoordinatorProvider)

@@ -44,8 +44,10 @@ void main() {
           consent: SurveyConsentGate(
             alreadyGranted: alreadyGranted,
             noticeTitle: 'How we use your answers',
-            noticeBody: 'Your answers are kept apart from anything that names you.',
-            onDecision: onDecision ?? ({required bool granted}) async => granted,
+            noticeBody:
+                'Your answers are kept apart from anything that names you.',
+            onDecision:
+                onDecision ?? ({required bool granted}) async => granted,
           ),
           onFinished: onFinished,
         ),
@@ -205,15 +207,11 @@ void main() {
       // An NPS runs 0 to 10, and a rating 1 to 5; the prompt asks for what the
       // question actually uses rather than a scale of its own.
       expect(
-        find.bySemanticsLabel(
-          'How likely are you to recommend Piso CAMP?: 0',
-        ),
+        find.bySemanticsLabel('How likely are you to recommend Piso CAMP?: 0'),
         findsOneWidget,
       );
       expect(
-        find.bySemanticsLabel(
-          'How likely are you to recommend Piso CAMP?: 10',
-        ),
+        find.bySemanticsLabel('How likely are you to recommend Piso CAMP?: 10'),
         findsOneWidget,
       );
     });
@@ -264,8 +262,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(finished, 1);
-      expect(find.text('Thank you. Your answers have been recorded.'),
-          findsOneWidget);
+      expect(
+        find.text('Thank you. Your answers have been recorded.'),
+        findsOneWidget,
+      );
     });
   });
 
@@ -297,7 +297,10 @@ void main() {
       );
 
       expect(queued, hasLength(1));
-      expect(queued.single.consentRecordId, '9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d');
+      expect(
+        queued.single.consentRecordId,
+        '9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+      );
       expect(queued.single.contentVersionId, survey.contentVersionId);
       expect(queued.single.submittedAt, DateTime.utc(2026, 9, 2, 4, 5, 6));
       // One answer and one skip: the count is what was answered.
@@ -308,10 +311,10 @@ void main() {
       final analytics = _RecordingAnalytics();
       final queued = <SurveyResponse>[];
 
-      await coordinator(analytics, queued).record(
-        buildSurvey(),
-        const SurveyPromptResult.declinedPrompt(),
-      );
+      await coordinator(
+        analytics,
+        queued,
+      ).record(buildSurvey(), const SurveyPromptResult.declinedPrompt());
 
       expect(queued, isEmpty);
       expect(analytics.events, ['declined:declinedPrompt']);
@@ -359,27 +362,6 @@ void main() {
         'declined:declinedNotice',
         'submitted:2',
       ]);
-    });
-  });
-
-  group('the seeded topic-completion trigger', () {
-    test('offers the survey whose subject is the topic just read', () {
-      final about = SurveyDocument.parsePublished(
-        surveyBytes(subject: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'),
-      );
-      final general = buildSurvey();
-
-      expect(
-        surveyForCompletedTopic([
-          general,
-          about,
-        ], 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')?.subjectContentItemId,
-        'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
-      );
-      expect(
-        surveyForCompletedTopic([general, about], 'a-different-topic'),
-        isNull,
-      );
     });
   });
 }

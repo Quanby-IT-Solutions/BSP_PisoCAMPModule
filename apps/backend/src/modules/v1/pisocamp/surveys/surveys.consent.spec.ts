@@ -48,9 +48,23 @@ jest.mock("@orpc/server", () => ({
 	implement: jest.fn(() => ({ handler: (handler: () => unknown) => handler() })),
 }))
 jest.mock("@/config/api-versions.config", () => ({
-	v1: { pisocamp: { surveys: { ingest: "surveysIngest" } } },
+	v1: {
+		pisocamp: {
+			surveys: { ingest: "surveysIngest" },
+			admin: {
+				surveyTriggers: {
+					list: "listTriggers",
+					upsert: "upsertTrigger",
+					remove: "removeTrigger",
+				},
+			},
+		},
+	},
 }))
-jest.mock("@thallesp/nestjs-better-auth", () => ({ AllowAnonymous: () => () => undefined }))
+jest.mock("@thallesp/nestjs-better-auth", () => ({
+	AllowAnonymous: () => () => undefined,
+	Session: () => () => undefined,
+}))
 jest.mock("better-auth/node", () => ({ fromNodeHeaders: () => ({}) }))
 jest.mock("@repo/auth", () => ({ getAuth: () => ({ api: { getSession: async () => null } }) }))
 jest.mock("@repo/contracts", () => ({ ADMIN_ROLE: "Admin", PERMISSION_NAMES: [] }))

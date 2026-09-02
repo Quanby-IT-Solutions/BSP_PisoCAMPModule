@@ -12,12 +12,15 @@ import 'package:mobile/features/pisocamp/data/survey_repository.dart';
 import 'package:mobile/features/pisocamp/data/survey_response.dart';
 import 'package:mobile/features/pisocamp/data/survey_response_queue.dart';
 import 'package:mobile/features/pisocamp/data/survey_sync_controller.dart';
+import 'package:mobile/features/pisocamp/data/survey_triggers.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/bundle_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/survey_prompt.dart';
 import 'package:mobile/services/api/api_client.dart';
 import 'package:mobile/services/storage/secure_storage_service.dart';
+import 'package:mobile/services/storage/theme_storage_service.dart';
 
 /// The encrypted store queued responses wait in.
 final surveyQueueProvider = FutureProvider<SurveyQueuePort>((ref) async {
@@ -258,17 +261,69 @@ final surveyPromptCoordinatorProvider = Provider<SurveyPromptCoordinator>((
   );
 });
 
-/// Chooses the survey to offer after a topic is completed.
+/// The rules BSP arranged, as the public configuration last reported them.
 ///
-/// EV-3 configures triggers, frequency caps and priority; this is the one
-/// trigger EV-2 seeds, and it is deliberately the simplest thing that could
-/// work: the survey whose subject is the topic just finished.
-SurveyDocument? surveyForCompletedTopic(
-  List<SurveyDocument> surveys,
-  String contentItemId,
-) {
-  for (final survey in surveys) {
-    if (survey.subjectContentItemId == contentItemId) return survey;
+/// Empty until the configuration has been read, which is the same as "do not
+/// ask": a device that has never reached the server has not been told to.
+final surveyTriggerRulesProvider = Provider<List<SurveyTriggerRule>>((ref) {
+  return ref.watch(pisoCampHomeProvider).asData?.value.surveyTriggers ??
+      const [];
+});
+
+final surveyFrequencyStoreProvider = Provider<SurveyFrequencyStore>((ref) {
+  return PreferencesSurveyFrequencyStore(ref.watch(sharedPreferencesProvider));
+});
+
+final surveyTriggerEngineProvider = Provider<SurveyTriggerEngine>(
+  (ref) => const SurveyTriggerEngine(),
+);
+
+/// Fires one trigger and reports the survey to offer, if any.
+///
+/// The cap is enforced here, on the device, because a guest has no account for
+/// the server to count against — and because the offer happens whether or not
+/// there is a connection.
+class SurveyTriggerCoordinator {
+  const SurveyTriggerCoordinator({
+    required this.engine,
+    required this.rules,
+    required this.frequency,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  final SurveyTriggerEngine engine;
+  final List<SurveyTriggerRule> rules;
+  final SurveyFrequencyStore frequency;
+  final DateTime Function() _clock;
+
+  Future<SurveyDocument?> fire({
+    required SurveyTriggerType trigger,
+    required List<SurveyDocument> surveys,
+    String? subjectContentItemId,
+    int? pageDepth,
+  }) async {
+    final survey = engine.select(
+      trigger: trigger,
+      rules: rules,
+      surveys: surveys,
+      lastOffered: await frequency.readLastOffered(),
+      subjectContentItemId: subjectContentItemId,
+      pageDepth: pageDepth,
+    );
+    if (survey == null) return null;
+    // Recorded when it is offered, not when it is answered: declining is still
+    // being asked, and the cap exists so people are not asked too often.
+    await frequency.recordOffered(survey.contentItemId, _clock());
+    return survey;
   }
-  return null;
 }
+
+final surveyTriggerCoordinatorProvider = Provider<SurveyTriggerCoordinator>((
+  ref,
+) {
+  return SurveyTriggerCoordinator(
+    engine: ref.watch(surveyTriggerEngineProvider),
+    rules: ref.watch(surveyTriggerRulesProvider),
+    frequency: ref.watch(surveyFrequencyStoreProvider),
+  );
+});

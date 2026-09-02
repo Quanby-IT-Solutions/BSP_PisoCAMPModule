@@ -1082,6 +1082,73 @@ export const surveyQuestions = createTable(
 )
 
 /**
+ * EV-3 survey trigger rule.
+ *
+ * When a survey may be offered, how often, and which one wins when more than
+ * one is eligible. A survey may carry a rule per trigger type — the same
+ * satisfaction survey can follow a topic and also a module exit — so the pair
+ * is what is unique, not the survey.
+ *
+ * `priority` is 1-highest, stated here because "higher priority" reads both
+ * ways and the client has to resolve ties the same way the console shows them.
+ */
+export const surveyTriggerRules = createTable(
+	"survey_trigger_rule",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		contentItemId: t
+			.uuid("content_item_id")
+			.notNull()
+			.references(() => contentItems.id, { onDelete: "cascade" }),
+		triggerType: t
+			.text("trigger_type")
+			.notNull()
+			.$type<
+				| "page_depth"
+				| "activity_completion"
+				| "topic_completion"
+				| "module_exit"
+				| "app_exit"
+			>(),
+		/** How many screens deep, and only for a page-depth trigger. */
+		pageDepth: t.integer("page_depth"),
+		/** Days before the same survey may be offered again. Null means no cap. */
+		frequencyCapDays: t.integer("frequency_cap_days"),
+		/** 1 is highest. Ties are broken by content item id, so they are stable. */
+		priority: t.integer("priority").notNull().default(50),
+		enabled: t.boolean("enabled").notNull().default(true),
+		createdBy: t
+			.text("created_by")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		updatedBy: t
+			.text("updated_by")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: t.timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("survey_trigger_rule_item_type_unique").on(t.contentItemId, t.triggerType),
+		check(
+			"survey_trigger_rule_type_check",
+			sql`${t.triggerType} in ('page_depth', 'activity_completion', 'topic_completion', 'module_exit', 'app_exit')`
+		),
+		check(
+			"survey_trigger_rule_page_depth_check",
+			sql`(${t.triggerType} = 'page_depth') = (${t.pageDepth} is not null)
+				and (${t.pageDepth} is null or ${t.pageDepth} between 1 and 50)`
+		),
+		check(
+			"survey_trigger_rule_frequency_check",
+			sql`${t.frequencyCapDays} is null or ${t.frequencyCapDays} between 1 and 365`
+		),
+		check("survey_trigger_rule_priority_check", sql`${t.priority} between 1 and 100`),
+		index("survey_trigger_rule_enabled_idx").on(t.priority).where(sql`${t.enabled}`),
+	]
+)
+
+/**
  * EV-2 survey response.
  *
  * The primary key is the **client's** `response_id`, the same idempotency shape

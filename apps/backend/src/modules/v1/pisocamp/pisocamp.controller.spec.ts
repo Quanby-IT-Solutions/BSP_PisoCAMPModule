@@ -16,6 +16,7 @@ import { PisoCampAdminConfigService } from "./pisocamp-admin-config.service"
 import { PisoCampConsentSubjectService } from "./pisocamp-consent-subject.service"
 import { PisoCampConsentService } from "./pisocamp-consent.service"
 import { PisoCampController } from "./pisocamp.controller"
+import { SurveyTriggerService } from "./surveys/survey-trigger.service"
 import { PisoCampService } from "./pisocamp.service"
 
 jest.mock("./pisocamp-consent-subject.service", () => ({
@@ -87,12 +88,16 @@ describe("PisoCampController", () => {
 	}
 	const consentService = { getStatus: jest.fn(), record: jest.fn() }
 	const subjectService = { resolve: jest.fn() }
+	// EV-3: the public configuration carries the trigger rules, so the service
+	// has a collaborator now. The rules themselves are proven elsewhere.
+	const triggerService = { publicRules: jest.fn().mockResolvedValue([]) }
 
 	beforeEach(async () => {
 		const module: TestingModule = await Test.createTestingModule({
 			controllers: [PisoCampController],
 			providers: [
 				PisoCampService,
+				{ provide: SurveyTriggerService, useValue: triggerService },
 				{ provide: PisoCampAdminConfigService, useValue: adminConfigService },
 				{ provide: PisoCampConsentService, useValue: consentService },
 				{ provide: PisoCampConsentSubjectService, useValue: subjectService },
@@ -189,6 +194,7 @@ describe("PisoCampController", () => {
 			module_enabled: true,
 			account_prompt_enabled: true,
 			config_version: "seed-1",
+			survey_triggers: [],
 		})
 	})
 

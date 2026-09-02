@@ -295,6 +295,27 @@ export type {
 	PisoCampBundleManifestEntry,
 } from "./modules/v1/pisocamp/bundle.schema.js"
 
+// EV-3 survey trigger rules
+export {
+	DeletePisoCampSurveyTriggerInputSchema,
+	DeletePisoCampSurveyTriggerOutputSchema,
+	ListPisoCampSurveyTriggersOutputSchema,
+	PisoCampSurveyTriggerConfigSchema,
+	PisoCampSurveyTriggerRuleSchema,
+	PisoCampSurveyTriggerTypeSchema,
+	SURVEY_TRIGGER_PRIORITY,
+	SURVEY_TRIGGER_TYPES,
+	UpsertPisoCampSurveyTriggerInputSchema,
+} from "./modules/v1/pisocamp/survey-trigger.schema.js"
+export type {
+	DeletePisoCampSurveyTriggerInput,
+	ListPisoCampSurveyTriggersOutput,
+	PisoCampSurveyTriggerConfig,
+	PisoCampSurveyTriggerRule,
+	PisoCampSurveyTriggerType,
+	UpsertPisoCampSurveyTriggerInput,
+} from "./modules/v1/pisocamp/survey-trigger.schema.js"
+
 // EV-2 survey responses
 export {
 	IngestSurveyResponsesInputSchema,

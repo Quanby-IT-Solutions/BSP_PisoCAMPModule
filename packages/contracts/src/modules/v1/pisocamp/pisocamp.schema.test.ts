@@ -123,18 +123,15 @@ describe("Piso CAMP F3 profile schemas", () => {
 })
 
 describe("PisoCampPublicConfigSchema", () => {
-	it("accepts the public F1 configuration", () => {
-		expect(
-			PisoCampPublicConfigSchema.parse({
-				module_enabled: true,
-				account_prompt_enabled: true,
-				config_version: "seed-1",
-			})
-		).toEqual({
+	it("accepts the public F1 configuration, EV-3's trigger rules included", () => {
+		const config = {
 			module_enabled: true,
 			account_prompt_enabled: true,
 			config_version: "seed-1",
-		})
+			survey_triggers: [],
+		}
+
+		expect(PisoCampPublicConfigSchema.parse(config)).toEqual(config)
 	})
 
 	it("rejects a non-public configuration key", () => {

@@ -1,11 +1,16 @@
 import { z } from "zod"
 
+import { PisoCampSurveyTriggerConfigSchema } from "./survey-trigger.schema.js"
+
 /** The complete allowlist of configuration safe for unauthenticated clients. */
 export const PisoCampPublicConfigSchema = z
 	.object({
 		module_enabled: z.boolean(),
 		account_prompt_enabled: z.boolean(),
 		config_version: z.string(),
+		// EV-3: when to ask, how often, and which survey wins. Public because a
+		// guest's device needs it and it names nobody.
+		survey_triggers: z.array(PisoCampSurveyTriggerConfigSchema).max(100),
 	})
 	.strict()
 
