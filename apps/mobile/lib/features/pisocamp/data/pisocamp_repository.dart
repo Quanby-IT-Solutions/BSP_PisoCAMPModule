@@ -62,6 +62,7 @@ class PisoCampHomeLoadResult {
     this.moduleEnabled = true,
     this.accountPromptEnabled = true,
     this.surveyTriggers = const [],
+    this.exitAdvisoryIntervalHours = _defaultExitAdvisoryIntervalHours,
   });
 
   final PisoCampHome home;
@@ -71,7 +72,14 @@ class PisoCampHomeLoadResult {
 
   /// EV-3's rules. Empty while offline, which is the same as "do not ask".
   final List<SurveyTriggerRule> surveyTriggers;
+
+  /// EV-4's interval. The default stands until configuration is read, so the
+  /// advisory still appears on a device that has never reached the server.
+  final int exitAdvisoryIntervalHours;
 }
+
+/// The contract's default, repeated here for the offline first emission.
+const int _defaultExitAdvisoryIntervalHours = 24;
 
 /// Loads guest-safe packaged content before attempting public remote config.
 class PisoCampRepository {
@@ -98,6 +106,7 @@ class PisoCampRepository {
         moduleEnabled: config.moduleEnabled,
         accountPromptEnabled: config.accountPromptEnabled,
         surveyTriggers: config.surveyTriggers,
+        exitAdvisoryIntervalHours: config.exitAdvisoryIntervalHours,
       );
     } on Object {
       // The first emission is already the safe offline fallback.
@@ -119,6 +128,7 @@ class PisoCampRepository {
       'account_prompt_enabled',
       'config_version',
       'survey_triggers',
+      'exit_advisory_interval_hours',
     };
     if (data.length != expectedKeys.length ||
         !data.keys.every((key) => expectedKeys.contains(key))) {
@@ -127,7 +137,8 @@ class PisoCampRepository {
     if (data['module_enabled'] is! bool ||
         data['account_prompt_enabled'] is! bool ||
         data['config_version'] is! String ||
-        data['survey_triggers'] is! List) {
+        data['survey_triggers'] is! List ||
+        data['exit_advisory_interval_hours'] is! int) {
       throw const FormatException('Invalid Piso CAMP config values');
     }
     return _PublicConfig(
@@ -136,6 +147,7 @@ class PisoCampRepository {
       // A rule this build does not understand is dropped rather than allowed
       // to fail the whole configuration: the module still works without it.
       surveyTriggers: SurveyTriggerRule.listFromJson(data['survey_triggers']),
+      exitAdvisoryIntervalHours: data['exit_advisory_interval_hours'] as int,
     );
   }
 }
@@ -145,12 +157,16 @@ class _PublicConfig {
     required this.moduleEnabled,
     required this.accountPromptEnabled,
     this.surveyTriggers = const [],
+    this.exitAdvisoryIntervalHours = _defaultExitAdvisoryIntervalHours,
   });
   final bool moduleEnabled;
   final bool accountPromptEnabled;
 
   /// EV-3's rules, as BSP arranged them.
   final List<SurveyTriggerRule> surveyTriggers;
+
+  /// EV-4's interval, in hours.
+  final int exitAdvisoryIntervalHours;
 }
 
 @riverpod

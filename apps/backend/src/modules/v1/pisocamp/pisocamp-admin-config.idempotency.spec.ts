@@ -61,7 +61,11 @@ function configProcedure(service: PisoCampAdminConfigService, value: number) {
 		"~orpc": {
 			handler: async () => {
 				calls.count += 1
-				return service.update({ actorId: USER_ID, session_inactivity_minutes: value })
+				return service.update({
+					actorId: USER_ID,
+					session_inactivity_minutes: value,
+					exit_advisory_interval_hours: 24,
+				})
 			},
 		},
 	}
@@ -223,10 +227,18 @@ describe("Piso CAMP idempotent transaction boundary", () => {
 			.select()
 			.from(auditLog)
 			.where(and(eq(auditLog.actorId, USER_ID), eq(auditLog.action, "module_configuration.update")))
-		expect(first.result).toEqual({ session_inactivity_minutes: 60 })
+		expect(first.result).toEqual({
+			session_inactivity_minutes: 60,
+			exit_advisory_interval_hours: 24,
+		})
 		expect(replay.result).toEqual(first.result)
 		expect(first.calls.count).toBe(1)
 		expect(replay.calls.count).toBe(0)
-		expect(audits).toHaveLength(1)
+		// One entry per setting, written once: EV-4 added a second key, and a
+		// replay must still not double what the first call recorded.
+		expect(audits.map(row => row.targetId).sort()).toEqual([
+			"exit_advisory_interval_hours",
+			"session_inactivity_minutes",
+		])
 	})
 })

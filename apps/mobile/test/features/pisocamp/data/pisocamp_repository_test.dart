@@ -77,6 +77,7 @@ void main() {
         'account_prompt_enabled': true,
         'config_version': 'seed-1',
         'survey_triggers': <Object?>[],
+        'exit_advisory_interval_hours': 24,
       });
     },
   );
@@ -88,6 +89,7 @@ void main() {
         'account_prompt_enabled': false,
         'config_version': 'seed-1',
         'survey_triggers': <Object?>[],
+        'exit_advisory_interval_hours': 24,
       }),
     ).loadHome().last;
 
@@ -104,6 +106,7 @@ void main() {
         'account_prompt_enabled': true,
         'config_version': 'seed-1',
         'survey_triggers': <Object?>[],
+        'exit_advisory_interval_hours': 24,
       }),
     ).loadHome().last;
 
@@ -119,6 +122,7 @@ void main() {
           'account_prompt_enabled': true,
           'config_version': 'seed-1',
           'survey_triggers': <Object?>[],
+        'exit_advisory_interval_hours': 24,
           'secret': 'must-not-leak',
         }),
       ).loadHome().last;

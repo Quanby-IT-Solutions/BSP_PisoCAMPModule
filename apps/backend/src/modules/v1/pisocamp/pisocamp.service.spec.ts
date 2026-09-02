@@ -1,3 +1,4 @@
+import type { PisoCampAdminConfigService } from "./pisocamp-admin-config.service"
 import type { SurveyTriggerService } from "./surveys/survey-trigger.service"
 import { PisoCampService } from "./pisocamp.service"
 
@@ -21,10 +22,13 @@ const rule = {
 	priority: 10,
 }
 
-function serviceWith(rules: (typeof rule)[]) {
-	return new PisoCampService({
-		publicRules: async () => rules,
-	} as unknown as SurveyTriggerService)
+function serviceWith(rules: (typeof rule)[], intervalHours = 24) {
+	return new PisoCampService(
+		{ publicRules: async () => rules } as unknown as SurveyTriggerService,
+		{
+			exitAdvisoryIntervalHours: async () => intervalHours,
+		} as unknown as PisoCampAdminConfigService
+	)
 }
 
 describe("PisoCampService", () => {
@@ -34,6 +38,13 @@ describe("PisoCampService", () => {
 			account_prompt_enabled: true,
 			config_version: "seed-1",
 			survey_triggers: [],
+			exit_advisory_interval_hours: 24,
+		})
+	})
+
+	it("carries EV-4's advisory interval to the device", async () => {
+		await expect(serviceWith([], 6).getPublicConfig()).resolves.toMatchObject({
+			exit_advisory_interval_hours: 6,
 		})
 	})
 

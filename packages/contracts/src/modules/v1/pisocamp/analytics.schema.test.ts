@@ -89,6 +89,7 @@ describe("AN-1 analytics event catalog", () => {
 			"survey_prompt_shown",
 			"survey_declined",
 			"survey_submitted",
+			"advisory_shown",
 		])
 	})
 

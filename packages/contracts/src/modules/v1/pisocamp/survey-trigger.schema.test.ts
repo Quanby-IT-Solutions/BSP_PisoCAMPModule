@@ -82,6 +82,7 @@ describe("survey trigger rules", () => {
 			module_enabled: true,
 			account_prompt_enabled: true,
 			config_version: "seed-1",
+			exit_advisory_interval_hours: 24,
 			survey_triggers: [
 				{
 					contentItemId: base.contentItemId,
@@ -110,6 +111,7 @@ describe("survey trigger rules", () => {
 				module_enabled: true,
 				account_prompt_enabled: true,
 				config_version: "seed-1",
+				exit_advisory_interval_hours: 24,
 			}).success
 		).toBe(false)
 	})

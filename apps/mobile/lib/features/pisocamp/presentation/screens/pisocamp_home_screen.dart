@@ -16,6 +16,10 @@ import 'package:mobile/features/pisocamp/presentation/providers/consent_provider
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
 import 'package:mobile/features/pisocamp/data/trivia_question_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/data/pisocamp_repository.dart';
+import 'package:mobile/features/pisocamp/data/advisory_document.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/advisory_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/widgets/exit_advisory.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/trivia_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/trivia_prompt.dart';
@@ -35,6 +39,10 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
   bool _creatingAccount = false;
   bool _continuingAsGuest = false;
   TriviaQuestionDocument? _prompt;
+
+  /// EV-4's advisory, held while it is being read on the way out.
+  AdvisoryDocument? _advisory;
+  var _advisoryDismissed = false;
   @override
   void initState() {
     super.initState();
@@ -230,9 +238,90 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
         .asData
         ?.value;
     final prompt = _prompt;
+    final advisory = _advisory;
+    return PopScope(
+      // The advisory interrupts the exit once and then gets out of the way:
+      // it is advice, not a gate.
+      canPop: _advisoryDismissed || advisory != null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        unawaited(_offerExitAdvisory());
+      },
+      child: _buildScaffold(
+        context,
+        state: state,
+        authenticated: authenticated,
+        profileStatus: profileStatus,
+        authLoading: authLoading,
+        transportAvailable: transportAvailable,
+        prompt: prompt,
+        advisory: advisory,
+      ),
+    );
+  }
+
+  /// Shows the approved advisory on the way out, if one is due.
+  ///
+  /// Silent on failure: somebody leaving the module should leave, and an
+  /// advisory that could not be read is not a reason to stop them.
+  Future<void> _offerExitAdvisory() async {
+    try {
+      final catalog = await ref.read(currencyCatalogViewProvider.future);
+      if (!mounted) return;
+      final advisory = await ref
+          .read(exitAdvisoryCoordinatorProvider)
+          .onExit(catalog.advisories);
+      if (!mounted) return;
+      if (advisory == null) {
+        setState(() => _advisoryDismissed = true);
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+      setState(() => _advisory = advisory);
+    } on Object {
+      if (!mounted) return;
+      setState(() => _advisoryDismissed = true);
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  void _dismissAdvisory() {
+    setState(() {
+      _advisory = null;
+      _advisoryDismissed = true;
+    });
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Widget _buildScaffold(
+    BuildContext context, {
+    required AsyncValue<PisoCampHomeLoadResult> state,
+    required bool authenticated,
+    required AsyncValue<PisoCampProfileResult?> profileStatus,
+    required bool authLoading,
+    required bool? transportAvailable,
+    required TriviaQuestionDocument? prompt,
+    required AdvisoryDocument? advisory,
+  }) {
     return Scaffold(
       appBar: AppBar(title: const Text('Piso CAMP')),
-      bottomSheet: prompt == null
+      bottomSheet: advisory != null
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ExitAdvisory(
+                  advisory: advisory,
+                  onDismissed: _dismissAdvisory,
+                ),
+              ),
+            )
+          : prompt == null
           ? null
           // A sheet, so the module underneath stays reachable: the prompt is an
           // offer, and dismissing it costs one tap.

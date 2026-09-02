@@ -2,6 +2,14 @@ import { z } from "zod"
 
 import { PisoCampSurveyTriggerConfigSchema } from "./survey-trigger.schema.js"
 
+/**
+ * EV-4. How long before the exit advisory is shown again.
+ *
+ * Hours rather than days because "once a day" and "once per visit" are both
+ * reasonable settings and only one of them is a whole number of days.
+ */
+const ExitAdvisoryIntervalHoursSchema = z.number().int().min(1).max(8760)
+
 /** The complete allowlist of configuration safe for unauthenticated clients. */
 export const PisoCampPublicConfigSchema = z
 	.object({
@@ -11,6 +19,9 @@ export const PisoCampPublicConfigSchema = z
 		// EV-3: when to ask, how often, and which survey wins. Public because a
 		// guest's device needs it and it names nobody.
 		survey_triggers: z.array(PisoCampSurveyTriggerConfigSchema).max(100),
+		// EV-4: how often the exit advisory is shown. Public because the device
+		// decides when to show it, offline included.
+		exit_advisory_interval_hours: ExitAdvisoryIntervalHoursSchema,
 	})
 	.strict()
 
@@ -22,6 +33,7 @@ const SessionInactivityMinutesSchema = z.number().int().min(1).max(1440)
 export const PisoCampAdminConfigSchema = z
 	.object({
 		session_inactivity_minutes: SessionInactivityMinutesSchema.default(30),
+		exit_advisory_interval_hours: ExitAdvisoryIntervalHoursSchema.default(24),
 	})
 	.strict()
 
@@ -29,6 +41,7 @@ export const PisoCampAdminConfigSchema = z
 export const UpdatePisoCampAdminConfigSchema = z
 	.object({
 		session_inactivity_minutes: SessionInactivityMinutesSchema,
+		exit_advisory_interval_hours: ExitAdvisoryIntervalHoursSchema,
 	})
 	.strict()
 

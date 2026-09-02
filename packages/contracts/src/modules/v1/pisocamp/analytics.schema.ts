@@ -31,6 +31,7 @@ export const ANALYTICS_EVENT_NAMES = [
 	"survey_prompt_shown",
 	"survey_declined",
 	"survey_submitted",
+	"advisory_shown",
 ] as const
 
 /**
@@ -182,6 +183,13 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 				answeredCount: z.number().int().min(0).max(20),
 			})
 			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("advisory_shown"),
+		screen: z.literal("exit_advisory"),
+		feature: z.literal("advisory"),
+		status: z.literal("completed"),
+		properties: z.object({ logicalId: z.string().trim().min(1).max(128) }).strict(),
 	}).strict(),
 	AnalyticsCommonSchema.extend({
 		eventName: z.literal("link_open"),

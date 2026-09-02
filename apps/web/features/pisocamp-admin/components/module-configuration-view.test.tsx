@@ -17,7 +17,7 @@ describe("ModuleConfigurationView", () => {
 		useConfigQuery.mockReturnValue({
 			isPending: false,
 			isError: false,
-			data: { session_inactivity_minutes: 30 },
+			data: { session_inactivity_minutes: 30, exit_advisory_interval_hours: 24 },
 			refetch: vi.fn(),
 		})
 		useUpdateConfig.mockReturnValue({
@@ -87,7 +87,7 @@ describe("ModuleConfigurationView", () => {
 		await user.type(input, "45{Enter}")
 
 		expect(mutate).toHaveBeenCalledWith(
-			{ session_inactivity_minutes: 45 },
+			{ session_inactivity_minutes: 45, exit_advisory_interval_hours: 24 },
 			expect.objectContaining({ onSuccess: expect.any(Function) })
 		)
 	})
@@ -119,5 +119,42 @@ describe("ModuleConfigurationView", () => {
 		rerender(<ModuleConfigurationView />)
 		expect(screen.getByRole("alert")).toHaveTextContent(/could not save configuration/i)
 		expect(screen.getByRole("alert")).not.toHaveTextContent(/secret detail/i)
+	})
+
+	it("saves the exit advisory interval alongside the session setting", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn()
+		useUpdateConfig.mockReturnValue({ mutate, isPending: false, isError: false, error: null })
+		render(<ModuleConfigurationView />)
+
+		const interval = screen.getByLabelText(/exit advisory interval/i)
+		await user.clear(interval)
+		await user.type(interval, "6")
+		await user.click(screen.getByRole("button", { name: /save configuration/i }))
+
+		expect(mutate).toHaveBeenCalledTimes(1)
+		expect(mutate.mock.calls[0]?.[0]).toEqual({
+			session_inactivity_minutes: 30,
+			exit_advisory_interval_hours: 6,
+		})
+	})
+
+	it("refuses an interval outside the contract's range, and says why", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn()
+		useUpdateConfig.mockReturnValue({ mutate, isPending: false, isError: false, error: null })
+		render(<ModuleConfigurationView />)
+
+		const interval = screen.getByLabelText(/exit advisory interval/i)
+		await user.clear(interval)
+		await user.type(interval, "0")
+		await user.click(screen.getByRole("button", { name: /save configuration/i }))
+
+		expect(mutate).not.toHaveBeenCalled()
+		expect(
+			screen.getByText("Enter a whole number of hours between 1 and 8,760.")
+		).toBeInTheDocument()
+		// The field that is wrong is the one that gets focus.
+		expect(interval).toHaveFocus()
 	})
 })

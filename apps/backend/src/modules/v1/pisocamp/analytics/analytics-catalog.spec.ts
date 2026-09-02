@@ -75,6 +75,11 @@ const CATALOG: Record<string, { screen: string; feature: string; properties: obj
 		feature: "survey",
 		properties: { logicalId: "content.one", purpose: "satisfaction", answeredCount: 3 },
 	},
+	advisory_shown: {
+		screen: "exit_advisory",
+		feature: "advisory",
+		properties: { logicalId: "content.one" },
+	},
 }
 
 /**

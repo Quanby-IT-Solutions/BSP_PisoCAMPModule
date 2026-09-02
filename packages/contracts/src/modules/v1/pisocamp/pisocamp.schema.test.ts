@@ -123,12 +123,13 @@ describe("Piso CAMP F3 profile schemas", () => {
 })
 
 describe("PisoCampPublicConfigSchema", () => {
-	it("accepts the public F1 configuration, EV-3's trigger rules included", () => {
+	it("accepts the public F1 configuration, with the EV-3 and EV-4 settings", () => {
 		const config = {
 			module_enabled: true,
 			account_prompt_enabled: true,
 			config_version: "seed-1",
 			survey_triggers: [],
+			exit_advisory_interval_hours: 24,
 		}
 
 		expect(PisoCampPublicConfigSchema.parse(config)).toEqual(config)
@@ -159,24 +160,59 @@ describe("PisoCampPublicConfigSchema", () => {
 
 describe("PisoCampAdminConfigSchema", () => {
 	it.each([1, 30, 1440])("accepts session inactivity value %i", value => {
-		expect(PisoCampAdminConfigSchema.parse({ session_inactivity_minutes: value })).toEqual({
-			session_inactivity_minutes: value,
-		})
+		expect(
+			PisoCampAdminConfigSchema.parse({
+				session_inactivity_minutes: value,
+				exit_advisory_interval_hours: 24,
+			})
+		).toEqual({ session_inactivity_minutes: value, exit_advisory_interval_hours: 24 })
 	})
 
-	it.each([0, 1441, 1.5])("rejects invalid session inactivity value %s", value => {
-		expect(() => PisoCampAdminConfigSchema.parse({ session_inactivity_minutes: value })).toThrow()
+	it.each([1, 24, 8760])("accepts exit advisory interval %i", value => {
+		expect(
+			PisoCampAdminConfigSchema.parse({
+				session_inactivity_minutes: 30,
+				exit_advisory_interval_hours: value,
+			})
+		).toMatchObject({ exit_advisory_interval_hours: value })
 	})
 
-	it("defaults the stored configuration to 30 minutes", () => {
-		expect(PisoCampAdminConfigSchema.parse({})).toEqual({ session_inactivity_minutes: 30 })
-	})
-
-	it("requires the update key and rejects unknown keys", () => {
-		expect(() => UpdatePisoCampAdminConfigSchema.parse({})).toThrow()
+	it.each([0, 8761, 1.5])("rejects exit advisory interval %s", value => {
 		expect(() =>
 			UpdatePisoCampAdminConfigSchema.parse({
 				session_inactivity_minutes: 30,
+				exit_advisory_interval_hours: value,
+			})
+		).toThrow()
+	})
+
+	it.each([0, 1441, 1.5])("rejects invalid session inactivity value %s", value => {
+		expect(() =>
+			PisoCampAdminConfigSchema.parse({
+				session_inactivity_minutes: value,
+				exit_advisory_interval_hours: 24,
+			})
+		).toThrow()
+	})
+
+	it("defaults a stored configuration that predates a setting", () => {
+		// A configuration written before EV-4 has no interval, and the default
+		// is what a device would have used anyway.
+		expect(PisoCampAdminConfigSchema.parse({})).toEqual({
+			session_inactivity_minutes: 30,
+			exit_advisory_interval_hours: 24,
+		})
+	})
+
+	it("requires both update keys and rejects unknown ones", () => {
+		expect(() => UpdatePisoCampAdminConfigSchema.parse({})).toThrow()
+		expect(() =>
+			UpdatePisoCampAdminConfigSchema.parse({ session_inactivity_minutes: 30 })
+		).toThrow()
+		expect(() =>
+			UpdatePisoCampAdminConfigSchema.parse({
+				session_inactivity_minutes: 30,
+				exit_advisory_interval_hours: 24,
 				unexpected: true,
 			})
 		).toThrow()

@@ -9,6 +9,7 @@ import { assertDisposablePostgres } from "@/test-support/destructive-database.gu
 
 import { ContentWorkflowService } from "../content/content-workflow.service"
 import { ContentService } from "../content/content.service"
+import { PisoCampAdminConfigService } from "../pisocamp-admin-config.service"
 import { PisoCampService } from "../pisocamp.service"
 import { SurveyTriggerService } from "./survey-trigger.service"
 
@@ -166,7 +167,7 @@ describe("EV-3 survey trigger rules", () => {
 				rule({ triggerType: "app_exit", priority: 5, enabled: false })
 			)
 
-			const config = await new PisoCampService(triggers).getPublicConfig()
+			const config = await new PisoCampService(triggers, new PisoCampAdminConfigService(new AuditService())).getPublicConfig()
 
 			// Highest priority first, and the disabled rule is simply not sent:
 			// the way to stop a device asking is to stop telling it to.
@@ -205,7 +206,7 @@ describe("EV-3 survey trigger rules", () => {
 				APPROVER_ID
 			)
 
-			const config = await new PisoCampService(triggers).getPublicConfig()
+			const config = await new PisoCampService(triggers, new PisoCampAdminConfigService(new AuditService())).getPublicConfig()
 
 			expect(config.survey_triggers).toEqual([])
 			// The rule is kept, not deleted: republishing should not mean

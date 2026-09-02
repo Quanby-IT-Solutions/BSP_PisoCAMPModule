@@ -4,6 +4,11 @@ jest.mock("@repo/db/schema", () => ({
 	moduleConfiguration: { key: "key", value: "value" },
 }))
 
+jest.mock("drizzle-orm", () => ({
+	eq: jest.fn(),
+	inArray: jest.fn(),
+}))
+
 jest.mock("@/common/database/database.client", () => ({
 	db: { select: jest.fn(), transaction: jest.fn() },
 }))
@@ -15,6 +20,8 @@ const mockDb = jest.requireMock("@/common/database/database.client").db as {
 const selectWhere = jest.fn()
 const selectFrom = jest.fn(() => ({ where: selectWhere }))
 
+// The reads are keyed now: one query returns both settings.
+
 describe("PisoCampAdminConfigService", () => {
 	beforeEach(() => {
 		jest.clearAllMocks()
@@ -22,17 +29,23 @@ describe("PisoCampAdminConfigService", () => {
 	})
 
 	it("returns the stored value", async () => {
-		selectWhere.mockResolvedValue([{ value: 45 }])
+		selectWhere.mockResolvedValue([{ key: "session_inactivity_minutes", value: 45 }])
 		const service = new PisoCampAdminConfigService({ record: jest.fn() } as never)
 
-		await expect(service.get()).resolves.toEqual({ session_inactivity_minutes: 45 })
+		await expect(service.get()).resolves.toEqual({
+			session_inactivity_minutes: 45,
+			exit_advisory_interval_hours: 24,
+		})
 	})
 
 	it("returns the default when the setting is missing", async () => {
 		selectWhere.mockResolvedValue([])
 		const service = new PisoCampAdminConfigService({ record: jest.fn() } as never)
 
-		await expect(service.get()).resolves.toEqual({ session_inactivity_minutes: 30 })
+		await expect(service.get()).resolves.toEqual({
+			session_inactivity_minutes: 30,
+			exit_advisory_interval_hours: 24,
+		})
 	})
 
 	it("commits the value and before/after audit together", async () => {
@@ -47,8 +60,15 @@ describe("PisoCampAdminConfigService", () => {
 		const service = new PisoCampAdminConfigService(auditService as never)
 
 		await expect(
-			service.update({ actorId: "actor-1", session_inactivity_minutes: 60 })
-		).resolves.toEqual({ session_inactivity_minutes: 60 })
+			service.update({
+				actorId: "actor-1",
+				session_inactivity_minutes: 60,
+				exit_advisory_interval_hours: 24,
+			})
+		).resolves.toEqual({
+			session_inactivity_minutes: 60,
+			exit_advisory_interval_hours: 24,
+		})
 		expect(auditService.record).toHaveBeenCalledWith(
 			{
 				domain: "pisocamp",
@@ -85,7 +105,11 @@ describe("PisoCampAdminConfigService", () => {
 		const service = new PisoCampAdminConfigService(auditService as never)
 
 		await expect(
-			service.update({ actorId: "actor-1", session_inactivity_minutes: 60 })
+			service.update({
+				actorId: "actor-1",
+				session_inactivity_minutes: 60,
+				exit_advisory_interval_hours: 24,
+			})
 		).rejects.toBe(auditFailure)
 		expect(committed).toBe(false)
 	})

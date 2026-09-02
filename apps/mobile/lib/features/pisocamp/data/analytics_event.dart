@@ -256,6 +256,26 @@ const Set<String> kSurveyPurposes = {
 /// Where a refusal happened: at the prompt, or at the privacy notice.
 enum SurveyDeclineStage { prompt, notice }
 
+final class AdvisoryShownIntent extends AnalyticsIntent {
+  const AdvisoryShownIntent({required this.logicalId});
+
+  final String logicalId;
+
+  @override
+  String get eventName => 'advisory_shown';
+
+  @override
+  String get screen => 'exit_advisory';
+
+  @override
+  String get feature => 'advisory';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+  };
+}
+
 final class SurveyPromptShownIntent extends AnalyticsIntent {
   const SurveyPromptShownIntent({
     required this.logicalId,
@@ -706,6 +726,16 @@ AnalyticsIntent _parseIntent({
         difficulty: _requiredTriviaDifficulty(properties),
         correct: _requiredBool(properties, 'correct'),
         openedTopic: _requiredBool(properties, 'openedTopic'),
+      );
+    case 'advisory_shown':
+      _requireExactKeys(properties, const <String>{'logicalId'});
+      if (screen != 'exit_advisory' || feature != 'advisory') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return AdvisoryShownIntent(
+        logicalId: _requiredBoundedString(properties, 'logicalId', 128),
       );
     case 'survey_prompt_shown':
       _requireExactKeys(properties, const <String>{'logicalId', 'purpose'});

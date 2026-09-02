@@ -7,6 +7,7 @@ import 'package:mobile/features/pisocamp/data/bundle_store.dart';
 import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/data/coin_model.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
+import 'package:mobile/features/pisocamp/data/advisory_document.dart';
 import 'package:mobile/features/pisocamp/data/survey_document.dart';
 import 'package:mobile/features/pisocamp/data/trivia_question_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/bundle_provider.dart';
@@ -192,9 +193,11 @@ final class CurrencyCatalogView {
     required Map<String, _VerifiedBundleResource> models,
     required List<TriviaQuestionDocument> triviaQuestions,
     required List<SurveyDocument> surveys,
+    required List<AdvisoryDocument> advisories,
   }) : documents = List.unmodifiable(documents),
        triviaQuestions = List.unmodifiable(triviaQuestions),
        surveys = List.unmodifiable(surveys),
+       advisories = List.unmodifiable(advisories),
        _securityFeatures =
            Map.unmodifiable(<String, List<CurrencyContentDocument>>{
              for (final entry in securityFeatures.entries)
@@ -215,6 +218,10 @@ final class CurrencyCatalogView {
   /// EV-2's published surveys, read from the same verified snapshot. A survey
   /// travels with the bundle because it is offered offline.
   final List<SurveyDocument> surveys;
+
+  /// EV-4's published advisories. Read from the bundle for the same reason:
+  /// somebody leaving the module may have no connection.
+  final List<AdvisoryDocument> advisories;
 
   final Map<String, List<CurrencyContentDocument>> _securityFeatures;
   final Map<String, _VerifiedBundleResource> _images;
@@ -329,6 +336,15 @@ final class CurrencyCatalogView {
         // Not a question, or not a readable one. Either way it is not offered.
       }
     }
+    final advisories = <AdvisoryDocument>[];
+    for (final bytes in publishedBytes) {
+      try {
+        advisories.add(AdvisoryDocument.parsePublished(bytes));
+      } on Object {
+        // Not an advisory, or not a readable one. Either way it is not shown.
+      }
+    }
+
     final surveys = <SurveyDocument>[];
     for (final bytes in publishedBytes) {
       try {
@@ -378,6 +394,7 @@ final class CurrencyCatalogView {
       models: models,
       triviaQuestions: triviaQuestions,
       surveys: surveys,
+      advisories: advisories,
     );
   }
 
