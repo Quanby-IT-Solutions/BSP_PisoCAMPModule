@@ -55,6 +55,67 @@ void main() {
     });
   });
 
+  group('feature_use binds a feature to the screen that hosts it', () {
+    Map<String, Object?> featureUse(Map<String, Object?> changes) {
+      final vector = Map<String, Object?>.from(
+        vectorsForTest.firstWhere(
+          (candidate) => candidate['eventName'] == 'feature_use',
+        ),
+      );
+      return vector..addAll(changes);
+    }
+
+    test('builds the coin viewer event from its intent', () {
+      final event = AnalyticsEvent.build(
+        intent: const FeatureUseIntent(
+          usedFeature: AnalyticsFeature.coin3d,
+          logicalId: 'catalog.ngc-coins.php-1',
+        ),
+        context: _context(),
+        createEventId: () => '0190f49b-57a8-4b85-9d0e-5e274f0e4aa1',
+        clock: () => DateTime.parse('2026-08-30T09:02:03.123456+08:00'),
+      );
+      final json = event.toJson();
+
+      expect(json['eventName'], 'feature_use');
+      expect(json['feature'], '3d_coin');
+      expect(json['screen'], 'coin_3d_viewer');
+      expect(json['properties'], <String, Object?>{
+        'logicalId': 'catalog.ngc-coins.php-1',
+      });
+    });
+
+    test('refuses a feature reported against the wrong screen', () {
+      expect(
+        () => AnalyticsEvent.fromJson(
+          featureUse(<String, Object?>{'screen': 'currency_detail'}),
+        ),
+        throwsA(
+          isA<AnalyticsValidationException>().having(
+            (error) => error.reason,
+            'reason',
+            AnalyticsValidationReason.invalidCatalog,
+          ),
+        ),
+      );
+    });
+
+    test('refuses a feature the catalog does not name', () {
+      expect(
+        () => AnalyticsEvent.fromJson(
+          featureUse(<String, Object?>{'feature': 'coin_polisher'}),
+        ),
+        throwsA(
+          isA<AnalyticsValidationException>().having(
+            (error) => error.reason,
+            'reason',
+            AnalyticsValidationReason.invalidCatalog,
+          ),
+        ),
+      );
+    });
+  });
+
   group('rejects forbidden values in every free-text envelope field', () {
     const forbiddenValues = <String>[
       'private@example.test',

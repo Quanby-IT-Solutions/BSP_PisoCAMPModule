@@ -880,7 +880,9 @@ export const contentBundleBlobs = createTable(
 		mediaType: t
 			.text("media_type")
 			.notNull()
-			.$type<"application/json" | "image/png" | "image/jpeg" | "image/webp">(),
+			.$type<
+				"application/json" | "image/png" | "image/jpeg" | "image/webp" | "model/gltf-binary"
+			>(),
 		body: bytea("body").notNull(),
 		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 	}),
@@ -890,7 +892,7 @@ export const contentBundleBlobs = createTable(
 		check("content_bundle_blob_size_check", sql`${t.byteLength} between 1 and 5242880`),
 		check(
 			"content_bundle_blob_media_type_check",
-			sql`${t.mediaType} in ('application/json', 'image/png', 'image/jpeg', 'image/webp')`
+			sql`${t.mediaType} in ('application/json', 'image/png', 'image/jpeg', 'image/webp', 'model/gltf-binary')`
 		),
 		check("content_bundle_blob_body_length_check", sql`octet_length(${t.body}) = ${t.byteLength}`),
 	]
@@ -902,12 +904,14 @@ export const contentBundleManifestEntries = createTable(
 		bundleId: t.uuid("bundle_id").notNull(),
 		logicalId: t.text("logical_id").notNull(),
 		position: t.integer("position").notNull(),
-		kind: t.text("kind").notNull().$type<"content" | "image">(),
+		kind: t.text("kind").notNull().$type<"content" | "image" | "model">(),
 		delivery: t.text("delivery").notNull().$type<"core" | "on_demand">(),
 		mediaType: t
 			.text("media_type")
 			.notNull()
-			.$type<"application/json" | "image/png" | "image/jpeg" | "image/webp">(),
+			.$type<
+				"application/json" | "image/png" | "image/jpeg" | "image/webp" | "model/gltf-binary"
+			>(),
 		byteLength: t.integer("byte_length").notNull(),
 		sha256: t.text("sha256").notNull(),
 		downloadPath: t.text("download_path").notNull(),
@@ -941,14 +945,23 @@ export const contentBundleManifestEntries = createTable(
 			sql`char_length(${t.logicalId}) between 1 and 160 and ${t.logicalId} ~ '^[a-z0-9]+([.:_-][a-z0-9]+)*$'`
 		),
 		check("content_bundle_manifest_entry_position_check", sql`${t.position} between 0 and 1999`),
-		check("content_bundle_manifest_entry_kind_check", sql`${t.kind} in ('content', 'image')`),
+		check(
+			"content_bundle_manifest_entry_kind_check",
+			sql`${t.kind} in ('content', 'image', 'model')`
+		),
+		check(
+			"content_bundle_manifest_entry_kind_media_type_check",
+			sql`(${t.kind} = 'content' and ${t.mediaType} = 'application/json')
+				or (${t.kind} = 'image' and ${t.mediaType} in ('image/png', 'image/jpeg', 'image/webp'))
+				or (${t.kind} = 'model' and ${t.mediaType} = 'model/gltf-binary')`
+		),
 		check(
 			"content_bundle_manifest_entry_delivery_check",
 			sql`${t.delivery} in ('core', 'on_demand')`
 		),
 		check(
 			"content_bundle_manifest_entry_media_type_check",
-			sql`${t.mediaType} in ('application/json', 'image/png', 'image/jpeg', 'image/webp')`
+			sql`${t.mediaType} in ('application/json', 'image/png', 'image/jpeg', 'image/webp', 'model/gltf-binary')`
 		),
 		check("content_bundle_manifest_entry_size_check", sql`${t.byteLength} between 1 and 5242880`),
 		check(

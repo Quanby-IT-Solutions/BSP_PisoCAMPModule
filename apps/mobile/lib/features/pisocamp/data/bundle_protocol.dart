@@ -47,7 +47,7 @@ final class BundleConfigurationException implements Exception {
   String toString() => 'BundleConfigurationException: $message';
 }
 
-enum BundleEntryKind { content, image }
+enum BundleEntryKind { content, image, model }
 
 enum BundleEntryDelivery { core, onDemand }
 
@@ -108,8 +108,8 @@ final class BundleKeyRing {
 
   factory BundleKeyRing.packagedSeed() {
     return BundleKeyRing._({
-      'ce1-seed-v1': _decodeHex(
-        '2f8e2a3cb15d1e1fbde814bbd7cc98b4623c679ccd803b6c12f304667aa98f2e',
+      'ce2-seed-v2': _decodeHex(
+        '5838bee09193663ea4a988cbc5a18ba31ce36ba6a24dd6ff2dfb85389b6b628a',
       ),
     });
   }
@@ -499,6 +499,14 @@ final class BundleManifestEntry {
       );
       return;
     }
+    if (kind == BundleEntryKind.model) {
+      if (!_isBinaryGltf(bytes)) {
+        throw const BundleValidationException(
+          'Model bytes are not a self-consistent binary glTF 2.0 document.',
+        );
+      }
+      return;
+    }
     final hasExpectedMagic = switch (mediaType) {
       'image/png' => _startsWith(bytes, const [
         137,
@@ -524,6 +532,20 @@ final class BundleManifestEntry {
     }
   }
 
+  /// Binary glTF header check: `glTF` magic, container version 2, and a
+  /// declared total length that matches the bytes actually held. The declared
+  /// length is what a reader would trust when walking chunks, so a mismatch is
+  /// rejected before any parser sees it.
+  static bool _isBinaryGltf(Uint8List bytes) {
+    if (bytes.length < 12 ||
+        !_startsWith(bytes, const [0x67, 0x6c, 0x54, 0x46])) {
+      return false;
+    }
+    final header = ByteData.sublistView(bytes, 0, 12);
+    return header.getUint32(4, Endian.little) == 2 &&
+        header.getUint32(8, Endian.little) == bytes.length;
+  }
+
   static BundleManifestEntry _parse(Map<String, Object?> json) {
     requireExactJsonKeys(
       json,
@@ -543,6 +565,7 @@ final class BundleManifestEntry {
     final kind = switch (kindValue) {
       'content' => BundleEntryKind.content,
       'image' => BundleEntryKind.image,
+      'model' => BundleEntryKind.model,
       _ => throw const BundleValidationException(
         'Bundle manifest entry kind is unsupported.',
       ),
@@ -587,15 +610,14 @@ final class BundleManifestEntry {
         'Bundle manifest entry logicalId is invalid.',
       );
     }
-    const supportedMediaTypes = {
-      'application/json',
-      'image/png',
-      'image/jpeg',
-      'image/webp',
+    // A kind names how a client renders the bytes, so the two can never
+    // disagree: a model entry claiming PNG would reach an image decoder.
+    const mediaTypesByKind = <BundleEntryKind, Set<String>>{
+      BundleEntryKind.content: {'application/json'},
+      BundleEntryKind.image: {'image/png', 'image/jpeg', 'image/webp'},
+      BundleEntryKind.model: {'model/gltf-binary'},
     };
-    if (!supportedMediaTypes.contains(mediaType) ||
-        (kind == BundleEntryKind.content && mediaType != 'application/json') ||
-        (kind == BundleEntryKind.image && mediaType == 'application/json')) {
+    if (!(mediaTypesByKind[kind] ?? const <String>{}).contains(mediaType)) {
       throw const BundleValidationException(
         'Bundle manifest entry media type does not match its kind.',
       );

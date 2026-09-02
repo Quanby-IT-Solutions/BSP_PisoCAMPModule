@@ -53,7 +53,7 @@ void main() {
       BundleKeyRing.packagedSeed(),
     );
 
-    expect(envelope.keyId, 'ce1-seed-v1');
+    expect(envelope.keyId, 'ce2-seed-v2');
     expect(envelope.manifest.bundleVersion, '0');
   });
 
@@ -165,8 +165,8 @@ void main() {
         productionPublicKeysJson: jsonEncode({'ce1-prod-v1': publicKey}),
       );
 
-      expect(BundleKeyRing.packagedSeed().accepts('ce1-seed-v1'), isTrue);
-      expect(releaseRing.accepts('ce1-seed-v1'), isFalse);
+      expect(BundleKeyRing.packagedSeed().accepts('ce2-seed-v2'), isTrue);
+      expect(releaseRing.accepts('ce2-seed-v2'), isFalse);
       expect(releaseRing.accepts('ce1-test-v1'), isFalse);
       expect(releaseRing.accepts('ce1-dev-2026-01'), isFalse);
       expect(releaseRing.accepts('ce1-prod-v1'), isTrue);

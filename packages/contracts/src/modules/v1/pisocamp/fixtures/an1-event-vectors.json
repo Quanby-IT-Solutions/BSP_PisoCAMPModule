@@ -15,7 +15,9 @@
 		"deviceCategory": "phone",
 		"networkState": "offline",
 		"status": "completed",
-		"properties": { "entryPoint": "navigation" }
+		"properties": {
+			"entryPoint": "navigation"
+		}
 	},
 	{
 		"schemaVersion": 1,
@@ -69,6 +71,28 @@
 		"deviceCategory": "tablet",
 		"networkState": "online",
 		"status": "completed",
-		"properties": { "logicalId": "currency.ngc.php-20" }
+		"properties": {
+			"logicalId": "currency.ngc.php-20"
+		}
+	},
+	{
+		"schemaVersion": 1,
+		"eventId": "4190f49b-57a8-4b85-9d0e-5e274f0e4aa1",
+		"eventName": "feature_use",
+		"occurredAt": "2026-08-30T01:02:07.000Z",
+		"subjectPseudoId": "AbCdEfGhIjKlMnOpQrStUv",
+		"sessionId": "f6635d24-b4d1-4f63-8a06-4026fa4e8fd6",
+		"accountType": "guest",
+		"screen": "coin_3d_viewer",
+		"feature": "3d_coin",
+		"appVersion": "1.0.0+1",
+		"osName": "android",
+		"osVersion": "Android 15",
+		"deviceCategory": "phone",
+		"networkState": "offline",
+		"status": "completed",
+		"properties": {
+			"logicalId": "catalog.ngc-coins.php-1"
+		}
 	}
 ]

@@ -21,7 +21,24 @@ export const ANALYTICS_EVENT_NAMES = [
 	"account_prompt_shown",
 	"account_prompt_guest",
 	"content_view",
+	"feature_use",
 ] as const
+
+/**
+ * Screens that may report a `feature_use`. A feature is bound to the one screen
+ * that hosts it so a mislabelled event is rejected rather than silently counted
+ * against the wrong surface.
+ */
+export const ANALYTICS_FEATURE_USE_SCREENS = {
+	"3d_coin": "coin_3d_viewer",
+} as const
+
+export type AnalyticsFeatureUseFeature = keyof typeof ANALYTICS_FEATURE_USE_SCREENS
+
+const FEATURE_USE_FEATURES = Object.keys(ANALYTICS_FEATURE_USE_SCREENS) as [
+	AnalyticsFeatureUseFeature,
+	...AnalyticsFeatureUseFeature[],
+]
 
 export const UuidV4Schema = z
 	.string()
@@ -70,6 +87,18 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 		status: z.literal("completed"),
 		properties: z.object({ logicalId: z.string().trim().min(1).max(128) }).strict(),
 	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("feature_use"),
+		screen: z.enum(ANALYTICS_FEATURE_USE_SCREENS),
+		feature: z.enum(FEATURE_USE_FEATURES),
+		status: z.literal("completed"),
+		properties: z.object({ logicalId: z.string().trim().min(1).max(128) }).strict(),
+	})
+		.strict()
+		.refine(
+			event => ANALYTICS_FEATURE_USE_SCREENS[event.feature] === event.screen,
+			"A feature_use event must name the screen that hosts its feature"
+		),
 ])
 
 function hasForbiddenKeySegment(key: string): boolean {

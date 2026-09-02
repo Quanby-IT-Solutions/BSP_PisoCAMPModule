@@ -4,6 +4,7 @@ import { v1Contract } from "../v1.contract.js"
 import { pisoCampAnalyticsContract } from "./analytics.contract.js"
 import {
 	ANALYTICS_EVENT_NAMES,
+	ANALYTICS_FEATURE_USE_SCREENS,
 	AnalyticsEventSchema,
 	IngestAnalyticsEventsInputSchema,
 	IngestAnalyticsEventsOutputSchema,
@@ -80,7 +81,27 @@ describe("AN-1 analytics event catalog", () => {
 			"account_prompt_shown",
 			"account_prompt_guest",
 			"content_view",
+			"feature_use",
 		])
+	})
+
+	it("binds a feature_use to the one screen that hosts its feature", () => {
+		const featureUse = vectors.find(vector => vector.eventName === "feature_use")
+		expect(featureUse).toBeDefined()
+		expect(ANALYTICS_FEATURE_USE_SCREENS).toEqual({ "3d_coin": "coin_3d_viewer" })
+
+		expect(
+			AnalyticsEventSchema.safeParse({ ...featureUse, screen: "currency_detail" }).success
+		).toBe(false)
+		expect(AnalyticsEventSchema.safeParse({ ...featureUse, feature: "ar_coin" }).success).toBe(
+			false
+		)
+		expect(
+			AnalyticsEventSchema.safeParse({
+				...featureUse,
+				properties: { logicalId: "catalog.ngc-coins.php-1", frames: 42 },
+			}).success
+		).toBe(false)
 	})
 
 	it("rejects unregistered names and unknown event or property fields", () => {

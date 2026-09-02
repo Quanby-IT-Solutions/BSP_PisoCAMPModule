@@ -987,7 +987,10 @@ final class BundleStore {
     final image = RegExp(
       r'^assets/pisocamp/bundle/seed/source/neutral-(?:banknote|coin)-education\.png$',
     ).hasMatch(assetPath);
-    return content || image;
+    final model = RegExp(
+      r'^assets/pisocamp/bundle/seed/source/neutral-coin-education\.glb$',
+    ).hasMatch(assetPath);
+    return content || image || model;
   }
 
   Uri _resourceUrl(Uri versionedUrl, String digest) {

@@ -161,6 +161,14 @@ class _DetailBody extends StatelessWidget {
                             );
                     },
                   ),
+              if (document.hasModel) ...[
+                const SizedBox(height: 16),
+                _ViewInThreeDimensions(
+                  document: document,
+
+                  catalog: detail.catalog,
+                ),
+              ],
               const SizedBox(height: 16),
               Text(document.body),
               if (features.isNotEmpty) ...[
@@ -207,6 +215,33 @@ class _DetailBody extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// CE-2 entry point. Offered only when the frozen catalog carries a model for
+/// this denomination, so the button never leads to a fallback notice.
+class _ViewInThreeDimensions extends StatelessWidget {
+  const _ViewInThreeDimensions({required this.document, required this.catalog});
+
+  final CurrencyContentDocument document;
+  final CurrencyCatalogView catalog;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: OutlinedButton.icon(
+        onPressed: () => context.push(
+          AppRoutes.currencyModel(
+            kind: CurrencyRouteKind.coins.pathSegment,
+            logicalId: document.logicalId,
+          ),
+          extra: catalog,
+        ),
+        icon: const Icon(Icons.threed_rotation),
+        label: const Text('View in 3D'),
       ),
     );
   }

@@ -179,3 +179,53 @@ describe("CE-1 strict bundle schemas", () => {
 		).toBe(false)
 	})
 })
+
+describe("manifest entry kinds", () => {
+	it("accepts a binary glTF model entry", () => {
+		const parsed = PisoCampBundleManifestEntrySchema.safeParse(
+			entry({
+				logicalId: "model.seed.coin-education",
+				kind: "model",
+				mediaType: "model/gltf-binary",
+				contentItemId: undefined,
+				contentVersionId: undefined,
+			})
+		)
+
+		expect(parsed.success).toBe(true)
+	})
+
+	it.each([
+		["a model claiming JSON", { kind: "model", mediaType: "application/json" }],
+		["a model claiming PNG", { kind: "model", mediaType: "image/png" }],
+		["content claiming glTF", { kind: "content", mediaType: "model/gltf-binary" }],
+		["an image claiming glTF", { kind: "image", mediaType: "model/gltf-binary" }],
+		["an image claiming JSON", { kind: "image", mediaType: "application/json" }],
+	])("refuses %s", (_label, overrides) => {
+		const parsed = PisoCampBundleManifestEntrySchema.safeParse(entry(overrides))
+
+		expect(parsed.success).toBe(false)
+		expect(parsed.error?.issues.some(issue => issue.path.includes("mediaType"))).toBe(true)
+	})
+
+	it("refuses a kind no client knows how to render", () => {
+		expect(PisoCampBundleManifestEntrySchema.safeParse(entry({ kind: "video" })).success).toBe(
+			false
+		)
+	})
+
+	it("holds a model to the same core size limit as anything else", () => {
+		const parsed = PisoCampBundleManifestEntrySchema.safeParse(
+			entry({
+				kind: "model",
+				mediaType: "model/gltf-binary",
+				delivery: "core",
+				byteLength: 5_242_881,
+				contentItemId: undefined,
+				contentVersionId: undefined,
+			})
+		)
+
+		expect(parsed.success).toBe(false)
+	})
+})

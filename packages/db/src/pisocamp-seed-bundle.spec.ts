@@ -20,7 +20,7 @@ describe("CE-1 packaged currency seed", () => {
 		)
 		expect(bundle.documents.filter(document => document.contentType === "coin")).toHaveLength(14)
 		expect(new Set(bundle.documents.map(document => document.logicalId)).size).toBe(29)
-		expect(bundle.manifest.entries).toHaveLength(31)
+		expect(bundle.manifest.entries).toHaveLength(32)
 		expect(bundle.manifest.entries.map(entry => entry.logicalId)).toEqual(
 			[...bundle.manifest.entries.map(entry => entry.logicalId)].sort()
 		)
@@ -35,8 +35,8 @@ describe("CE-1 packaged currency seed", () => {
 
 		try {
 			const bundle = buildUnsignedSeedBundle(await readSeedSourceImages())
-			expect(bundle.manifest.entries).toHaveLength(31)
-			expect(Object.keys(bundle.resourceIndex)).toHaveLength(31)
+			expect(bundle.manifest.entries).toHaveLength(32)
+			expect(Object.keys(bundle.resourceIndex)).toHaveLength(32)
 		} finally {
 			String.prototype.localeCompare = originalLocaleCompare
 		}
@@ -79,6 +79,35 @@ describe("CE-1 packaged currency seed", () => {
 					Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 				)
 			}
+			if (entry.kind === "model") {
+				expect(resource!.bytes.subarray(0, 4).toString("ascii")).toBe("glTF")
+				expect(resource!.bytes.readUInt32LE(8)).toBe(resource!.byteLength)
+			}
+		}
+	})
+
+
+	it("gives every mandatory coin a model and no banknote one", async () => {
+		const bundle = buildUnsignedSeedBundle(await readSeedSourceImages())
+		const models = bundle.manifest.entries.filter(entry => entry.kind === "model")
+
+		expect(models).toHaveLength(1)
+		expect(models[0]?.logicalId).toBe("model.seed.coin-education")
+		expect(models[0]?.mediaType).toBe("model/gltf-binary")
+		// Core, so a first-run device can open the 3D view with no network.
+		expect(models[0]?.delivery).toBe("core")
+
+		const coins = bundle.documents.filter(document => document.contentType === "coin")
+		expect(coins).toHaveLength(14)
+		for (const coin of coins) {
+			expect(coin.modelSha256, coin.logicalId).toBe(models[0]?.sha256)
+			expect(coin.modelAlt, coin.logicalId).toContain("not a reproduction")
+		}
+		for (const banknote of bundle.documents.filter(
+			document => document.contentType === "banknote"
+		)) {
+			expect(banknote.modelSha256, banknote.logicalId).toBeUndefined()
+			expect(banknote.modelAlt, banknote.logicalId).toBeUndefined()
 		}
 	})
 
@@ -87,7 +116,7 @@ describe("CE-1 packaged currency seed", () => {
 		try {
 			await generateCheckedInSeed(output)
 			const result = await validateCheckedInSeed(output)
-			expect(result).toEqual({ entries: 31, documents: 29, networkUsed: false })
+			expect(result).toEqual({ entries: 32, documents: 29, networkUsed: false })
 			expect(await readFile(join(output, "manifest.envelope.json"))).toEqual(
 				await readFile(
 					join(
@@ -112,7 +141,7 @@ describe("CE-1 packaged currency seed", () => {
 	it("contains no private-key, credential, absolute-path, or unauthorized URL material", async () => {
 		const result = await validateCheckedInSeed()
 
-		expect(result).toEqual({ entries: 31, documents: 29, networkUsed: false })
+		expect(result).toEqual({ entries: 32, documents: 29, networkUsed: false })
 	})
 
 	it("retains verification authority only and cannot generate or use private signing keys", async () => {

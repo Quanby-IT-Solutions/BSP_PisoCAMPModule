@@ -461,6 +461,63 @@ void main() {
     },
   );
 
+  testWidgets('a coin detail offers the 3D view and a banknote does not', (
+    tester,
+  ) async {
+    final coin = catalog.documentsFor(CurrencyRouteKind.coins).first;
+    final banknote = catalog.documentsFor(CurrencyRouteKind.banknotes).first;
+    final router = GoRouter(
+      initialLocation: '/detail',
+      routes: [
+        GoRoute(
+          path: '/detail',
+          builder: (context, state) => CurrencyDetailScreen(
+            kind: CurrencyRouteKind.coins,
+            logicalId: coin.logicalId,
+            initialCatalog: catalog,
+          ),
+        ),
+        GoRoute(
+          path: '/pisocamp/currency/:kind/:logicalId/3d',
+          builder: (context, state) => Scaffold(
+            body: Text('3D view of ${state.pathParameters['logicalId']}'),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+    await tester.pumpAndSettle();
+
+    final entryPoint = find.widgetWithText(OutlinedButton, 'View in 3D');
+    expect(entryPoint, findsOneWidget);
+    expect(tester.getSize(entryPoint).height, greaterThanOrEqualTo(48));
+
+    await tester.ensureVisible(entryPoint);
+    await tester.pumpAndSettle();
+    await tester.tap(entryPoint);
+    await tester.pumpAndSettle();
+    expect(find.text('3D view of ${coin.logicalId}'), findsOneWidget);
+
+    // Banknote 3D is out of scope, so the button is absent rather than
+    // present and leading to a notice.
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: CurrencyDetailScreen(
+            kind: CurrencyRouteKind.banknotes,
+            logicalId: banknote.logicalId,
+            initialCatalog: catalog,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('View in 3D'), findsNothing);
+  });
+
   testWidgets(
     'detail associates security features and exposes only safe destinations',
     (tester) async {
@@ -508,6 +565,10 @@ void main() {
         findsAtLeastNWidgets(1),
       );
 
+      // The coin detail now offers a 3D entry point above the related links,
+      // so the topic button can start below the fold.
+      await tester.ensureVisible(topic);
+      await tester.pumpAndSettle();
       await tester.tap(topic);
       await tester.pumpAndSettle();
       expect(

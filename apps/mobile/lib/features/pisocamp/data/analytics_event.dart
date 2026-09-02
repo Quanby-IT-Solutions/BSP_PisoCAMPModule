@@ -58,6 +58,17 @@ enum ModuleEntryPoint {
   final String wireValue;
 }
 
+/// Features that report a `feature_use`. Each is bound to the one screen that
+/// hosts it, so a mislabelled event is rejected rather than counted against the
+/// wrong surface.
+enum AnalyticsFeature {
+  coin3d('3d_coin', 'coin_3d_viewer');
+
+  const AnalyticsFeature(this.wireValue, this.screen);
+  final String wireValue;
+  final String screen;
+}
+
 enum AnalyticsAccountType {
   guest('guest'),
   registered('registered');
@@ -168,6 +179,27 @@ final class ContentViewIntent extends AnalyticsIntent {
 
   @override
   String get feature => 'currency_education';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+  };
+}
+
+final class FeatureUseIntent extends AnalyticsIntent {
+  const FeatureUseIntent({required this.usedFeature, required this.logicalId});
+
+  final AnalyticsFeature usedFeature;
+  final String logicalId;
+
+  @override
+  String get eventName => 'feature_use';
+
+  @override
+  String get screen => usedFeature.screen;
+
+  @override
+  String get feature => usedFeature.wireValue;
 
   @override
   Map<String, Object?> get properties => <String, Object?>{
@@ -386,6 +418,20 @@ AnalyticsIntent _parseIntent({
       return ContentViewIntent(
         _requiredBoundedString(properties, 'logicalId', 128),
       );
+    case 'feature_use':
+      _requireExactKeys(properties, const <String>{'logicalId'});
+      // An unknown or mislabelled feature is a catalog problem, not a
+      // malformed field, so it is reported as one.
+      final usedFeature = _featureForWireValue(feature);
+      if (usedFeature == null || screen != usedFeature.screen) {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return FeatureUseIntent(
+        usedFeature: usedFeature,
+        logicalId: _requiredBoundedString(properties, 'logicalId', 128),
+      );
     default:
       throw const AnalyticsValidationException(
         AnalyticsValidationReason.invalidCatalog,
@@ -521,6 +567,13 @@ void _requireLiteral(Map<String, Object?> json, String key, Object value) {
       AnalyticsValidationReason.invalidField,
     );
   }
+}
+
+AnalyticsFeature? _featureForWireValue(String wireValue) {
+  for (final value in AnalyticsFeature.values) {
+    if (value.wireValue == wireValue) return value;
+  }
+  return null;
 }
 
 T _parseWire<T extends Enum>(List<T> values, String wireValue) {

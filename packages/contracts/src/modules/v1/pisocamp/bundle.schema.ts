@@ -49,12 +49,24 @@ export const PisoCampBundleEnvelopeSchema = z
 	})
 	.strict()
 
+const KIND_MEDIA_TYPES = {
+	content: ["application/json"],
+	image: ["image/png", "image/jpeg", "image/webp"],
+	model: ["model/gltf-binary"],
+} as const satisfies Record<string, readonly string[]>
+
 export const PisoCampBundleManifestEntrySchema = z
 	.object({
 		logicalId: z.string().min(1).max(160).regex(LOGICAL_ID_PATTERN),
-		kind: z.enum(["content", "image"]),
+		kind: z.enum(["content", "image", "model"]),
 		delivery: z.enum(["core", "on_demand"]),
-		mediaType: z.enum(["application/json", "image/png", "image/jpeg", "image/webp"]),
+		mediaType: z.enum([
+			"application/json",
+			"image/png",
+			"image/jpeg",
+			"image/webp",
+			"model/gltf-binary",
+		]),
 		byteLength: z.number().int().positive(),
 		sha256: z.string().regex(SHA256_PATTERN),
 		downloadPath: z.string(),
@@ -63,6 +75,17 @@ export const PisoCampBundleManifestEntrySchema = z
 	})
 	.strict()
 	.superRefine((entry, context) => {
+		// A kind names how a client renders the bytes, so the two can never
+		// disagree: an image entry claiming JSON would reach an image decoder.
+		const expectedMediaTypes: readonly string[] = KIND_MEDIA_TYPES[entry.kind]
+		if (!expectedMediaTypes.includes(entry.mediaType)) {
+			context.addIssue({
+				code: "custom",
+				message: `A ${entry.kind} entry cannot declare ${entry.mediaType}`,
+				path: ["mediaType"],
+			})
+		}
+
 		if (entry.delivery === "core" && entry.byteLength > MAX_CORE_ENTRY_BYTES) {
 			context.addIssue({
 				code: "custom",

@@ -164,6 +164,28 @@ abstract interface class ContentViewAnalytics {
   Future<void> recordOpen(String logicalId);
 }
 
+final coinViewerAnalyticsProvider = Provider<CoinViewerAnalytics>(
+  (ref) => _SdkCoinViewerAnalytics(ref.watch(analyticsSdkProvider)),
+);
+
+abstract interface class CoinViewerAnalytics {
+  Future<void> recordUse(String logicalId);
+}
+
+final class _SdkCoinViewerAnalytics implements CoinViewerAnalytics {
+  const _SdkCoinViewerAnalytics(this._sdk);
+
+  final AnalyticsSdk _sdk;
+
+  @override
+  Future<void> recordUse(String logicalId) => _sdk.emit(
+    FeatureUseIntent(
+      usedFeature: AnalyticsFeature.coin3d,
+      logicalId: logicalId,
+    ),
+  );
+}
+
 final class _SdkContentViewAnalytics implements ContentViewAnalytics {
   const _SdkContentViewAnalytics(this._sdk);
 

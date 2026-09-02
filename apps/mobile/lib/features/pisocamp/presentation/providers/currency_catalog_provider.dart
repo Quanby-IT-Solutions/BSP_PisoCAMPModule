@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/features/pisocamp/data/bundle_protocol.dart';
 import 'package:mobile/features/pisocamp/data/bundle_store.dart';
 import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
+import 'package:mobile/features/pisocamp/data/coin_model.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/bundle_provider.dart';
 
@@ -87,15 +88,21 @@ final class CurrencySeedBaseline {
     return CurrencySeedBaseline._(resources);
   }
 
+  /// Each packaged asset path is named here rather than pattern-matched, so a
+  /// tampered index cannot point a manifest entry at some other bundled file.
   static bool _isSafeSeedAsset(BundleManifestEntry entry, String assetPath) {
-    if (entry.kind == BundleEntryKind.content) {
-      return assetPath ==
-          'assets/pisocamp/bundle/seed/resources/${entry.sha256}.json';
-    }
-    return const {
-      'assets/pisocamp/bundle/seed/source/neutral-banknote-education.png',
-      'assets/pisocamp/bundle/seed/source/neutral-coin-education.png',
-    }.contains(assetPath);
+    return switch (entry.kind) {
+      BundleEntryKind.content =>
+        assetPath ==
+            'assets/pisocamp/bundle/seed/resources/${entry.sha256}.json',
+      BundleEntryKind.image => const {
+        'assets/pisocamp/bundle/seed/source/neutral-banknote-education.png',
+        'assets/pisocamp/bundle/seed/source/neutral-coin-education.png',
+      }.contains(assetPath),
+      BundleEntryKind.model =>
+        assetPath ==
+            'assets/pisocamp/bundle/seed/source/neutral-coin-education.glb',
+    };
   }
 }
 
@@ -106,8 +113,8 @@ final class _SeedBaselineResource {
   final Uint8List bytes;
 }
 
-final class _VerifiedImageResource {
-  const _VerifiedImageResource({required this.mediaType, required this.read});
+final class _VerifiedBundleResource {
+  const _VerifiedBundleResource({required this.mediaType, required this.read});
 
   final String mediaType;
   final Future<Uint8List> Function() read;
@@ -179,7 +186,8 @@ final class CurrencyCatalogView {
     required this.snapshot,
     required List<CurrencyContentDocument> documents,
     required Map<String, List<CurrencyContentDocument>> securityFeatures,
-    required Map<String, _VerifiedImageResource> images,
+    required Map<String, _VerifiedBundleResource> images,
+    required Map<String, _VerifiedBundleResource> models,
   }) : documents = List.unmodifiable(documents),
        _securityFeatures =
            Map.unmodifiable(<String, List<CurrencyContentDocument>>{
@@ -187,14 +195,17 @@ final class CurrencyCatalogView {
                entry.key: List.unmodifiable(entry.value),
            }),
        _images = Map.unmodifiable(images),
+       _models = Map.unmodifiable(models),
        safeFailureCode = documents.isEmpty ? 'saved_content_unavailable' : null;
 
   final ActiveCurrencyCatalog snapshot;
   final List<CurrencyContentDocument> documents;
   final Map<String, List<CurrencyContentDocument>> _securityFeatures;
-  final Map<String, _VerifiedImageResource> _images;
+  final Map<String, _VerifiedBundleResource> _images;
+  final Map<String, _VerifiedBundleResource> _models;
   final Map<String, Future<VerifiedCurrencyImage?>> _imageReads = {};
   final Map<String, VerifiedCurrencyImage> _loadedImages = {};
+  final Map<String, Future<CoinModel>> _modelReads = {};
   final String? safeFailureCode;
 
   static Future<CurrencyCatalogView> load(
@@ -203,14 +214,17 @@ final class CurrencyCatalogView {
   }) async {
     final seedDocuments = <CurrencyContentDocument>[];
     final publishedBytes = <Uint8List>[];
-    final images = <String, _VerifiedImageResource>{};
+    final images = <String, _VerifiedBundleResource>{};
+    final models = <String, _VerifiedBundleResource>{};
 
     final baselineResources = seedBaseline?._resources;
     if (baselineResources != null) {
       for (final resource in baselineResources) {
         final entry = resource.entry;
-        if (entry.kind == BundleEntryKind.image) {
-          images[entry.sha256] = _VerifiedImageResource(
+        if (entry.kind == BundleEntryKind.image ||
+            entry.kind == BundleEntryKind.model) {
+          final target = entry.kind == BundleEntryKind.image ? images : models;
+          target[entry.sha256] = _VerifiedBundleResource(
             mediaType: entry.mediaType,
             read: () async => Uint8List.fromList(resource.bytes),
           );
@@ -231,8 +245,10 @@ final class CurrencyCatalogView {
       }
     } else {
       for (final entry in snapshot.entries) {
-        if (entry.kind == BundleEntryKind.image) {
-          images[entry.sha256] = _VerifiedImageResource(
+        if (entry.kind == BundleEntryKind.image ||
+            entry.kind == BundleEntryKind.model) {
+          final target = entry.kind == BundleEntryKind.image ? images : models;
+          target[entry.sha256] = _VerifiedBundleResource(
             mediaType: entry.mediaType,
             read: () => snapshot.readBytes(entry),
           );
@@ -256,8 +272,10 @@ final class CurrencyCatalogView {
     }
 
     for (final entry in snapshot.entries) {
-      if (entry.kind == BundleEntryKind.image) {
-        images[entry.sha256] = _VerifiedImageResource(
+      if (entry.kind == BundleEntryKind.image ||
+          entry.kind == BundleEntryKind.model) {
+        final target = entry.kind == BundleEntryKind.image ? images : models;
+        target[entry.sha256] = _VerifiedBundleResource(
           mediaType: entry.mediaType,
           read: () => snapshot.readBytes(entry),
         );
@@ -318,6 +336,7 @@ final class CurrencyCatalogView {
       documents: documents,
       securityFeatures: securityFeatures,
       images: images,
+      models: models,
     );
   }
 
@@ -421,8 +440,37 @@ final class CurrencyCatalogView {
     return digest == null ? null : _loadedImages[digest];
   }
 
+  /// Reads and parses the 3D model this document names.
+  ///
+  /// Throws [CoinModelException] rather than returning null so the viewer can
+  /// tell "this denomination has no model" from "the bundle is missing it"
+  /// from "the bytes will not parse", and say which.
+  Future<CoinModel> readModel(CurrencyContentDocument document) {
+    final digest = document.modelSha256;
+    if (digest == null || !document.hasModel) {
+      return Future.error(
+        const CoinModelException(CoinModelFailure.unavailable),
+      );
+    }
+    final resource = _models[digest];
+    if (resource == null || resource.mediaType != 'model/gltf-binary') {
+      return Future.error(
+        const CoinModelException(CoinModelFailure.missingResource),
+      );
+    }
+    return _modelReads.putIfAbsent(digest, () async {
+      final Uint8List bytes;
+      try {
+        bytes = await resource.read();
+      } on Object {
+        throw const CoinModelException(CoinModelFailure.missingResource);
+      }
+      return CoinModel.parse(bytes);
+    });
+  }
+
   Future<VerifiedCurrencyImage?> _readImage(
-    _VerifiedImageResource resource,
+    _VerifiedBundleResource resource,
   ) async {
     try {
       return VerifiedCurrencyImage.parse(

@@ -33,7 +33,7 @@ void main() {
     );
   }
 
-  test('bootstraps all 29 content and 2 image seed objects below root', () async {
+  test('bootstraps all 29 content, 2 image and 1 model seed objects below root', () async {
     final catalog = await seedStore().bootstrap();
 
     expect(catalog.version, '0');
@@ -48,7 +48,7 @@ void main() {
     final objects = Directory(
       '${root.path}${Platform.pathSeparator}pisocamp${Platform.pathSeparator}bundles${Platform.pathSeparator}objects',
     );
-    expect(await objects.list().where((item) => item is File).length, 31);
+    expect(await objects.list().where((item) => item is File).length, 32);
     for (final entry in catalog.entries) {
       expect(await seedStore().hasVerifiedObject(entry), isTrue);
     }
@@ -181,7 +181,7 @@ void main() {
         isNot(contains(removedEntry.logicalId)),
       );
       expect(oldSnapshot.version, '0');
-      expect(oldSnapshot.entries, hasLength(31));
+      expect(oldSnapshot.entries, hasLength(32));
       expect(
         oldSnapshot.entries.map((entry) => entry.logicalId),
         isNot(contains('content.new')),

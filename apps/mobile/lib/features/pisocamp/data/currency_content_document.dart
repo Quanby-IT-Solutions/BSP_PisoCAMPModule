@@ -41,6 +41,8 @@ final class CurrencyContentDocument {
     required this.body,
     required this.imageSha256,
     required this.imageAlt,
+    required this.modelSha256,
+    required this.modelAlt,
     required List<CurrencyRelatedLink> relatedLinks,
     required this.catalogVersion,
     required this.sourceUrl,
@@ -62,12 +64,20 @@ final class CurrencyContentDocument {
   final String body;
   final String? imageSha256;
   final String? imageAlt;
+
+  /// A 3D model for this denomination, when the catalog carries one. Only
+  /// coins do: CE-2 requires a 3D view for every mandatory coin and puts
+  /// banknote 3D out of scope.
+  final String? modelSha256;
+  final String? modelAlt;
   final List<CurrencyRelatedLink> relatedLinks;
   final String catalogVersion;
   final Uri sourceUrl;
   final String? contentItemId;
   final String? contentVersionId;
   final int? versionNo;
+
+  bool get hasModel => modelSha256 != null && modelAlt != null;
 
   static CurrencyContentDocument parseSeed(Uint8List bytes) {
     final json = decodeStrictJsonObject(
@@ -94,7 +104,12 @@ final class CurrencyContentDocument {
         'sourceUrl',
         'relatedLinks',
       },
-      optionalKeys: const {'imageSha256', 'imageAlt'},
+      optionalKeys: const {
+        'imageSha256',
+        'imageAlt',
+        'modelSha256',
+        'modelAlt',
+      },
       context: 'currency seed document',
     );
 
@@ -115,6 +130,19 @@ final class CurrencyContentDocument {
     if ((imageSha256 == null) != (imageAlt == null)) {
       throw const BundleValidationException(
         'Currency image digest and alternative text must be provided together.',
+      );
+    }
+
+    final modelSha256 = _nullableDigest(json, 'modelSha256');
+    final modelAlt = _nullablePlainText(json, 'modelAlt', maximum: 500);
+    if ((modelSha256 == null) != (modelAlt == null)) {
+      throw const BundleValidationException(
+        'Currency model digest and alternative text must be provided together.',
+      );
+    }
+    if (modelSha256 != null && kind != CurrencyContentKind.coin) {
+      throw const BundleValidationException(
+        'Only coin catalog entries may carry a 3D model.',
       );
     }
 
@@ -140,6 +168,8 @@ final class CurrencyContentDocument {
       body: _plainText(json, 'body', maximum: 10000),
       imageSha256: imageSha256,
       imageAlt: imageAlt,
+      modelSha256: modelSha256,
+      modelAlt: modelAlt,
       relatedLinks: relatedLinks,
       catalogVersion: _plainText(json, 'catalogVersion', maximum: 64),
       sourceUrl: sourceUrl,
@@ -228,6 +258,14 @@ final class CurrencyContentDocument {
       body: _plainText(json, 'body', maximum: 10000),
       imageSha256: catalogEntry.imageSha256,
       imageAlt: catalogEntry.imageAlt,
+      // Presentation media is the frozen catalog's, never the published
+      // version's: an editor cannot swap the model shown for a denomination.
+      modelSha256: kind == CurrencyContentKind.securityFeature
+          ? null
+          : catalogEntry.modelSha256,
+      modelAlt: kind == CurrencyContentKind.securityFeature
+          ? null
+          : catalogEntry.modelAlt,
       relatedLinks: relatedLinks,
       catalogVersion: catalogEntry.catalogVersion,
       sourceUrl: catalogEntry.sourceUrl,

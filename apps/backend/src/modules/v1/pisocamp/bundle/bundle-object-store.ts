@@ -6,16 +6,21 @@ import { contentBundleBlobs } from "@repo/db/schema"
 
 import { db } from "@/common/database/database.client"
 
+import type { PisoCampBundleManifestEntry } from "@repo/contracts"
+
 import type { ContentDatabase } from "../content/content-mapping"
 
-type BundleMediaType = "application/json" | "image/png" | "image/jpeg" | "image/webp"
+// Derived from the manifest contract rather than restated, so a media type the
+// bundle protocol gains cannot be silently missing from the object store.
+type BundleMediaType = PisoCampBundleManifestEntry["mediaType"]
 const MAX_BUNDLE_OBJECT_BYTES = 5_242_880
 const BUNDLE_MEDIA_TYPES = new Set<BundleMediaType>([
 	"application/json",
 	"image/png",
 	"image/jpeg",
 	"image/webp",
-])
+	"model/gltf-binary",
+] satisfies readonly BundleMediaType[])
 
 export class BundleObjectCorruptionError extends Error {
 	readonly code: string

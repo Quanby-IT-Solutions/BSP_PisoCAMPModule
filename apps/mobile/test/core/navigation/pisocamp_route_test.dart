@@ -31,6 +31,8 @@ void main() {
       '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20',
       '/pisocamp/currency/coins/catalog.ngc-coins.php-1',
       '/pisocamp/currency/banknotes/content%3Averified',
+      // CE-2's 3D view is guest content like the detail it opens from.
+      '/pisocamp/currency/coins/catalog.ngc-coins.php-1/3d',
     ];
     const protected = <String>[
       '/pisocamp/currency',
@@ -40,6 +42,9 @@ void main() {
       '/pisocamp/currency/coins/UPPER',
       '/pisocamp/currency/coins/bad%2Fid',
       '/pisocamp/currency/coins/catalog..bad',
+      '/pisocamp/currency/coins/catalog.ngc-coins.php-1/4d',
+      '/pisocamp/currency/coins/catalog.ngc-coins.php-1/3d/more',
+      '/pisocamp/currency/coins/UPPER/3d',
       '/pisocamp/currency-banknotes',
       '/pisocamp/register/currency/coins',
       '/profile',
@@ -83,6 +88,17 @@ void main() {
     );
     expect(
       () => AppRoutes.currencyDetail(kind: 'coins', logicalId: '../private'),
+      throwsArgumentError,
+    );
+    expect(
+      AppRoutes.currencyModel(
+        kind: 'coins',
+        logicalId: 'catalog.ngc-coins.php-1',
+      ),
+      '/pisocamp/currency/coins/catalog.ngc-coins.php-1/3d',
+    );
+    expect(
+      () => AppRoutes.currencyModel(kind: 'coins', logicalId: '../private'),
       throwsArgumentError,
     );
   });

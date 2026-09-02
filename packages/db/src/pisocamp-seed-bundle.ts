@@ -10,13 +10,14 @@ import {
 	type PisoCampBundleManifest,
 } from "@repo/contracts"
 
+import { buildNeutralCoinModel } from "./pisocamp-coin-model.js"
 import {
 	PISOCAMP_CURRENCY_CATALOG,
 	PISOCAMP_CURRENCY_CATALOG_VERSION,
 } from "./pisocamp-currency-catalog.js"
 
 const GENERATED_AT = "2026-08-27T00:00:00Z"
-const SEED_KEY_ID = "ce1-seed-v1"
+const SEED_KEY_ID = "ce2-seed-v2"
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
 const CHECKED_IN_SEED_ROOT = join(
 	REPOSITORY_ROOT,
@@ -29,15 +30,20 @@ const CHECKED_IN_SEED_ROOT = join(
 )
 const BANKNOTE_SOURCE = "neutral-banknote-education.png"
 const COIN_SOURCE = "neutral-coin-education.png"
+const COIN_MODEL_SOURCE = "neutral-coin-education.glb"
 const PROVENANCE_SOURCE = "SOURCE.md"
 const PNG_MAGIC = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+const GLB_MAGIC = Buffer.from("glTF", "ascii")
 const MAX_CORE_ENTRY_BYTES = 5_242_880
 const MAX_TOTAL_CORE_BYTES = 52_428_800
 
-// Raw 32-byte Ed25519 public key and signature only. Signing authority is not retained.
-export const FROZEN_SEED_PUBLIC_KEY_BASE64URL = "L44qPLFdHh-96BS718yYtGI8Z5zNgDtsEvMEZnqpjy4"
+// Raw 32-byte Ed25519 public key and signature only. Signing authority is not
+// retained: the seed is re-signed with a fresh throwaway key whenever its
+// contents legitimately change, and both constants move with it in one diff.
+// Superseded ce1-seed-v1 when CE-2 added the coin model to the packaged seed.
+export const FROZEN_SEED_PUBLIC_KEY_BASE64URL = "WDi-4JGTZj6kqYjLxaGLoxzja6aiTdb_LfuFOJtrYoo"
 export const FROZEN_SEED_SIGNATURE_BASE64URL =
-	"4SFHVqShRdp6_oIbxiu_GviBGXSb1sqBRWlYWmez3VwENXq4DWL9pVuwYeenTQvwBJ-wBsS-z3vLuxxYqdVwBg"
+	"6PScS1YkZ_DBfV7Jljk1Z6V_bJJecwJqi0BM2ujiAM7FMWA-42nzimlmnuokOMJsKjwc1MIyliujzNdqqZsOAQ"
 
 export interface SeedSourceImages {
 	banknote: Buffer
@@ -61,13 +67,15 @@ export interface SeedCurrencyDocument {
 	sourceUrl: string
 	imageSha256: string
 	imageAlt: string
+	modelSha256?: string
+	modelAlt?: string
 	relatedLinks: { label: string; url: string }[]
 }
 
 interface SeedResource {
 	bytes: Buffer
 	byteLength: number
-	mediaType: "application/json" | "image/png"
+	mediaType: "application/json" | "image/png" | "model/gltf-binary"
 	fileName: string
 }
 
@@ -115,6 +123,37 @@ function imageEntry(
 	}
 }
 
+/**
+ * The coin model is generated rather than read: it is procedural geometry, so
+ * the generator is its source and the checked-in `.glb` is a build artifact
+ * that `validateCheckedInSeed` reproduces byte for byte.
+ */
+function modelEntry(logicalId: string, bytes: Buffer, fileName: string) {
+	if (!bytes.subarray(0, GLB_MAGIC.length).equals(GLB_MAGIC)) throw new Error("seed_model_not_glb")
+	if (bytes.readUInt32LE(4) !== 2) throw new Error("seed_model_version_unsupported")
+	if (bytes.readUInt32LE(8) !== bytes.byteLength) throw new Error("seed_model_length_mismatch")
+	if (bytes.byteLength > MAX_CORE_ENTRY_BYTES) throw new Error("seed_model_too_large")
+	const digest = sha256(bytes)
+	return {
+		digest,
+		entry: {
+			logicalId,
+			kind: "model" as const,
+			delivery: "core" as const,
+			mediaType: "model/gltf-binary" as const,
+			byteLength: bytes.byteLength,
+			sha256: digest,
+			downloadPath: `/pisocamp/bundle/resources/${digest}`,
+		},
+		resource: {
+			bytes,
+			byteLength: bytes.byteLength,
+			mediaType: "model/gltf-binary" as const,
+			fileName,
+		},
+	}
+}
+
 export async function readSeedSourceImages(
 	seedRoot = CHECKED_IN_SEED_ROOT
 ): Promise<SeedSourceImages> {
@@ -131,12 +170,22 @@ export function buildUnsignedSeedBundle(images: SeedSourceImages): UnsignedSeedB
 		join("source", BANKNOTE_SOURCE)
 	)
 	const coin = imageEntry("image.seed.coin-education", images.coin, join("source", COIN_SOURCE))
+	const coinModel = modelEntry(
+		"model.seed.coin-education",
+		buildNeutralCoinModel(),
+		join("source", COIN_MODEL_SOURCE)
+	)
 	const resources = new Map<string, SeedResource>([
 		[banknote.digest, banknote.resource],
 		[coin.digest, coin.resource],
+		[coinModel.digest, coinModel.resource],
 	])
 	const documents: SeedCurrencyDocument[] = []
-	const entries: PisoCampBundleManifest["entries"] = [banknote.entry, coin.entry]
+	const entries: PisoCampBundleManifest["entries"] = [
+		banknote.entry,
+		coin.entry,
+		coinModel.entry,
+	]
 
 	PISOCAMP_CURRENCY_CATALOG.forEach((currencySeries, seriesOrder) => {
 		currencySeries.denominations.forEach(currencyDenomination => {
@@ -160,6 +209,15 @@ export function buildUnsignedSeedBundle(images: SeedSourceImages): UnsignedSeedB
 				sourceUrl: currencySeries.sourceUrl,
 				imageSha256: chosenImage.digest,
 				imageAlt: `A neutral fictional ${kindLabel} education illustration, not a reproduction.`,
+				// Only coins carry a model: CE-2 requires a 3D view for every
+				// mandatory coin, and banknote 3D is explicitly out of scope.
+				...(currencySeries.mediaKind === "coin"
+					? {
+							modelSha256: coinModel.digest,
+							modelAlt:
+								"A neutral fictional coin model with an abstract face pattern and a reeded edge, not a reproduction.",
+						}
+					: {}),
 				relatedLinks: [
 					{
 						label: "Bangko Sentral ng Pilipinas source",

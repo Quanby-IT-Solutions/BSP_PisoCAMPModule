@@ -66,7 +66,7 @@ void main() {
         containsAllInOrder(['0', '1']),
       );
       expect(old.version, '0');
-      expect(old.entries, hasLength(31));
+      expect(old.entries, hasLength(32));
       expect(seen.last.version, '1');
       expect(seen.last.entries.single.logicalId, 'content.provider');
     },
@@ -215,7 +215,7 @@ void main() {
       expect(newest.version, '1');
       expect(newest.entries.single.logicalId, 'content.race');
       expect(pinnedOld.version, '0');
-      expect(pinnedOld.entries, hasLength(31));
+      expect(pinnedOld.entries, hasLength(32));
       expect(await pinnedOld.readBytes(pinnedOld.entries.first), isNotEmpty);
     },
   );
