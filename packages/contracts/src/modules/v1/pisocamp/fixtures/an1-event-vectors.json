@@ -94,5 +94,26 @@
 		"properties": {
 			"logicalId": "catalog.ngc-coins.php-1"
 		}
+	},
+	{
+		"schemaVersion": 1,
+		"eventId": "5190f49b-57a8-4b85-9d0e-5e274f0e4aa1",
+		"eventName": "link_open",
+		"occurredAt": "2026-08-30T01:02:08.000Z",
+		"subjectPseudoId": "AbCdEfGhIjKlMnOpQrStUv",
+		"sessionId": "f6635d24-b4d1-4f63-8a06-4026fa4e8fd6",
+		"accountType": "guest",
+		"screen": "currency_detail",
+		"feature": "currency_education",
+		"appVersion": "1.0.0+1",
+		"osName": "ios",
+		"osVersion": "iOS 18",
+		"deviceCategory": "phone",
+		"networkState": "online",
+		"status": "completed",
+		"properties": {
+			"linkType": "external",
+			"logicalId": "catalog.ngc-banknotes.php-20"
+		}
 	}
 ]

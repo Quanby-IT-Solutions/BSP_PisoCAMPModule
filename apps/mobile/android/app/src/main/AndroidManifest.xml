@@ -41,12 +41,39 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- F5. The custom scheme only an installed app can answer. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="bsp" android:host="pisocamp"/>
+            </intent-filter>
+            <!-- F5. The App Link an installed app intercepts and a browser
+                 otherwise follows to the BSP page, which is what makes the
+                 "app not installed" fallback work at all: the operating system
+                 cannot run code that is not on the device.
+                 autoVerify requires the matching assetlinks.json to be served
+                 from https://www.bsp.gov.ph/.well-known/. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.bsp.gov.ph"
+                    android:pathPrefix="/pisocamp"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- F5. Hands an incoming link to the Flutter router rather than to a
+             platform channel, so one resolver decides what every link means. -->
+        <meta-data
+            android:name="flutter_deeplinking_enabled"
+            android:value="true" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

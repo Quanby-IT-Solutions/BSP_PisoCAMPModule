@@ -188,6 +188,24 @@ abstract interface class TiltAnalytics {
   Future<void> recordUse(String logicalId);
 }
 
+final linkAnalyticsProvider = Provider<LinkAnalytics>(
+  (ref) => _SdkLinkAnalytics(ref.watch(analyticsSdkProvider)),
+);
+
+abstract interface class LinkAnalytics {
+  Future<void> recordOpen(AnalyticsLinkType linkType, String logicalId);
+}
+
+final class _SdkLinkAnalytics implements LinkAnalytics {
+  const _SdkLinkAnalytics(this._sdk);
+
+  final AnalyticsSdk _sdk;
+
+  @override
+  Future<void> recordOpen(AnalyticsLinkType linkType, String logicalId) =>
+      _sdk.emit(LinkOpenIntent(linkType: linkType, logicalId: logicalId));
+}
+
 final class _SdkTiltAnalytics implements TiltAnalytics {
   const _SdkTiltAnalytics(this._sdk);
 

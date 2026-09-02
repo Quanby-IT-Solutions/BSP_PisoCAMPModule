@@ -209,6 +209,40 @@ final class FeatureUseIntent extends AnalyticsIntent {
   };
 }
 
+/// What kind of destination a tapped link led to. Never the destination
+/// itself: a URL is content, and analytics carries none.
+enum AnalyticsLinkType {
+  external('external'),
+  internal('internal'),
+  topic('topic'),
+  deepLink('deep_link');
+
+  const AnalyticsLinkType(this.wireValue);
+  final String wireValue;
+}
+
+final class LinkOpenIntent extends AnalyticsIntent {
+  const LinkOpenIntent({required this.linkType, required this.logicalId});
+
+  final AnalyticsLinkType linkType;
+  final String logicalId;
+
+  @override
+  String get eventName => 'link_open';
+
+  @override
+  String get screen => 'currency_detail';
+
+  @override
+  String get feature => 'currency_education';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'linkType': linkType.wireValue,
+    'logicalId': logicalId,
+  };
+}
+
 final class AnalyticsEventContext {
   const AnalyticsEventContext({
     required this.subjectPseudoId,
@@ -420,6 +454,20 @@ AnalyticsIntent _parseIntent({
       return ContentViewIntent(
         _requiredBoundedString(properties, 'logicalId', 128),
       );
+    case 'link_open':
+      _requireExactKeys(properties, const <String>{'linkType', 'logicalId'});
+      if (screen != 'currency_detail' || feature != 'currency_education') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return LinkOpenIntent(
+        linkType: _parseWire(
+          AnalyticsLinkType.values,
+          _requiredString(properties, 'linkType'),
+        ),
+        logicalId: _requiredBoundedString(properties, 'logicalId', 128),
+      );
     case 'feature_use':
       _requireExactKeys(properties, const <String>{'logicalId'});
       // An unknown or mislabelled feature is a catalog problem, not a
@@ -582,6 +630,7 @@ T _parseWire<T extends Enum>(List<T> values, String wireValue) {
   for (final value in values) {
     final actual = switch (value) {
       ModuleEntryPoint value => value.wireValue,
+      AnalyticsLinkType value => value.wireValue,
       AnalyticsAccountType value => value.wireValue,
       AnalyticsOsName value => value.wireValue,
       AnalyticsDeviceCategory value => value.wireValue,

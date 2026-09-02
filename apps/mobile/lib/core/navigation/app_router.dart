@@ -8,6 +8,7 @@ import 'package:mobile/features/auth/presentation/screens/register_screen.dart';
 import 'package:mobile/features/home/presentation/screens/home_screen.dart';
 import 'package:mobile/features/onboarding/presentation/providers/onboarding_provider.dart';
 import 'package:mobile/features/onboarding/presentation/screens/onboarding_screen.dart';
+import 'package:mobile/features/pisocamp/data/deep_links.dart';
 import 'package:mobile/features/pisocamp/data/preview_build.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_home_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_preview_screen.dart';
@@ -101,11 +102,47 @@ bool isGuestCurrencyRoute(String matchedLocation) {
   }
 }
 
+/// Translates a location that arrived as an approved deep link into the app
+/// route it means, or returns null when it is already an app route.
+///
+/// Flutter hands the router the incoming link's *path*, so the same path can
+/// have arrived as `https://www.bsp.gov.ph/pisocamp/...` or as
+/// `bsp://pisocamp/...`. Both are rebuilt and run through the one resolver, so
+/// there is a single place that decides what a link means, and it never
+/// produces a route this build does not already have.
+String? resolvePisoCampIncomingLink(String location) {
+  if (!location.startsWith('/')) return null;
+
+  final candidates = <String>['https://$kPisoCampLinkHost$location'];
+  // The custom-scheme reading is only attempted for a path that names a
+  // currency kind. Without that restriction any in-app location — '/' most of
+  // all — could be reinterpreted as a link and hijacked, because a bare path
+  // does not say which scheme it arrived under.
+  final first = Uri.parse(location).pathSegments
+      .where((segment) => segment.isNotEmpty)
+      .firstOrNull;
+  if (first != null && CurrencyRouteKind.fromPathSegment(first) != null) {
+    candidates.add('$kPisoCampLinkScheme://$kPisoCampLinkPathPrefix$location');
+  }
+
+  for (final candidate in candidates) {
+    final link = resolvePisoCampDeepLink(Uri.parse(candidate));
+    if (link == null) continue;
+    return link.route == location ? null : link.route;
+  }
+  return null;
+}
+
 String? resolveAppRedirect({
   required bool isOnboardingDone,
   required bool isAuthenticated,
   required String matchedLocation,
 }) {
+  // An approved link becomes an app route before anything else looks at it,
+  // so the guards below only ever see locations this build owns.
+  final incoming = resolvePisoCampIncomingLink(matchedLocation);
+  if (incoming != null) return incoming;
+
   final onboarding = matchedLocation == AppRoutes.onboarding;
   final auth =
       matchedLocation == AppRoutes.login ||

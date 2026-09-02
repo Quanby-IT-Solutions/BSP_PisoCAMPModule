@@ -82,6 +82,7 @@ describe("AN-1 analytics event catalog", () => {
 			"account_prompt_guest",
 			"content_view",
 			"feature_use",
+			"link_open",
 		])
 	})
 

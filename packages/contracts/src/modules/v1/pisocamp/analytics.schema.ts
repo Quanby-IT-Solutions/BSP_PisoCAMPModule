@@ -22,6 +22,7 @@ export const ANALYTICS_EVENT_NAMES = [
 	"account_prompt_guest",
 	"content_view",
 	"feature_use",
+	"link_open",
 ] as const
 
 /**
@@ -88,6 +89,20 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 		feature: z.literal("currency_education"),
 		status: z.literal("completed"),
 		properties: z.object({ logicalId: z.string().trim().min(1).max(128) }).strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("link_open"),
+		screen: z.literal("currency_detail"),
+		feature: z.literal("currency_education"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				// The kind of destination, never the destination itself: a URL is
+				// content, and analytics carries none.
+				linkType: z.enum(["external", "internal", "topic", "deep_link"]),
+				logicalId: z.string().trim().min(1).max(128),
+			})
+			.strict(),
 	}).strict(),
 	AnalyticsCommonSchema.extend({
 		eventName: z.literal("feature_use"),

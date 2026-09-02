@@ -6,6 +6,7 @@ import 'package:mobile/core/navigation/app_router.dart';
 import 'package:mobile/features/pisocamp/data/analytics_event.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/link_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/zoomable_currency_image.dart';
 
@@ -229,7 +230,11 @@ class _DetailBody extends StatelessWidget {
                   ),
                 ),
                 for (final link in document.relatedLinks)
-                  _RelatedInformation(link: link, catalog: detail.catalog),
+                  _RelatedInformation(
+                    link: link,
+                    catalog: detail.catalog,
+                    logicalId: document.logicalId,
+                  ),
               ],
             ],
           ),
@@ -337,14 +342,43 @@ class _CurrencyImage extends StatelessWidget {
   }
 }
 
-class _RelatedInformation extends StatelessWidget {
-  const _RelatedInformation({required this.link, required this.catalog});
+class _RelatedInformation extends ConsumerWidget {
+  const _RelatedInformation({
+    required this.link,
+    required this.catalog,
+    required this.logicalId,
+  });
 
   final CurrencyRelatedLink link;
   final CurrencyCatalogView catalog;
+  final String logicalId;
+
+  Future<void> _openExternal(BuildContext context, WidgetRef ref) async {
+    final url = link.url!;
+    emitAnalyticsFuture(
+      LinkOpenIntent(
+        linkType: AnalyticsLinkType.external,
+        logicalId: logicalId,
+      ),
+      () => ref
+          .read(linkAnalyticsProvider)
+          .recordOpen(AnalyticsLinkType.external, logicalId),
+    );
+    final outcome = await ref.read(pisoCampLinkServiceProvider).open(url);
+    if (outcome.opened || !context.mounted) return;
+    // A device with no browser is a device limitation, not a dead end: the
+    // address stays on screen so it can still be read or copied.
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'This device could not open the link. The address is shown above.',
+        ),
+      ),
+    );
+  }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (link.kind == CurrencyRelatedLinkKind.external && link.url != null) {
       return Card(
         child: Padding(
@@ -355,8 +389,15 @@ class _RelatedInformation extends StatelessWidget {
               Text(link.label, style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 4),
               Text(link.url.toString(), softWrap: true),
-              const SizedBox(height: 4),
-              const Text('BSP HTTPS address — shown for reference'),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: OutlinedButton.icon(
+                  onPressed: () => unawaited(_openExternal(context, ref)),
+                  icon: const Icon(Icons.open_in_new),
+                  label: Text('Open ${link.label}'),
+                ),
+              ),
             ],
           ),
         ),
@@ -383,13 +424,33 @@ class _RelatedInformation extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 48),
       child: TextButton.icon(
-        onPressed: () => context.push(
-          AppRoutes.currencyDetail(
-            kind: targetKind.pathSegment,
-            logicalId: target.logicalId,
-          ),
-          extra: catalog,
-        ),
+        onPressed: () {
+          emitAnalyticsFuture(
+            LinkOpenIntent(
+              linkType: link.kind == CurrencyRelatedLinkKind.internal
+                  ? AnalyticsLinkType.internal
+                  : AnalyticsLinkType.topic,
+              logicalId: logicalId,
+            ),
+            () => ref
+                .read(linkAnalyticsProvider)
+                .recordOpen(
+                  link.kind == CurrencyRelatedLinkKind.internal
+                      ? AnalyticsLinkType.internal
+                      : AnalyticsLinkType.topic,
+                  logicalId,
+                ),
+          );
+          // A push, not a replace: back returns to the content that linked
+          // here, which is what the criterion asks for.
+          context.push(
+            AppRoutes.currencyDetail(
+              kind: targetKind.pathSegment,
+              logicalId: target.logicalId,
+            ),
+            extra: catalog,
+          );
+        },
         icon: const Icon(Icons.arrow_forward),
         label: Text(link.label),
       ),

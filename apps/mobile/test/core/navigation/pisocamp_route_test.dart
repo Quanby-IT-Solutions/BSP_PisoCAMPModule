@@ -116,7 +116,8 @@ void main() {
       '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tactile',
     );
     expect(
-      () => AppRoutes.currencyTactile(kind: 'notes', logicalId: 'catalog.valid'),
+      () =>
+          AppRoutes.currencyTactile(kind: 'notes', logicalId: 'catalog.valid'),
       throwsArgumentError,
     );
     expect(
@@ -155,5 +156,73 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  group('F5 incoming approved links', () {
+    void translates(String location, String route) {
+      test('$location becomes $route', () {
+        expect(resolvePisoCampIncomingLink(location), route);
+        // And the guard runs on the translated route, not the raw link.
+        expect(
+          resolveAppRedirect(
+            isOnboardingDone: true,
+            isAuthenticated: false,
+            matchedLocation: location,
+          ),
+          route,
+        );
+      });
+    }
+
+    translates('/pisocamp/coins', AppRoutes.pisoCampCoins);
+    translates('/pisocamp/banknotes', AppRoutes.pisoCampBanknotes);
+    translates(
+      '/pisocamp/coins/catalog.ngc-coins.php-1',
+      '/pisocamp/currency/coins/catalog.ngc-coins.php-1',
+    );
+    translates('/coins', AppRoutes.pisoCampCoins);
+    translates(
+      '/banknotes/catalog.ngc-banknotes.php-20',
+      '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20',
+    );
+
+    test('leaves an app location alone', () {
+      // The bug this guards against: a bare path does not say which scheme it
+      // arrived under, so an unrestricted guess hijacked the home route.
+      for (final location in [
+        AppRoutes.home,
+        AppRoutes.login,
+        AppRoutes.pisoCamp,
+        AppRoutes.pisoCampCoins,
+        '/profile',
+        '/pisocamp/currency/coins/catalog.ngc-coins.php-1',
+      ]) {
+        expect(resolvePisoCampIncomingLink(location), isNull, reason: location);
+      }
+    });
+
+    test('refuses a link it cannot account for', () {
+      for (final location in [
+        '/pisocamp/notes/catalog.ngc-banknotes.php-20',
+        '/pisocamp/coins/UPPER',
+        '/pisocamp/coins/catalog.ngc-coins.php-1/extra',
+        'pisocamp/coins',
+      ]) {
+        expect(resolvePisoCampIncomingLink(location), isNull, reason: location);
+      }
+    });
+
+    test('an unauthenticated visitor still reaches guest content', () {
+      // Translated first, guarded second: the criterion is that an approved
+      // link opens the screen, not that it bounces to login.
+      expect(
+        resolveAppRedirect(
+          isOnboardingDone: true,
+          isAuthenticated: false,
+          matchedLocation: '/pisocamp/currency/coins/catalog.ngc-coins.php-1',
+        ),
+        isNull,
+      );
+    });
   });
 }

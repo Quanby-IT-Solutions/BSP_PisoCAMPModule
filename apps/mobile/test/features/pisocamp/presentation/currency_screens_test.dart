@@ -18,7 +18,10 @@ import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/currency_detail_screen.dart';
+import 'package:mobile/features/pisocamp/data/link_service.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/link_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/currency_list_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/bundle_test_support.dart';
 
@@ -560,8 +563,13 @@ void main() {
       expect(topic, findsOneWidget);
       expect(tester.getSize(topic).height, greaterThanOrEqualTo(48));
       expect(find.textContaining('https://www.bsp.gov.ph/'), findsOneWidget);
+      // F5 turned the reference-only address into an approved opener; the
+      // address itself is still shown so it can be read or copied.
       expect(
-        find.textContaining('shown for reference'),
+        find.widgetWithText(
+          OutlinedButton,
+          'Open Bangko Sentral ng Pilipinas source',
+        ),
         findsAtLeastNWidgets(1),
       );
 
@@ -728,6 +736,98 @@ void main() {
       expect(catalogReads, 1);
     },
   );
+
+  group('F5 link handling', () {
+    testWidgets('opens an approved external link and records its type', (
+      tester,
+    ) async {
+      final opened = <Uri>[];
+      final links = <({AnalyticsLinkType type, String logicalId})>[];
+      final document = catalog.documentsFor(CurrencyRouteKind.coins).first;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            pisoCampLinkServiceProvider.overrideWithValue(
+              PisoCampLinkService(
+                launch: (url, {mode = LaunchMode.platformDefault}) async {
+                  opened.add(url);
+                  return true;
+                },
+              ),
+            ),
+            linkAnalyticsProvider.overrideWithValue(
+              _RecordingLinkAnalytics(links),
+            ),
+          ],
+          child: MaterialApp(
+            home: CurrencyDetailScreen(
+              kind: CurrencyRouteKind.coins,
+              logicalId: document.logicalId,
+              initialCatalog: catalog,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final opener = find.widgetWithText(
+        OutlinedButton,
+        'Open Bangko Sentral ng Pilipinas source',
+      );
+      expect(opener, findsOneWidget);
+      await tester.ensureVisible(opener);
+      await tester.pumpAndSettle();
+      await tester.tap(opener);
+      await tester.pumpAndSettle();
+
+      expect(opened, hasLength(1));
+      expect(opened.single.host, 'www.bsp.gov.ph');
+      expect(links, hasLength(1));
+      expect(links.single.type, AnalyticsLinkType.external);
+      expect(links.single.logicalId, document.logicalId);
+    });
+
+    testWidgets('says so when the device cannot open a link', (tester) async {
+      final document = catalog.documentsFor(CurrencyRouteKind.coins).first;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            pisoCampLinkServiceProvider.overrideWithValue(
+              PisoCampLinkService(
+                launch: (url, {mode = LaunchMode.platformDefault}) async =>
+                    false,
+              ),
+            ),
+            linkAnalyticsProvider.overrideWithValue(
+              _RecordingLinkAnalytics([]),
+            ),
+          ],
+          child: MaterialApp(
+            home: CurrencyDetailScreen(
+              kind: CurrencyRouteKind.coins,
+              logicalId: document.logicalId,
+              initialCatalog: catalog,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final opener = find.widgetWithText(
+        OutlinedButton,
+        'Open Bangko Sentral ng Pilipinas source',
+      );
+      await tester.ensureVisible(opener);
+      await tester.pumpAndSettle();
+      await tester.tap(opener);
+      await tester.pumpAndSettle();
+
+      // The address stays on screen, so a device with no browser is a
+      // limitation rather than a dead end.
+      expect(find.textContaining('could not open the link'), findsOneWidget);
+      expect(find.textContaining('https://www.bsp.gov.ph/'), findsWidgets);
+    });
+  });
 
   testWidgets('detail fits landscape at 200 percent text with reduced motion', (
     tester,
@@ -1045,5 +1145,16 @@ Future<CurrencyCatalogView> _emptyCatalog(Directory root) async {
     return CurrencyCatalogView.load(await store.activate(staged));
   } finally {
     client.close();
+  }
+}
+
+final class _RecordingLinkAnalytics implements LinkAnalytics {
+  _RecordingLinkAnalytics(this.recorded);
+
+  final List<({AnalyticsLinkType type, String logicalId})> recorded;
+
+  @override
+  Future<void> recordOpen(AnalyticsLinkType linkType, String logicalId) async {
+    recorded.add((type: linkType, logicalId: logicalId));
   }
 }
