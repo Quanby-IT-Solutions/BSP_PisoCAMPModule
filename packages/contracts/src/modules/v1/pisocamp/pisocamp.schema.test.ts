@@ -165,7 +165,11 @@ describe("PisoCampAdminConfigSchema", () => {
 				session_inactivity_minutes: value,
 				exit_advisory_interval_hours: 24,
 			})
-		).toEqual({ session_inactivity_minutes: value, exit_advisory_interval_hours: 24 })
+		).toEqual({
+			session_inactivity_minutes: value,
+			exit_advisory_interval_hours: 24,
+			churn_inactivity_days: 30,
+		})
 	})
 
 	it.each([1, 24, 8760])("accepts exit advisory interval %i", value => {
@@ -182,6 +186,7 @@ describe("PisoCampAdminConfigSchema", () => {
 			UpdatePisoCampAdminConfigSchema.parse({
 				session_inactivity_minutes: 30,
 				exit_advisory_interval_hours: value,
+				churn_inactivity_days: 30,
 			})
 		).toThrow()
 	})
@@ -201,10 +206,31 @@ describe("PisoCampAdminConfigSchema", () => {
 		expect(PisoCampAdminConfigSchema.parse({})).toEqual({
 			session_inactivity_minutes: 30,
 			exit_advisory_interval_hours: 24,
+			churn_inactivity_days: 30,
 		})
 	})
 
-	it("requires both update keys and rejects unknown ones", () => {
+	it.each([1, 30, 365])("accepts churn inactivity of %i days", value => {
+		expect(
+			PisoCampAdminConfigSchema.parse({
+				session_inactivity_minutes: 30,
+				exit_advisory_interval_hours: 24,
+				churn_inactivity_days: value,
+			})
+		).toMatchObject({ churn_inactivity_days: value })
+	})
+
+	it.each([0, 366, 1.5])("rejects churn inactivity of %s days", value => {
+		expect(() =>
+			UpdatePisoCampAdminConfigSchema.parse({
+				session_inactivity_minutes: 30,
+				exit_advisory_interval_hours: 24,
+				churn_inactivity_days: value,
+			})
+		).toThrow()
+	})
+
+	it("requires every update key and rejects unknown ones", () => {
 		expect(() => UpdatePisoCampAdminConfigSchema.parse({})).toThrow()
 		expect(() =>
 			UpdatePisoCampAdminConfigSchema.parse({ session_inactivity_minutes: 30 })
@@ -213,6 +239,13 @@ describe("PisoCampAdminConfigSchema", () => {
 			UpdatePisoCampAdminConfigSchema.parse({
 				session_inactivity_minutes: 30,
 				exit_advisory_interval_hours: 24,
+			})
+		).toThrow()
+		expect(() =>
+			UpdatePisoCampAdminConfigSchema.parse({
+				session_inactivity_minutes: 30,
+				exit_advisory_interval_hours: 24,
+				churn_inactivity_days: 30,
 				unexpected: true,
 			})
 		).toThrow()

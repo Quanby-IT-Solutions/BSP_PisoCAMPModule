@@ -8,6 +8,7 @@ import { STRICT_THROTTLE_KEY } from "@/shared/decorators/strict-throttle.decorat
 import { AnalyticsController } from "./analytics.controller"
 import { AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
+import { RetentionService } from "./retention.service"
 import { EngagementService } from "./engagement.service"
 
 const ingestInput = {
@@ -92,6 +93,7 @@ describe("AnalyticsController", () => {
 				// controller's decorators and error translation.
 				{ provide: EngagementService, useValue: { summary: async () => null } },
 				{ provide: AdoptionService, useValue: { summary: async () => null } },
+				{ provide: RetentionService, useValue: { summary: async () => null } },
 				{
 					provide: Logger,
 					useValue: { error: (...args: unknown[]) => logCalls.push(args) },
@@ -114,6 +116,9 @@ describe("AnalyticsController", () => {
 		).toEqual(["reports.dashboards.view"])
 		expect(
 			Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, AnalyticsController.prototype.adoption)
+		).toEqual(["reports.dashboards.view"])
+		expect(
+			Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, AnalyticsController.prototype.retention)
 		).toEqual(["reports.dashboards.view"])
 		expect(
 			Reflect.getMetadata("PUBLIC", AnalyticsController.prototype.moduleEntryToday)

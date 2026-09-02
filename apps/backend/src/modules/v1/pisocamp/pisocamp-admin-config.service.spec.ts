@@ -35,6 +35,23 @@ describe("PisoCampAdminConfigService", () => {
 		await expect(service.get()).resolves.toEqual({
 			session_inactivity_minutes: 45,
 			exit_advisory_interval_hours: 24,
+			churn_inactivity_days: 30,
+		})
+	})
+
+	it("refuses to serve a stored value outside the contract's range", async () => {
+		// A row somebody edited by hand is not a reason to report a setting the
+		// contract would refuse; the declared default is.
+		selectWhere.mockResolvedValue([
+			{ key: "session_inactivity_minutes", value: 0 },
+			{ key: "churn_inactivity_days", value: 400 },
+		])
+		const service = new PisoCampAdminConfigService({ record: jest.fn() } as never)
+
+		await expect(service.get()).resolves.toEqual({
+			session_inactivity_minutes: 30,
+			exit_advisory_interval_hours: 24,
+			churn_inactivity_days: 30,
 		})
 	})
 
@@ -45,6 +62,7 @@ describe("PisoCampAdminConfigService", () => {
 		await expect(service.get()).resolves.toEqual({
 			session_inactivity_minutes: 30,
 			exit_advisory_interval_hours: 24,
+			churn_inactivity_days: 30,
 		})
 	})
 
@@ -64,11 +82,16 @@ describe("PisoCampAdminConfigService", () => {
 				actorId: "actor-1",
 				session_inactivity_minutes: 60,
 				exit_advisory_interval_hours: 24,
+				churn_inactivity_days: 45,
 			})
 		).resolves.toEqual({
 			session_inactivity_minutes: 60,
 			exit_advisory_interval_hours: 24,
+			churn_inactivity_days: 45,
 		})
+		// One entry per setting, so a later question about any one of them has an
+		// answer that names it.
+		expect(auditService.record).toHaveBeenCalledTimes(3)
 		expect(auditService.record).toHaveBeenCalledWith(
 			{
 				domain: "pisocamp",
@@ -109,6 +132,7 @@ describe("PisoCampAdminConfigService", () => {
 				actorId: "actor-1",
 				session_inactivity_minutes: 60,
 				exit_advisory_interval_hours: 24,
+				churn_inactivity_days: 30,
 			})
 		).rejects.toBe(auditFailure)
 		expect(committed).toBe(false)

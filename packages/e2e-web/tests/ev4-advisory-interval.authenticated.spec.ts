@@ -104,6 +104,32 @@ test.describe("EV-4 exit advisory interval", () => {
 		expectClean(observed)
 	})
 
+	test("saves the AN-4 churn period from the same form", async ({ page }) => {
+		const observed = observe(page)
+		await signOutCompletely(page)
+		await signInAs(page, "contentAdmin")
+
+		await page.goto("/pisocamp/config")
+		await page.waitForLoadState("networkidle")
+
+		const churn = page.getByLabel(/churn inactivity/i)
+		await expect(churn).toBeVisible({ timeout: 20_000 })
+		await churn.fill("45")
+		await page.getByRole("button", { name: /save configuration/i }).click()
+
+		await expect(page.getByText("Configuration saved.")).toBeVisible()
+		await page.reload()
+		await page.waitForLoadState("networkidle")
+		await expect(page.getByLabel(/churn inactivity/i)).toHaveValue("45")
+
+		// Put it back, so the next run starts where this one did.
+		await page.getByLabel(/churn inactivity/i).fill("30")
+		await page.getByRole("button", { name: /save configuration/i }).click()
+		await expect(page.getByText("Configuration saved.")).toBeVisible()
+
+		expectClean(observed)
+	})
+
 	test("stays readable and operable by keyboard at 320 px", async ({ page }) => {
 		const observed = observe(page)
 		await page.setViewportSize({ width: 320, height: 720 })

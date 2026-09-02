@@ -65,6 +65,7 @@ function configProcedure(service: PisoCampAdminConfigService, value: number) {
 					actorId: USER_ID,
 					session_inactivity_minutes: value,
 					exit_advisory_interval_hours: 24,
+					churn_inactivity_days: 30,
 				})
 			},
 		},
@@ -230,13 +231,15 @@ describe("Piso CAMP idempotent transaction boundary", () => {
 		expect(first.result).toEqual({
 			session_inactivity_minutes: 60,
 			exit_advisory_interval_hours: 24,
+			churn_inactivity_days: 30,
 		})
 		expect(replay.result).toEqual(first.result)
 		expect(first.calls.count).toBe(1)
 		expect(replay.calls.count).toBe(0)
-		// One entry per setting, written once: EV-4 added a second key, and a
+		// One entry per setting, written once: each new setting adds a key, and a
 		// replay must still not double what the first call recorded.
 		expect(audits.map(row => row.targetId).sort()).toEqual([
+			"churn_inactivity_days",
 			"exit_advisory_interval_hours",
 			"session_inactivity_minutes",
 		])

@@ -19,6 +19,7 @@ import { Label } from "@/core/components/ui/label"
 import { Skeleton } from "@/core/components/ui/skeleton"
 import { useEngagementSummaryQuery } from "@/features/analytics/api/analytics.hooks"
 import { AdoptionDashboard } from "@/features/analytics/components/adoption-dashboard"
+import { RetentionDashboard } from "@/features/analytics/components/retention-dashboard"
 
 const number = new Intl.NumberFormat("en-US")
 const decimal = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 })
@@ -134,6 +135,9 @@ export function EngagementDashboard() {
 
 			<h2 className="text-xl font-semibold">Adoption</h2>
 			<AdoptionDashboard from={range.from} to={range.to} />
+
+			<h2 className="text-xl font-semibold">Retention</h2>
+			<RetentionDashboard from={range.from} to={range.to} />
 		</div>
 	)
 }

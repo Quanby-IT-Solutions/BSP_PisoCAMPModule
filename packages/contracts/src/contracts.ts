@@ -312,6 +312,19 @@ export type {
 	KeyActionEvent,
 } from "./modules/v1/pisocamp/adoption.schema.js"
 
+// AN-4 retention, churn and lifetime
+export {
+	CohortRetentionSchema,
+	RetentionPointSchema,
+	RetentionRangeInputSchema,
+	RetentionSummarySchema,
+} from "./modules/v1/pisocamp/retention.schema.js"
+export type {
+	CohortRetention,
+	RetentionPoint,
+	RetentionSummary,
+} from "./modules/v1/pisocamp/retention.schema.js"
+
 // AN-2 engagement KPIs
 export {
 	ConcurrencyPeakSchema,

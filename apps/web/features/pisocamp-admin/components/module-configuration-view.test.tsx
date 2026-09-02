@@ -17,7 +17,11 @@ describe("ModuleConfigurationView", () => {
 		useConfigQuery.mockReturnValue({
 			isPending: false,
 			isError: false,
-			data: { session_inactivity_minutes: 30, exit_advisory_interval_hours: 24 },
+			data: {
+				session_inactivity_minutes: 30,
+				exit_advisory_interval_hours: 24,
+				churn_inactivity_days: 30,
+			},
 			refetch: vi.fn(),
 		})
 		useUpdateConfig.mockReturnValue({
@@ -87,7 +91,11 @@ describe("ModuleConfigurationView", () => {
 		await user.type(input, "45{Enter}")
 
 		expect(mutate).toHaveBeenCalledWith(
-			{ session_inactivity_minutes: 45, exit_advisory_interval_hours: 24 },
+			{
+				session_inactivity_minutes: 45,
+				exit_advisory_interval_hours: 24,
+				churn_inactivity_days: 30,
+			},
 			expect.objectContaining({ onSuccess: expect.any(Function) })
 		)
 	})
@@ -136,7 +144,42 @@ describe("ModuleConfigurationView", () => {
 		expect(mutate.mock.calls[0]?.[0]).toEqual({
 			session_inactivity_minutes: 30,
 			exit_advisory_interval_hours: 6,
+			churn_inactivity_days: 30,
 		})
+	})
+
+	it("saves the churn period the retention report runs on", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn()
+		useUpdateConfig.mockReturnValue({ mutate, isPending: false, isError: false, error: null })
+		render(<ModuleConfigurationView />)
+
+		const churn = screen.getByLabelText(/churn inactivity/i)
+		await user.clear(churn)
+		await user.type(churn, "45")
+		await user.click(screen.getByRole("button", { name: /save configuration/i }))
+
+		expect(mutate.mock.calls[0]?.[0]).toEqual({
+			session_inactivity_minutes: 30,
+			exit_advisory_interval_hours: 24,
+			churn_inactivity_days: 45,
+		})
+	})
+
+	it("refuses a churn period outside the contract's range, and says why", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn()
+		useUpdateConfig.mockReturnValue({ mutate, isPending: false, isError: false, error: null })
+		render(<ModuleConfigurationView />)
+
+		const churn = screen.getByLabelText(/churn inactivity/i)
+		await user.clear(churn)
+		await user.type(churn, "400")
+		await user.click(screen.getByRole("button", { name: /save configuration/i }))
+
+		expect(mutate).not.toHaveBeenCalled()
+		expect(screen.getByText("Enter a whole number between 1 and 365 days.")).toBeInTheDocument()
+		expect(churn).toHaveFocus()
 	})
 
 	it("refuses an interval outside the contract's range, and says why", async () => {

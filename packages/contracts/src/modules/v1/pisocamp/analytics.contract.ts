@@ -10,6 +10,7 @@ import {
 	EngagementRangeInputSchema,
 	EngagementSummarySchema,
 } from "./engagement.schema.js"
+import { RetentionRangeInputSchema, RetentionSummarySchema } from "./retention.schema.js"
 
 export const pisoCampAnalyticsContract = {
 	events: {
@@ -51,5 +52,14 @@ export const pisoCampAnalyticsContract = {
 			})
 			.input(AdoptionRangeInputSchema)
 			.output(AdoptionSummarySchema),
+		retention: oc
+			.route({
+				method: "GET",
+				path: "/admin/pisocamp/analytics/retention",
+				summary: "Retention cohorts, churn and lifetime for a range of days",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(RetentionRangeInputSchema)
+			.output(RetentionSummarySchema),
 	},
 }

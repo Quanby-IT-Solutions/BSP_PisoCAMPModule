@@ -7,6 +7,7 @@ import type {
 	EngagementRangeInput,
 	EngagementSummary,
 	ModuleEntryToday,
+	RetentionSummary,
 } from "@repo/contracts"
 
 import { orpc } from "@/services/orpc/client"
@@ -34,6 +35,18 @@ export function useEngagementSummaryQuery(input: EngagementRangeInput) {
 
 	return useQuery<EngagementSummary, Error>(
 		options as unknown as UseQueryOptions<EngagementSummary, Error>
+	)
+}
+
+export function useRetentionSummaryQuery(input: EngagementRangeInput) {
+	const options = orpc.pisocamp.analytics.retention.queryOptions({
+		input,
+		networkMode: "online",
+		staleTime: 60_000,
+	})
+
+	return useQuery<RetentionSummary, Error>(
+		options as unknown as UseQueryOptions<RetentionSummary, Error>
 	)
 }
 

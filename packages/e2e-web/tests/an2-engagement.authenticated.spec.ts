@@ -135,6 +135,27 @@ test.describe("AN-2 engagement dashboard", () => {
 		expectClean(observed)
 	})
 
+	test("shows the AN-4 retention figures beside the engagement ones", async ({ page }) => {
+		const observed = observe(page)
+		await signOutCompletely(page)
+		await signInAs(page, "contentAdmin")
+
+		await page.goto("/pisocamp/engagement")
+		await page.waitForLoadState("networkidle")
+
+		await expect(page.getByRole("heading", { name: "Retention" })).toBeVisible({
+			timeout: 20_000,
+		})
+		await expect(page.getByText("Churn rate")).toBeVisible()
+		await expect(page.getByText("Reactivation rate")).toBeVisible()
+		await expect(page.getByText("Average lifetime")).toBeVisible()
+		// The churn figure names the pool and the configured period it used.
+		await expect(page.getByText(/of \d+ quiet past \d+ days/)).toBeVisible()
+		await expect(page.getByText("Retention by cohort")).toBeVisible()
+
+		expectClean(observed)
+	})
+
 	test("stays readable and operable by keyboard at 320 px", async ({ page }) => {
 		const observed = observe(page)
 		await page.setViewportSize({ width: 320, height: 720 })

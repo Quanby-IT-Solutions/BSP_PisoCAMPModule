@@ -45,6 +45,7 @@ jest.mock("@/config/api-versions.config", () => ({
 				moduleEntryToday: "moduleEntryToday",
 				engagement: "engagement",
 				adoption: "adoption",
+				retention: "retention",
 			},
 		},
 	},
@@ -235,6 +236,24 @@ describe("analytics summary authorization", () => {
 			targetId: "AnalyticsController.engagement",
 			newValue: { missingPermissions: ["reports.dashboards.view"] },
 		})
+	})
+
+	it("gates the retention dashboard on the same permission, both ways", async () => {
+		const retention = AnalyticsController.prototype.retention
+
+		await expect(createGuard().canActivate(contextFor(permittedId, retention))).resolves.toBe(
+			true
+		)
+		await expect(
+			createGuard().canActivate(contextFor(deniedId, retention))
+		).rejects.toMatchObject({ status: 403 })
+
+		const rows = await db
+			.select()
+			.from(auditLog)
+			.where(and(eq(auditLog.actorId, deniedId), eq(auditLog.action, "permission_denied")))
+		expect(rows).toHaveLength(1)
+		expect(rows[0]).toMatchObject({ targetId: "AnalyticsController.retention" })
 	})
 
 	it("gates the adoption dashboard on the same permission, both ways", async () => {

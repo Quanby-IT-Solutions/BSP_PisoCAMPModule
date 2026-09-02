@@ -29,11 +29,21 @@ export type PisoCampPublicConfig = z.infer<typeof PisoCampPublicConfigSchema>
 
 const SessionInactivityMinutesSchema = z.number().int().min(1).max(1440)
 
+/**
+ * AN-4. How long somebody has to be quiet before they count as churned.
+ *
+ * Days rather than minutes: churn is a question about weeks away from the
+ * module, and the session gap that ends a visit is a different setting with a
+ * different unit for a reason.
+ */
+const ChurnInactivityDaysSchema = z.number().int().min(1).max(365)
+
 /** Complete administrator-visible Piso CAMP configuration. */
 export const PisoCampAdminConfigSchema = z
 	.object({
 		session_inactivity_minutes: SessionInactivityMinutesSchema.default(30),
 		exit_advisory_interval_hours: ExitAdvisoryIntervalHoursSchema.default(24),
+		churn_inactivity_days: ChurnInactivityDaysSchema.default(30),
 	})
 	.strict()
 
@@ -42,6 +52,7 @@ export const UpdatePisoCampAdminConfigSchema = z
 	.object({
 		session_inactivity_minutes: SessionInactivityMinutesSchema,
 		exit_advisory_interval_hours: ExitAdvisoryIntervalHoursSchema,
+		churn_inactivity_days: ChurnInactivityDaysSchema,
 	})
 	.strict()
 

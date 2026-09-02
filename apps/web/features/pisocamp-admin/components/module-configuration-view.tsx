@@ -2,6 +2,8 @@
 
 import { useRef, useState, type FormEvent } from "react"
 
+import type { PisoCampAdminConfig } from "@repo/contracts"
+
 import { PageHeader } from "@/core/components/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/core/components/ui/alert"
 import { Button } from "@/core/components/ui/button"
@@ -20,10 +22,52 @@ import {
 	useUpdatePisoCampAdminConfigMutation,
 } from "@/features/pisocamp-admin/api/pisocamp-config.hooks"
 
-const FIELD_ID = "session-inactivity-minutes"
-const ERROR_ID = `${FIELD_ID}-error`
-const INTERVAL_FIELD_ID = "exit-advisory-interval-hours"
-const INTERVAL_ERROR_ID = `${INTERVAL_FIELD_ID}-error`
+type SettingKey = keyof PisoCampAdminConfig
+
+/**
+ * The settings this form edits, declared once.
+ *
+ * Every one is a whole number in a range, so the field, its label, its help
+ * text and its validation are written once over this list. A fourth setting is
+ * a line here, not another copy of the same block.
+ */
+const SETTINGS: {
+	key: SettingKey
+	id: string
+	label: string
+	help: string
+	min: number
+	max: number
+	error: string
+}[] = [
+	{
+		key: "session_inactivity_minutes",
+		id: "session-inactivity-minutes",
+		label: "Session inactivity (minutes)",
+		help: "How long a gap in activity ends a session in the engagement figures.",
+		min: 1,
+		max: 1440,
+		error: "Enter a whole number between 1 and 1,440 minutes.",
+	},
+	{
+		key: "exit_advisory_interval_hours",
+		id: "exit-advisory-interval-hours",
+		label: "Exit advisory interval (hours)",
+		help: "How long before somebody leaving the module is shown the advisory again.",
+		min: 1,
+		max: 8760,
+		error: "Enter a whole number of hours between 1 and 8,760.",
+	},
+	{
+		key: "churn_inactivity_days",
+		id: "churn-inactivity-days",
+		label: "Churn inactivity (days)",
+		help: "How long somebody has to be away before the retention report counts them as churned.",
+		min: 1,
+		max: 365,
+		error: "Enter a whole number between 1 and 365 days.",
+	},
+]
 
 export function ModuleConfigurationView() {
 	const config = usePisoCampAdminConfigQuery()
@@ -57,60 +101,42 @@ export function ModuleConfigurationView() {
 					</AlertDescription>
 				</Alert>
 			) : config.data ? (
-				<ModuleConfigurationForm
-					initialMinutes={config.data.session_inactivity_minutes}
-					initialIntervalHours={config.data.exit_advisory_interval_hours}
-				/>
+				<ModuleConfigurationForm initial={config.data} />
 			) : null}
 		</div>
 	)
 }
 
-function ModuleConfigurationForm({
-	initialMinutes,
-	initialIntervalHours,
-}: {
-	initialMinutes: number
-	initialIntervalHours: number
-}) {
+function ModuleConfigurationForm({ initial }: { initial: PisoCampAdminConfig }) {
 	const update = useUpdatePisoCampAdminConfigMutation()
-	const [minutes, setMinutes] = useState(String(initialMinutes))
-	const [intervalHours, setIntervalHours] = useState(String(initialIntervalHours))
-	const [validationError, setValidationError] = useState<string | null>(null)
-	const [intervalError, setIntervalError] = useState<string | null>(null)
+	const [draft, setDraft] = useState<Record<SettingKey, string>>(
+		() =>
+			Object.fromEntries(SETTINGS.map(setting => [setting.key, String(initial[setting.key])])) as
+				Record<SettingKey, string>
+	)
+	const [invalidKey, setInvalidKey] = useState<SettingKey | null>(null)
 	const [saved, setSaved] = useState(false)
-	const inputRef = useRef<HTMLInputElement>(null)
-	const intervalRef = useRef<HTMLInputElement>(null)
+	const fields = useRef(new Map<SettingKey, HTMLInputElement | null>())
 
 	function submit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
 		setSaved(false)
-		const parsed = Number(minutes)
-		if (!Number.isInteger(parsed) || parsed < 1 || parsed > 1440) {
-			setValidationError("Enter a whole number between 1 and 1,440 minutes.")
-			setIntervalError(null)
-			inputRef.current?.focus()
-			return
-		}
-		const parsedInterval = Number(intervalHours)
-		if (!Number.isInteger(parsedInterval) || parsedInterval < 1 || parsedInterval > 8760) {
-			setValidationError(null)
-			setIntervalError("Enter a whole number of hours between 1 and 8,760.")
-			intervalRef.current?.focus()
-			return
+
+		const parsed = {} as Record<SettingKey, number>
+		for (const setting of SETTINGS) {
+			const value = Number(draft[setting.key])
+			if (!Number.isInteger(value) || value < setting.min || value > setting.max) {
+				// The first bad field takes the focus, so a keyboard user lands on
+				// the thing the message is about.
+				setInvalidKey(setting.key)
+				fields.current.get(setting.key)?.focus()
+				return
+			}
+			parsed[setting.key] = value
 		}
 
-		setValidationError(null)
-		setIntervalError(null)
-		update.mutate(
-			{
-				session_inactivity_minutes: parsed,
-				exit_advisory_interval_hours: parsedInterval,
-			},
-			{
-				onSuccess: () => setSaved(true),
-			}
-		)
+		setInvalidKey(null)
+		update.mutate(parsed, { onSuccess: () => setSaved(true) })
 	}
 
 	return (
@@ -118,60 +144,48 @@ function ModuleConfigurationForm({
 			<CardHeader>
 				<CardTitle>Module settings</CardTitle>
 				<CardDescription>
-					How long an inactive signed-in session remains available, and how often the exit
-					advisory is shown.
+					The session, advisory and churn periods the module and its reports run on.
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
 				<form className="space-y-5" onSubmit={submit} noValidate>
-					<div className="space-y-2">
-						<Label htmlFor={FIELD_ID}>Session inactivity (minutes)</Label>
-						<Input
-							ref={inputRef}
-							id={FIELD_ID}
-							name="session_inactivity_minutes"
-							autoComplete="off"
-							type="number"
-							min={1}
-							max={1440}
-							step={1}
-							value={minutes}
-							onChange={event => setMinutes(event.target.value)}
-							aria-invalid={validationError ? true : undefined}
-							aria-describedby={validationError ? ERROR_ID : undefined}
-						/>
-						{validationError ? (
-							<p id={ERROR_ID} role="alert" className="text-destructive text-sm">
-								{validationError}
-							</p>
-						) : null}
-					</div>
+					{SETTINGS.map(setting => {
+						const errorId = `${setting.id}-error`
+						const helpId = `${setting.id}-help`
+						const invalid = invalidKey === setting.key
 
-					<div className="space-y-2">
-						<Label htmlFor={INTERVAL_FIELD_ID}>Exit advisory interval (hours)</Label>
-						<Input
-							ref={intervalRef}
-							id={INTERVAL_FIELD_ID}
-							name="exit_advisory_interval_hours"
-							autoComplete="off"
-							type="number"
-							min={1}
-							max={8760}
-							step={1}
-							value={intervalHours}
-							onChange={event => setIntervalHours(event.target.value)}
-							aria-invalid={intervalError ? true : undefined}
-							aria-describedby={intervalError ? INTERVAL_ERROR_ID : "exit-advisory-help"}
-						/>
-						<p id="exit-advisory-help" className="text-muted-foreground text-sm">
-							How long before somebody leaving the module is shown the advisory again.
-						</p>
-						{intervalError ? (
-							<p id={INTERVAL_ERROR_ID} role="alert" className="text-destructive text-sm">
-								{intervalError}
-							</p>
-						) : null}
-					</div>
+						return (
+							<div key={setting.key} className="space-y-2">
+								<Label htmlFor={setting.id}>{setting.label}</Label>
+								<Input
+									ref={node => {
+										fields.current.set(setting.key, node)
+									}}
+									id={setting.id}
+									name={setting.key}
+									autoComplete="off"
+									type="number"
+									min={setting.min}
+									max={setting.max}
+									step={1}
+									value={draft[setting.key]}
+									onChange={event =>
+										setDraft({ ...draft, [setting.key]: event.target.value })
+									}
+									aria-invalid={invalid ? true : undefined}
+									aria-describedby={invalid ? errorId : helpId}
+								/>
+								<p id={helpId} className="text-muted-foreground text-sm">
+									{setting.help}
+								</p>
+								{invalid ? (
+									<p id={errorId} role="alert" className="text-destructive text-sm">
+										{setting.error}
+									</p>
+								) : null}
+							</div>
+						)
+					})}
 
 					{update.isError ? (
 						<Alert variant="destructive">

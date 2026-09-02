@@ -7,6 +7,7 @@ import { AnalyticsController } from "./analytics.controller"
 import { analyticsDatabaseProvider, AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
+import { RetentionService } from "./retention.service"
 import { SessionizerService } from "./sessionizer.service"
 
 @Module({
@@ -17,6 +18,7 @@ import { SessionizerService } from "./sessionizer.service"
 		analyticsDatabaseProvider,
 		AdoptionService,
 		EngagementService,
+		RetentionService,
 		SessionizerService,
 		PisoCampAdminConfigService,
 	],
