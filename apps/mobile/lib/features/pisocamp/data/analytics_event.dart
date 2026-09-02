@@ -243,6 +243,99 @@ final class LinkOpenIntent extends AnalyticsIntent {
   };
 }
 
+final class TriviaPromptShownIntent extends AnalyticsIntent {
+  const TriviaPromptShownIntent({
+    required this.logicalId,
+    required this.category,
+    required this.difficulty,
+  });
+
+  final String logicalId;
+  final String category;
+  final String difficulty;
+
+  @override
+  String get eventName => 'trivia_prompt_shown';
+
+  @override
+  String get screen => 'trivia_prompt';
+
+  @override
+  String get feature => 'trivia';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+    'category': category,
+    'difficulty': difficulty,
+  };
+}
+
+final class TriviaPromptAnsweredIntent extends AnalyticsIntent {
+  const TriviaPromptAnsweredIntent({
+    required this.logicalId,
+    required this.category,
+    required this.difficulty,
+    required this.correct,
+    required this.openedTopic,
+  });
+
+  final String logicalId;
+  final String category;
+  final String difficulty;
+
+  /// Whether the answer was right, never which answer was chosen: the chosen
+  /// label is content, and analytics carries none.
+  final bool correct;
+  final bool openedTopic;
+
+  @override
+  String get eventName => 'trivia_prompt_answered';
+
+  @override
+  String get screen => 'trivia_prompt';
+
+  @override
+  String get feature => 'trivia';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+    'category': category,
+    'difficulty': difficulty,
+    'correct': correct,
+    'openedTopic': openedTopic,
+  };
+}
+
+final class TriviaPromptSkippedIntent extends AnalyticsIntent {
+  const TriviaPromptSkippedIntent({
+    required this.logicalId,
+    required this.category,
+    required this.difficulty,
+  });
+
+  final String logicalId;
+  final String category;
+  final String difficulty;
+
+  @override
+  String get eventName => 'trivia_prompt_skipped';
+
+  @override
+  String get screen => 'trivia_prompt';
+
+  @override
+  String get feature => 'trivia';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+    'category': category,
+    'difficulty': difficulty,
+  };
+}
+
 final class AnalyticsEventContext {
   const AnalyticsEventContext({
     required this.subjectPseudoId,
@@ -468,6 +561,56 @@ AnalyticsIntent _parseIntent({
         ),
         logicalId: _requiredBoundedString(properties, 'logicalId', 128),
       );
+    case 'trivia_prompt_shown':
+    case 'trivia_prompt_skipped':
+      _requireExactKeys(properties, const <String>{
+        'logicalId',
+        'category',
+        'difficulty',
+      });
+      if (screen != 'trivia_prompt' || feature != 'trivia') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      final promptLogicalId = _requiredBoundedString(
+        properties,
+        'logicalId',
+        128,
+      );
+      final promptCategory = _requiredBoundedString(properties, 'category', 64);
+      final promptDifficulty = _requiredTriviaDifficulty(properties);
+      return eventName == 'trivia_prompt_shown'
+          ? TriviaPromptShownIntent(
+              logicalId: promptLogicalId,
+              category: promptCategory,
+              difficulty: promptDifficulty,
+            )
+          : TriviaPromptSkippedIntent(
+              logicalId: promptLogicalId,
+              category: promptCategory,
+              difficulty: promptDifficulty,
+            );
+    case 'trivia_prompt_answered':
+      _requireExactKeys(properties, const <String>{
+        'logicalId',
+        'category',
+        'difficulty',
+        'correct',
+        'openedTopic',
+      });
+      if (screen != 'trivia_prompt' || feature != 'trivia') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return TriviaPromptAnsweredIntent(
+        logicalId: _requiredBoundedString(properties, 'logicalId', 128),
+        category: _requiredBoundedString(properties, 'category', 64),
+        difficulty: _requiredTriviaDifficulty(properties),
+        correct: _requiredBool(properties, 'correct'),
+        openedTopic: _requiredBool(properties, 'openedTopic'),
+      );
     case 'feature_use':
       _requireExactKeys(properties, const <String>{'logicalId'});
       // An unknown or mislabelled feature is a catalog problem, not a
@@ -617,6 +760,26 @@ void _requireLiteral(Map<String, Object?> json, String key, Object value) {
       AnalyticsValidationReason.invalidField,
     );
   }
+}
+
+String _requiredTriviaDifficulty(Map<String, Object?> properties) {
+  final value = properties['difficulty'];
+  if (value != 'easy' && value != 'medium' && value != 'hard') {
+    throw const AnalyticsValidationException(
+      AnalyticsValidationReason.invalidField,
+    );
+  }
+  return value! as String;
+}
+
+bool _requiredBool(Map<String, Object?> properties, String key) {
+  final value = properties[key];
+  if (value is! bool) {
+    throw const AnalyticsValidationException(
+      AnalyticsValidationReason.invalidField,
+    );
+  }
+  return value;
 }
 
 AnalyticsFeature? _featureForWireValue(String wireValue) {

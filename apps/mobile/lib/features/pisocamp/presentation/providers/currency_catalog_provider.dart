@@ -7,6 +7,7 @@ import 'package:mobile/features/pisocamp/data/bundle_store.dart';
 import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/data/coin_model.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
+import 'package:mobile/features/pisocamp/data/trivia_question_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/bundle_provider.dart';
 
 enum CurrencyRouteKind {
@@ -188,7 +189,9 @@ final class CurrencyCatalogView {
     required Map<String, List<CurrencyContentDocument>> securityFeatures,
     required Map<String, _VerifiedBundleResource> images,
     required Map<String, _VerifiedBundleResource> models,
+    required List<TriviaQuestionDocument> triviaQuestions,
   }) : documents = List.unmodifiable(documents),
+       triviaQuestions = List.unmodifiable(triviaQuestions),
        _securityFeatures =
            Map.unmodifiable(<String, List<CurrencyContentDocument>>{
              for (final entry in securityFeatures.entries)
@@ -200,6 +203,11 @@ final class CurrencyCatalogView {
 
   final ActiveCurrencyCatalog snapshot;
   final List<CurrencyContentDocument> documents;
+
+  /// GM-2's question pool, read from the same verified snapshot as everything
+  /// else. Only published and active questions reach a device, so this list is
+  /// the pool: there is nothing further to filter.
+  final List<TriviaQuestionDocument> triviaQuestions;
   final Map<String, List<CurrencyContentDocument>> _securityFeatures;
   final Map<String, _VerifiedBundleResource> _images;
   final Map<String, _VerifiedBundleResource> _models;
@@ -305,6 +313,18 @@ final class CurrencyCatalogView {
     for (final document in seedDocuments) {
       baseByDenomination[_denominationKey(document)] = document;
     }
+    final triviaQuestions = <TriviaQuestionDocument>[];
+    for (final bytes in publishedBytes) {
+      try {
+        triviaQuestions.add(TriviaQuestionDocument.parsePublished(bytes));
+      } on Object {
+        // Not a question, or not a readable one. Either way it is not offered.
+      }
+    }
+    triviaQuestions.sort(
+      (left, right) => left.contentItemId.compareTo(right.contentItemId),
+    );
+
     final securityFeatures = <String, List<CurrencyContentDocument>>{};
     if (lookup != null) {
       for (final bytes in publishedBytes) {
@@ -337,6 +357,7 @@ final class CurrencyCatalogView {
       securityFeatures: securityFeatures,
       images: images,
       models: models,
+      triviaQuestions: triviaQuestions,
     );
   }
 

@@ -23,6 +23,9 @@ export const ANALYTICS_EVENT_NAMES = [
 	"content_view",
 	"feature_use",
 	"link_open",
+	"trivia_prompt_shown",
+	"trivia_prompt_answered",
+	"trivia_prompt_skipped",
 ] as const
 
 /**
@@ -89,6 +92,49 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 		feature: z.literal("currency_education"),
 		status: z.literal("completed"),
 		properties: z.object({ logicalId: z.string().trim().min(1).max(128) }).strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("trivia_prompt_shown"),
+		screen: z.literal("trivia_prompt"),
+		feature: z.literal("trivia"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				logicalId: z.string().trim().min(1).max(128),
+				category: z.string().trim().min(1).max(64),
+				difficulty: z.enum(["easy", "medium", "hard"]),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("trivia_prompt_answered"),
+		screen: z.literal("trivia_prompt"),
+		feature: z.literal("trivia"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				logicalId: z.string().trim().min(1).max(128),
+				category: z.string().trim().min(1).max(64),
+				difficulty: z.enum(["easy", "medium", "hard"]),
+				// Whether the answer was right, never which answer was chosen: the
+				// chosen label is content, and analytics carries none.
+				correct: z.boolean(),
+				openedTopic: z.boolean(),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("trivia_prompt_skipped"),
+		screen: z.literal("trivia_prompt"),
+		feature: z.literal("trivia"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				logicalId: z.string().trim().min(1).max(128),
+				category: z.string().trim().min(1).max(64),
+				difficulty: z.enum(["easy", "medium", "hard"]),
+			})
+			.strict(),
 	}).strict(),
 	AnalyticsCommonSchema.extend({
 		eventName: z.literal("link_open"),

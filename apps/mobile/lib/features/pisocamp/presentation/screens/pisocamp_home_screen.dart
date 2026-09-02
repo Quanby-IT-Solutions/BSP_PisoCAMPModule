@@ -13,9 +13,13 @@ import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/data/analytics_event.dart';
 import 'package:mobile/features/pisocamp/data/analytics_sync_controller.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
-import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provider.dart';
-import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
+import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
+import 'package:mobile/features/pisocamp/data/trivia_question_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/trivia_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/widgets/trivia_prompt.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/account_prompt.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
@@ -30,6 +34,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
   late Future<bool> _continued;
   bool _creatingAccount = false;
   bool _continuingAsGuest = false;
+  TriviaQuestionDocument? _prompt;
   @override
   void initState() {
     super.initState();
@@ -37,6 +42,66 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     _syncCurrencies(BundleSyncTrigger.startup);
     _syncAnalytics(AnalyticsSyncTrigger.startup);
     _emitAnalytics(const ModuleEntryIntent(ModuleEntryPoint.navigation));
+    unawaited(_offerTrivia());
+  }
+
+  /// GM-2's module-home trigger.
+  ///
+  /// Everything it needs is already on the device, so it runs the same way
+  /// offline. A failure here is silent by design: a question is an offer, and a
+  /// module that could not make one is not a module that should show an error.
+  Future<void> _offerTrivia() async {
+    try {
+      final catalog = await ref.read(currencyCatalogViewProvider.future);
+      if (!mounted || catalog.triviaQuestions.isEmpty) return;
+      final question = await ref
+          .read(triviaPromptCoordinatorProvider)
+          .next(catalog.triviaQuestions);
+      if (!mounted || question == null) return;
+      setState(() => _prompt = question);
+    } on Object {
+      // No prompt this time.
+    }
+  }
+
+  /// Opens the topic an incorrect answer offered.
+  ///
+  /// A push, so the guest comes back to the module rather than being sent away
+  /// from it: the prompt was an aside, not a destination.
+  void _openTriviaTopic(TriviaRelatedTopic topic) {
+    unawaited(
+      ref
+          .read(currencyCatalogViewProvider.future)
+          .then((catalog) {
+            if (!mounted) return;
+            final target = catalog.resolveTopic(topic.contentItemId);
+            if (target == null) return;
+            final kind = target.kind == CurrencyContentKind.banknote
+                ? CurrencyRouteKind.banknotes
+                : CurrencyRouteKind.coins;
+            context.push(
+              AppRoutes.currencyDetail(
+                kind: kind.pathSegment,
+                logicalId: target.logicalId,
+              ),
+              extra: catalog,
+            );
+          })
+          .catchError((_) {}),
+    );
+  }
+
+  void _finishTrivia(
+    TriviaQuestionDocument question,
+    TriviaPromptResult result,
+  ) {
+    setState(() => _prompt = null);
+    unawaited(
+      ref
+          .read(triviaPromptCoordinatorProvider)
+          .record(question, result)
+          .catchError((_) {}),
+    );
   }
 
   void _syncCurrencies(BundleSyncTrigger trigger) {
@@ -164,8 +229,24 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
         .watch(connectivityStatusProvider)
         .asData
         ?.value;
+    final prompt = _prompt;
     return Scaffold(
       appBar: AppBar(title: const Text('Piso CAMP')),
+      bottomSheet: prompt == null
+          ? null
+          // A sheet, so the module underneath stays reachable: the prompt is an
+          // offer, and dismissing it costs one tap.
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: TriviaPrompt(
+                  question: prompt,
+                  keepResult: ref.watch(triviaKeepResultProvider),
+                  onOpenTopic: (topic) => _openTriviaTopic(topic),
+                  onFinished: (result) => _finishTrivia(prompt, result),
+                ),
+              ),
+            ),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) =>
