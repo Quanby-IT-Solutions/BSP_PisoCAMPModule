@@ -14,6 +14,7 @@ import {
 import { AuditService } from "@/common/audit/audit.service"
 import { db } from "@/common/database/database.client"
 import { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
+import { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 import { assertDisposablePostgres } from "@/test-support/destructive-database.guard"
 
 import { ContentWorkflowService } from "./content-workflow.service"
@@ -78,6 +79,7 @@ describe("Content workflow idempotency transaction boundary", () => {
 			sql.raw(`drop trigger if exists "${IDEMPOTENCY_TRIGGER}" on "idempotency_keys"`)
 		)
 		await db.execute(sql.raw(`drop function if exists "${IDEMPOTENCY_FUNCTION}"()`))
+		await db.$client.end()
 	})
 
 	async function createDraft() {
@@ -116,7 +118,8 @@ describe("Content workflow idempotency transaction boundary", () => {
 		})
 		const interceptor = new IdempotencyInterceptor(
 			{ isActive: async () => true } as never,
-			reflector
+			reflector,
+			new IdempotencyService()
 		)
 		const procedure = {
 			"~orpc": {

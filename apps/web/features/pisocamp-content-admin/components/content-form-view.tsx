@@ -36,6 +36,7 @@ import {
 	useSubmitPisoCampContentMutation,
 	useUpdatePisoCampContentMutation,
 } from "@/features/pisocamp-content-admin/api/content.hooks"
+import { AssetAttachmentsEditor } from "@/features/pisocamp-content-admin/components/asset-attachments-editor"
 import { ContentTypeFields } from "@/features/pisocamp-content-admin/components/content-type-fields"
 import { RelatedLinksEditor } from "@/features/pisocamp-content-admin/components/related-links-editor"
 import {
@@ -49,13 +50,14 @@ import {
 } from "@/features/pisocamp-content-admin/lib/content-form"
 
 type ContentFormViewProps =
-	| { mode: "create"; itemId?: never; canSubmit?: never }
-	| { mode: "edit"; itemId: string; canSubmit?: boolean }
+	| { mode: "create"; itemId?: never; canSubmit?: never; canManageAssets?: never }
+	| { mode: "edit"; itemId: string; canSubmit?: boolean; canManageAssets?: boolean }
 type ContentFormEditorProps =
 	| {
 			mode: "create"
 			itemId?: never
 			canSubmit?: never
+			canManageAssets?: never
 			initialDetail?: never
 			reloadDetail?: never
 	  }
@@ -63,6 +65,7 @@ type ContentFormEditorProps =
 			mode: "edit"
 			itemId: string
 			canSubmit: boolean
+			canManageAssets: boolean
 			initialDetail: PisoCampContentDetail
 			reloadDetail: () => Promise<PisoCampContentDetail | undefined>
 	  }
@@ -122,7 +125,12 @@ function titleCase(value: string) {
 	return `${label.charAt(0).toUpperCase()}${label.slice(1)}`
 }
 
-export function ContentFormView({ canSubmit = false, itemId, mode }: ContentFormViewProps) {
+export function ContentFormView({
+	canManageAssets = false,
+	canSubmit = false,
+	itemId,
+	mode,
+}: ContentFormViewProps) {
 	const detail = usePisoCampContentDetailQuery({ itemId: itemId ?? EMPTY_ITEM_ID }, mode === "edit")
 
 	if (mode === "edit" && detail.isPending) {
@@ -177,6 +185,7 @@ export function ContentFormView({ canSubmit = false, itemId, mode }: ContentForm
 			<ContentFormEditor
 				mode="edit"
 				itemId={itemId}
+				canManageAssets={canManageAssets}
 				canSubmit={canSubmit}
 				initialDetail={detail.data}
 				reloadDetail={async () => {
@@ -191,6 +200,7 @@ export function ContentFormView({ canSubmit = false, itemId, mode }: ContentForm
 }
 
 function ContentFormEditor({
+	canManageAssets = false,
 	canSubmit = false,
 	itemId,
 	mode,
@@ -543,6 +553,23 @@ function ContentFormEditor({
 							}}
 							onChange={relatedLinks => changeValues({ ...values, relatedLinks })}
 						/>
+						{mode === "edit" ? (
+							<AssetAttachmentsEditor
+								itemId={itemId}
+								expectedVersionNo={versionNo}
+								canManageAssets={canManageAssets}
+								contentDirty={dirty || pending || submitting}
+								onVersionChanged={async nextVersionNo => {
+									setVersionNo(nextVersionNo)
+									await reloadDetail()
+								}}
+							/>
+						) : (
+							<Alert>
+								<AlertTitle>Assets Become Available After Saving</AlertTitle>
+								<AlertDescription>Save this draft before adding assets.</AlertDescription>
+							</Alert>
+						)}
 
 						{conflict ? (
 							<Alert variant="destructive">

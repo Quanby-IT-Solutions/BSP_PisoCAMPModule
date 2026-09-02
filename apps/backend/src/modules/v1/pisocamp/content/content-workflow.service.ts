@@ -29,6 +29,7 @@ import { AuditService } from "@/common/audit/audit.service"
 import { databaseTransactionContext } from "@/common/database/database-transaction.context"
 import { db } from "@/common/database/database.client"
 
+import { copyVersionAssets } from "../assets/version-assets"
 import {
 	fromContentVersion,
 	selectContentLinks,
@@ -139,6 +140,11 @@ export class ContentWorkflowService {
 				publishedAt,
 				transitionAction: action,
 				transitionComments: comments,
+			})
+			await copyVersionAssets(tx, {
+				contentItemId: item.id,
+				sourceVersionId: current.id,
+				targetVersionId: versionId,
 			})
 
 			const currentLinks = await tx

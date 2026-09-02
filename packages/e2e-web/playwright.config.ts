@@ -62,7 +62,13 @@ export default defineConfig({
 							storageState: AUTH_FILE,
 						},
 						testMatch: /authenticated\.spec\.ts/,
+						testIgnore: /cm2-assets\.authenticated\.spec\.ts/,
 						dependencies: ["setup"],
+					},
+					{
+						name: "cm2-assets-authenticated",
+						use: { ...devices["Desktop Chrome"] },
+						testMatch: /cm2-assets\.authenticated\.spec\.ts/,
 					},
 				]
 			: []),

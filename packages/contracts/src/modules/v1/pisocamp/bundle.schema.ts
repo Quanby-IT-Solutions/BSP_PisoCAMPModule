@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer"
 import { z } from "zod"
 
 const MAX_MANIFEST_ENTRIES = 2_000
@@ -9,12 +8,23 @@ const MAX_MANIFEST_PAYLOAD_BYTES = 2_097_152
 const SHA256_PATTERN = /^[a-f0-9]{64}$/
 const LOGICAL_ID_PATTERN = /^[a-z0-9]+(?:[.:_-][a-z0-9]+)*$/
 const KEY_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
+const BASE64URL_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+function decodedBase64urlByteLength(value: string): number {
+	return Math.floor((value.length * 3) / 4)
+}
 
 function isCanonicalBase64url(value: string, maximumDecodedBytes: number): boolean {
 	if (!/^[A-Za-z0-9_-]+$/.test(value) || value.length % 4 === 1) return false
-	if (Math.floor((value.length * 3) / 4) > maximumDecodedBytes) return false
+	if (decodedBase64urlByteLength(value) > maximumDecodedBytes) return false
 
-	return Buffer.from(value, "base64url").toString("base64url") === value
+	const remainder = value.length % 4
+	if (remainder === 0) return true
+
+	const finalValue = BASE64URL_ALPHABET.indexOf(value.at(-1) ?? "")
+	if (finalValue < 0) return false
+
+	return remainder === 2 ? (finalValue & 0b1111) === 0 : (finalValue & 0b11) === 0
 }
 
 const UnpaddedBase64urlSchema = (maximumDecodedBytes: number) =>
@@ -33,7 +43,7 @@ export const PisoCampBundleEnvelopeSchema = z
 		keyId: z.string().min(1).max(64).regex(KEY_ID_PATTERN),
 		payload: UnpaddedBase64urlSchema(MAX_MANIFEST_PAYLOAD_BYTES),
 		signature: UnpaddedBase64urlSchema(64).refine(
-			value => Buffer.from(value, "base64url").byteLength === 64,
+			value => decodedBase64urlByteLength(value) === 64,
 			"Ed25519 signatures must decode to exactly 64 bytes"
 		),
 	})

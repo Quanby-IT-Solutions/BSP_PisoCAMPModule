@@ -44,6 +44,25 @@ function createApp(): { app: express.Express; readLogs: () => string } {
 	// The same options object main.ts registers, so this test fails the moment
 	// the shipped config regresses.
 	app.use(pinoHttp({ ...buildPinoHttpOptions(), transport: undefined }, stream))
+	app.get("/task7/status-only", (_req, res) => res.status(500).json({ ok: false }))
+	app.get("/task7/response-error", (_req, res) => {
+		const error = Object.assign(
+			new Error("private-task7-pino-message C:\\private\\task7\\transport.ts"),
+			{ code: "ECONNRESET" }
+		)
+		;(res as typeof res & { err?: Error }).err = error
+		res.status(500).json({ ok: false })
+	})
+	app.get("/task7/unsafe-error-code", (_req, res) => {
+		const error = Object.assign(new Error("private-task7-code-message"), {
+			code: "private/task7/secret",
+		})
+		Object.defineProperty(error, "constructor", {
+			value: { name: "private/task7/secret-class" },
+		})
+		;(res as typeof res & { err?: Error }).err = error
+		res.status(500).json({ ok: false })
+	})
 	app.all(/.*/, (_req, res) => res.status(200).json({ ok: true }))
 
 	return { app, readLogs: () => chunks.join("") }
@@ -135,5 +154,51 @@ describe("request logging redaction (full auth cycle)", () => {
 
 		expect(response.headers["x-request-id"]).toBeTruthy()
 		expect(readLogs()).toContain(response.headers["x-request-id"])
+	})
+
+	it("retains only bounded classification for a genuine response error", async () => {
+		const response = await request(app).get("/task7/response-error")
+		const records = readLogs()
+			.trim()
+			.split("\n")
+			.map(line => JSON.parse(line) as Record<string, unknown>)
+		const completion = records.find(
+			record => record.res && JSON.stringify(record).includes("/task7/response-error")
+		)
+
+		expect(response.status).toBe(500)
+		expect(completion).toMatchObject({
+			err: { type: "Error", code: "ECONNRESET" },
+			res: { statusCode: 500 },
+			responseTime: expect.any(Number),
+		})
+		expect(JSON.stringify(completion)).not.toMatch(
+			/private-task7|transport\.ts|C:\\\\private|"message"|"stack"|\n\s+at /i
+		)
+	})
+
+	it("rejects spoofed error class/code and excludes all status-only error details", async () => {
+		await request(app).get("/task7/unsafe-error-code").expect(500)
+		await request(app).get("/task7/status-only").expect(500)
+
+		const records = readLogs()
+			.trim()
+			.split("\n")
+			.map(line => JSON.parse(line) as Record<string, unknown>)
+		const unsafe = records.find(
+			record => record.res && JSON.stringify(record).includes("/task7/unsafe-error-code")
+		)
+		const statusOnly = records.find(
+			record => record.res && JSON.stringify(record).includes("/task7/status-only")
+		)
+
+		expect(unsafe).toMatchObject({ err: { type: "Error" }, res: { statusCode: 500 } })
+		expect(unsafe).not.toHaveProperty("err.code")
+		expect(statusOnly).toMatchObject({ res: { statusCode: 500 } })
+		for (const record of [unsafe, statusOnly]) {
+			expect(JSON.stringify(record)).not.toMatch(
+				/private-task7|failed with status code|node_modules|"message"|"stack"|\n\s+at /i
+			)
+		}
 	})
 })

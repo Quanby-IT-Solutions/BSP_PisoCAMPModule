@@ -161,6 +161,44 @@ export type {
 	ModuleEntryToday,
 } from "./modules/v1/pisocamp/analytics.schema.js"
 
+// CM-2 governed content asset protocol
+export { pisoCampAssetContract } from "./modules/v1/pisocamp/asset.contract.js"
+export {
+	AttachPisoCampAssetInputSchema,
+	AttachPisoCampAssetOutputSchema,
+	DeletePisoCampAssetInputSchema,
+	DeletePisoCampAssetOutputSchema,
+	DetachPisoCampAssetInputSchema,
+	DetachPisoCampAssetOutputSchema,
+	ListPisoCampAssetsOutputSchema,
+	PISO_CAMP_ASSET_MEDIA_TYPE_MAX_BYTES,
+	PISO_CAMP_ASSET_MEDIA_TYPES,
+	PISO_CAMP_ASSET_ROLES,
+	PisoCampAssetMediaTypeSchema,
+	PisoCampAssetMutationOutputSchema,
+	PisoCampAssetRoleSchema,
+	PisoCampAssetSchema,
+	PisoCampVersionAssetSchema,
+	UploadPisoCampAssetInputSchema,
+	UploadPisoCampAssetOutputSchema,
+} from "./modules/v1/pisocamp/asset.schema.js"
+export type {
+	AttachPisoCampAssetInput,
+	AttachPisoCampAssetOutput,
+	DeletePisoCampAssetInput,
+	DeletePisoCampAssetOutput,
+	DetachPisoCampAssetInput,
+	DetachPisoCampAssetOutput,
+	ListPisoCampAssetsOutput,
+	PisoCampAsset,
+	PisoCampAssetMediaType,
+	PisoCampAssetMutationOutput,
+	PisoCampAssetRole,
+	PisoCampVersionAsset,
+	UploadPisoCampAssetInput,
+	UploadPisoCampAssetOutput,
+} from "./modules/v1/pisocamp/asset.schema.js"
+
 // CE-1 signed offline bundle protocol
 export { pisoCampBundleContract } from "./modules/v1/pisocamp/bundle.contract.js"
 export {

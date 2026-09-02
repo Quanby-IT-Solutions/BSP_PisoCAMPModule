@@ -1,3 +1,5 @@
+import { types as nodeTypes } from "node:util"
+
 /**
  * Request-id sanitisation for the log path (LG-2 / F-37).
  *
@@ -25,6 +27,30 @@ export const MAX_REQUEST_ID_LENGTH = 64
  */
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_.:-]+$/
 
+const TRUSTED_ERROR_NAMES = new Map<object, string>([
+	[Error.prototype, "Error"],
+	[TypeError.prototype, "TypeError"],
+	[RangeError.prototype, "RangeError"],
+	[ReferenceError.prototype, "ReferenceError"],
+	[SyntaxError.prototype, "SyntaxError"],
+	[URIError.prototype, "URIError"],
+	[EvalError.prototype, "EvalError"],
+	[AggregateError.prototype, "AggregateError"],
+])
+
+const TRUSTED_OPERATIONAL_ERROR_CODES = new Set([
+	"EAI_AGAIN",
+	"ECONNABORTED",
+	"ECONNREFUSED",
+	"ECONNRESET",
+	"EHOSTUNREACH",
+	"ENETUNREACH",
+	"ENOTFOUND",
+	"EPIPE",
+	"ETIMEDOUT",
+	"ERR_STREAM_PREMATURE_CLOSE",
+])
+
 /**
  * The inbound id if it is safe to reuse, otherwise null so the caller mints a
  * fresh one. Reusing a client value is what makes distributed tracing work, so
@@ -36,4 +62,44 @@ export function sanitizeRequestId(value: unknown): string | null {
 	if (raw.length === 0 || raw.length > MAX_REQUEST_ID_LENGTH) return null
 	if (!REQUEST_ID_PATTERN.test(raw)) return null
 	return raw
+}
+
+function trustedErrorName(value: unknown): string | null {
+	if ((typeof value !== "object" && typeof value !== "function") || value === null) return null
+	try {
+		if (!nodeTypes.isNativeError(value)) return null
+		return TRUSTED_ERROR_NAMES.get(Object.getPrototypeOf(value) as object) ?? null
+	} catch {
+		return null
+	}
+}
+
+/** A fixed built-in error category safe for structured logs and responses. */
+export function safeErrorName(value: unknown, fallback = "Error"): string {
+	return trustedErrorName(value) ?? fallback
+}
+
+/**
+ * Preserve only stable diagnostic classification from a request error. Error
+ * messages and stacks may contain credentials, paths, SQL, or uploaded data.
+ */
+export function safeLogError(value: unknown): { type: string; code?: string } {
+	const trustedName = trustedErrorName(value)
+	const type = trustedName ?? "Error"
+	if (
+		!trustedName ||
+		(typeof value !== "object" && typeof value !== "function") ||
+		value === null
+	) {
+		return { type }
+	}
+	try {
+		const descriptor = Object.getOwnPropertyDescriptor(value, "code")
+		const code = descriptor && "value" in descriptor ? descriptor.value : undefined
+		return typeof code === "string" && TRUSTED_OPERATIONAL_ERROR_CODES.has(code)
+			? { type, code }
+			: { type }
+	} catch {
+		return { type }
+	}
 }

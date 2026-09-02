@@ -15,15 +15,17 @@ vi.mock("next/navigation", () => ({ redirect }))
 vi.mock("@/features/dashboard/server/get-access", () => ({ getAccess }))
 vi.mock("@/features/pisocamp-content-admin/components/content-form-view", () => ({
 	ContentFormView: ({
+		canManageAssets,
 		canSubmit,
 		itemId,
 		mode,
 	}: {
+		canManageAssets: boolean
 		canSubmit: boolean
 		itemId: string
 		mode: string
 	}) => {
-		contentFormView({ canSubmit, itemId, mode })
+		contentFormView({ canManageAssets, canSubmit, itemId, mode })
 		return (
 			<div>
 				Content form: {mode} {itemId}
@@ -42,18 +44,23 @@ describe("EditPisoCampContentPage", () => {
 		expect(metadata).toEqual(expect.objectContaining({ title: "Edit Content" }))
 	})
 
-	it("passes an explicit submit capability to the item edit feature view", async () => {
+	it("independently maps submit and asset-management capabilities to the edit view", async () => {
 		getAccess.mockResolvedValue({
 			status: "loaded",
 			roles: [],
-			permissions: ["content.items.edit", "content.items.submit"],
+			permissions: ["content.items.edit", "content.items.submit", "content.assets.upload"],
 		})
 
 		render(await EditPisoCampContentPage(route))
 
 		expect(redirect).not.toHaveBeenCalled()
 		expect(screen.getByText(`Content form: edit ${itemId}`)).toBeInTheDocument()
-		expect(contentFormView).toHaveBeenCalledWith({ canSubmit: true, itemId, mode: "edit" })
+		expect(contentFormView).toHaveBeenCalledWith({
+			canManageAssets: true,
+			canSubmit: true,
+			itemId,
+			mode: "edit",
+		})
 	})
 
 	it("keeps editing available while withholding submit capability without its exact permission", async () => {
@@ -65,7 +72,25 @@ describe("EditPisoCampContentPage", () => {
 
 		render(await EditPisoCampContentPage(route))
 
-		expect(contentFormView).toHaveBeenCalledWith({ canSubmit: false, itemId, mode: "edit" })
+		expect(contentFormView).toHaveBeenCalledWith({
+			canManageAssets: false,
+			canSubmit: false,
+			itemId,
+			mode: "edit",
+		})
+	})
+
+	it("does not let asset upload permission substitute for edit-page access", async () => {
+		getAccess.mockResolvedValue({
+			status: "loaded",
+			roles: [],
+			permissions: ["content.assets.upload"],
+		})
+
+		await expect(EditPisoCampContentPage(route)).rejects.toThrow("NEXT_REDIRECT")
+
+		expect(redirect).toHaveBeenCalledWith("/dashboard")
+		expect(contentFormView).not.toHaveBeenCalled()
 	})
 
 	it.each([

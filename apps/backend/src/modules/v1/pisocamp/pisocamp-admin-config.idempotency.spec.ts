@@ -11,6 +11,7 @@ import { auditLog, idempotencyKeys, moduleConfiguration, users } from "@repo/db/
 import type { AuditService } from "@/common/audit/audit.service"
 import type { db as DatabaseClient } from "@/common/database/database.client"
 import type { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
+import type { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 
 import type { PisoCampAdminConfigService } from "./pisocamp-admin-config.service"
 
@@ -35,6 +36,7 @@ const DATABASE_NAME = `f2_atomicity_spec_${process.pid}`
 let db: typeof DatabaseClient
 let AuditServiceConstructor: typeof AuditService
 let InterceptorConstructor: typeof IdempotencyInterceptor
+let IdempotencyServiceConstructor: typeof IdempotencyService
 let ServiceConstructor: typeof PisoCampAdminConfigService
 let admin: pg.Client
 let originalConfig: unknown
@@ -86,7 +88,11 @@ async function removeFailureTrigger() {
 }
 
 function createInterceptor() {
-	return new InterceptorConstructor({ isActive: async () => true } as never, new Reflector())
+	return new InterceptorConstructor(
+		{ isActive: async () => true } as never,
+		new Reflector(),
+		new IdempotencyServiceConstructor()
+	)
 }
 
 async function resetEvidence() {
@@ -126,6 +132,8 @@ beforeAll(async () => {
 	;({ AuditService: AuditServiceConstructor } = await import("@/common/audit/audit.service"))
 	;({ IdempotencyInterceptor: InterceptorConstructor } =
 		await import("@/shared/interceptors/idempotency.interceptor"))
+	;({ IdempotencyService: IdempotencyServiceConstructor } =
+		await import("@/shared/interceptors/idempotency.service"))
 	;({ PisoCampAdminConfigService: ServiceConstructor } =
 		await import("./pisocamp-admin-config.service"))
 

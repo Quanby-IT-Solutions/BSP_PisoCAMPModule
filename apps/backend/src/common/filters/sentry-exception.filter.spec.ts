@@ -22,13 +22,16 @@ jest.mock("@sentry/nestjs", () => ({
 	captureException: (...args: unknown[]) => mockCaptureException(...args),
 }))
 
-function createHost() {
+function createHost(options?: { id?: unknown; inboundRequestId?: unknown }) {
 	const json = jest.fn()
 	const status = jest.fn((_statusCode: number) => ({ json }))
 
 	const host = {
 		switchToHttp: () => ({
-			getRequest: () => ({ headers: { "x-request-id": "req-1" } }),
+			getRequest: () => ({
+				id: options?.id ?? "canonical-req-1",
+				headers: { "x-request-id": options?.inboundRequestId ?? "raw-request-id" },
+			}),
 			getResponse: () => ({ status }),
 		}),
 	} as unknown as ArgumentsHost
@@ -94,18 +97,39 @@ describe("SentryExceptionFilter", () => {
 		})
 	})
 
-	// Logs what pino-http cannot: the stack behind the 500.
-	it("logs the exception with the request id", () => {
+	it("logs only bounded classification with the request id", () => {
 		const logger = createLoggerStub()
 		const filter = new SentryExceptionFilter(logger as unknown as Logger)
 		const { host } = createHost()
+		const exception = new Error("private-task7-filter-message C:\\private\\task7\\filter.ts")
+
+		filter.catch(exception, host)
+
+		expect(logger.error).toHaveBeenCalledWith(
+			{ requestId: "canonical-req-1", errorName: "Error" },
+			"Unhandled exception"
+		)
+		expect(JSON.stringify(logger.error.mock.calls)).not.toMatch(
+			/private-task7|filter\.ts|C:\\\\private|"message"|"stack"|\n\s+at /i
+		)
+		expect(mockCaptureException).toHaveBeenCalledWith(exception)
+	})
+
+	it("uses Pino's canonical request id instead of the raw inbound header", () => {
+		const logger = createLoggerStub()
+		const filter = new SentryExceptionFilter(logger as unknown as Logger)
+		const { host } = createHost({
+			id: "canonical-safe-id",
+			inboundRequestId: "private-task7-malicious/id",
+		})
 
 		filter.catch(new Error("boom"), host)
 
 		expect(logger.error).toHaveBeenCalledWith(
-			expect.objectContaining({ requestId: "req-1" }),
-			expect.any(String)
+			{ requestId: "canonical-safe-id", errorName: "Error" },
+			"Unhandled exception"
 		)
+		expect(JSON.stringify(logger.error.mock.calls)).not.toContain("private-task7-malicious")
 	})
 })
 

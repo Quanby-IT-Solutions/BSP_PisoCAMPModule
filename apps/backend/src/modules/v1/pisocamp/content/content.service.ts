@@ -28,6 +28,7 @@ import {
 import { db } from "@/common/database/database.client"
 import type { V1Inputs } from "@/config/contract-types"
 
+import { copyVersionAssets } from "../assets/version-assets"
 import {
 	fromContentVersion,
 	getContentDetail,
@@ -124,6 +125,11 @@ export class ContentService {
 				status: "draft",
 				createdBy: actorId,
 				...this.toVersionValues(input.content),
+			})
+			await copyVersionAssets(tx, {
+				contentItemId: item.id,
+				sourceVersionId: current.id,
+				targetVersionId: versionId,
 			})
 			await this.insertLinks(tx, versionId, input.relatedLinks)
 			await tx

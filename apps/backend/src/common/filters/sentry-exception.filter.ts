@@ -2,6 +2,8 @@ import { Catch, HttpStatus, type ArgumentsHost, type ExceptionFilter } from "@ne
 import * as Sentry from "@sentry/nestjs"
 import { Logger } from "nestjs-pino"
 
+import { safeErrorName, sanitizeRequestId } from "@/utils/log-redaction"
+
 /**
  * Catch-all filter: reports unexpected failures to Sentry and renders them in
  * the app's uniform error shape.
@@ -32,18 +34,13 @@ export class SentryExceptionFilter implements ExceptionFilter {
 		const ctx = host.switchToHttp()
 		const request = ctx.getRequest()
 		const response = ctx.getResponse()
-		const requestId = request?.headers?.["x-request-id"]
+		const requestId = sanitizeRequestId(request?.id) ?? undefined
 
-		// pino-http logs the 500 response line but not the stack behind it, and an
-		// unexpected exception is precisely the case where the stack is the whole
-		// diagnostic. Same reasoning as the ZodSerializationException branch in
-		// HttpExceptionFilter: log only what the request logger cannot carry.
-		this.logger.error({ requestId, err: exception }, "Unhandled exception")
-
-		const code =
-			typeof exception === "object" && exception !== null && exception.constructor?.name
-				? exception.constructor.name
-				: "InternalServerError"
+		// Sentry receives the intact exception above and is the restricted diagnostic
+		// sink. Operational logs retain only bounded classification and correlation;
+		// raw messages/stacks may contain credentials, SQL, paths, or uploaded data.
+		const code = safeErrorName(exception, "InternalServerError")
+		this.logger.error({ requestId, errorName: code }, "Unhandled exception")
 
 		// The message is deliberately generic. An unexpected exception carries no
 		// message vetted for a client — it may name a table, a file path or a

@@ -5,7 +5,7 @@ import type { Options } from "pino-http"
 import { PINO_REDACT_PATHS, sanitizeLogQuery, sanitizeLogUrl } from "@repo/observability"
 
 import { env } from "@/config/env.config"
-import { sanitizeRequestId } from "@/utils/log-redaction"
+import { safeLogError, sanitizeRequestId } from "@/utils/log-redaction"
 
 /**
  * Build the shared pino-http options used by BOTH:
@@ -51,8 +51,17 @@ export function buildPinoHttpOptions(overrides?: { autoLogging?: boolean }): Opt
 		// `req.query` right beside it.
 		serializers: {
 			req(req: { url?: string; query?: unknown; [key: string]: unknown }) {
+				let headers = req.headers
+				if (typeof req.headers === "object" && req.headers !== null) {
+					const safeHeaders = { ...(req.headers as Record<string, unknown>) }
+					if (sanitizeRequestId(safeHeaders["x-request-id"]) === null) {
+						delete safeHeaders["x-request-id"]
+					}
+					headers = safeHeaders
+				}
 				return {
 					...req,
+					headers,
 					url: sanitizeLogUrl(req.url),
 					query: sanitizeLogQuery(req.query),
 				}
@@ -81,6 +90,15 @@ export function buildPinoHttpOptions(overrides?: { autoLogging?: boolean }): Opt
 		customReceivedMessage: req => `--> ${req.method} ${sanitizeLogUrl(req.url)}`,
 		customSuccessMessage: (req, res) =>
 			`<-- ${req.method} ${sanitizeLogUrl(req.url)} ${res.statusCode}`,
+		customErrorObject: (_req, _res, _error, value) => {
+			// A genuine response/transport error carries useful classification, while
+			// pino-http also synthesizes an Error for status-only 5xx responses. Keep
+			// only a bounded class and allowlisted code in both cases: messages and
+			// stacks can contain credentials, uploaded data, SQL, and local paths.
+			const safe = { ...(value as Record<string, unknown>) }
+			safe.err = safeLogError(_error)
+			return safe
+		},
 		customErrorMessage: (req, res) =>
 			`<-- ${req.method} ${sanitizeLogUrl(req.url)} ${res.statusCode}`,
 	}

@@ -5,14 +5,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ContentFormView } from "./content-form-view"
 
-const { useDetail, useCreate, useUpdate, useSubmit, push, toastSuccess } = vi.hoisted(() => ({
-	useDetail: vi.fn(),
-	useCreate: vi.fn(),
-	useUpdate: vi.fn(),
-	useSubmit: vi.fn(),
-	push: vi.fn(),
-	toastSuccess: vi.fn(),
-}))
+const { useDetail, useCreate, useUpdate, useSubmit, push, toastSuccess, assetEditor } = vi.hoisted(
+	() => ({
+		useDetail: vi.fn(),
+		useCreate: vi.fn(),
+		useUpdate: vi.fn(),
+		useSubmit: vi.fn(),
+		push: vi.fn(),
+		toastSuccess: vi.fn(),
+		assetEditor: vi.fn(),
+	})
+)
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }))
 vi.mock("sonner", () => ({ toast: { success: toastSuccess } }))
@@ -21,6 +24,26 @@ vi.mock("@/features/pisocamp-content-admin/api/content.hooks", () => ({
 	useCreatePisoCampContentMutation: () => useCreate(),
 	useUpdatePisoCampContentMutation: () => useUpdate(),
 	useSubmitPisoCampContentMutation: () => useSubmit(),
+}))
+vi.mock("@/features/pisocamp-content-admin/components/asset-attachments-editor", () => ({
+	AssetAttachmentsEditor: (props: {
+		itemId: string
+		expectedVersionNo: number
+		canManageAssets: boolean
+		contentDirty: boolean
+		onVersionChanged: (versionNo: number) => void | Promise<void>
+	}) => {
+		assetEditor(props)
+		return props.canManageAssets ? (
+			<section aria-label="Draft assets integration">
+				<p>Asset version {props.expectedVersionNo}</p>
+				<p>{props.contentDirty ? "Content dirty" : "Content saved"}</p>
+				<button type="button" onClick={() => void props.onVersionChanged(9)}>
+					Simulate asset version 9
+				</button>
+			</section>
+		) : null
+	},
 }))
 
 const detail = {
@@ -266,6 +289,44 @@ describe("ContentFormView", () => {
 		)
 		expect(toastSuccess).toHaveBeenCalledWith("Draft saved.")
 		expect(push).toHaveBeenCalledWith("/pisocamp/content")
+	})
+
+	it("wires independent asset permission and synchronizes its version before another content mutation", async () => {
+		const user = userEvent.setup()
+		const refetch = vi.fn().mockResolvedValue({ data: detail, status: "success", isError: false })
+		useDetail.mockReturnValue({ isPending: false, isError: false, data: detail, refetch })
+		const mutate = vi.fn()
+		useSubmit.mockReturnValue(mutation(mutate))
+		render(<ContentFormView mode="edit" itemId={detail.id} canSubmit canManageAssets />)
+
+		expect(screen.getByRole("region", { name: "Draft assets integration" })).toBeInTheDocument()
+		expect(assetEditor).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				itemId: detail.id,
+				expectedVersionNo: 3,
+				canManageAssets: true,
+				contentDirty: false,
+			})
+		)
+		await user.click(screen.getByRole("button", { name: "Simulate asset version 9" }))
+		await waitFor(() => expect(refetch).toHaveBeenCalledTimes(1))
+		expect(screen.getByText("Asset version 9")).toBeInTheDocument()
+		await user.click(screen.getByRole("button", { name: /submit for review/i }))
+		await user.click(screen.getByRole("button", { name: /confirm submission/i }))
+
+		expect(mutate).toHaveBeenCalledWith(
+			expect.objectContaining({ itemId: detail.id, expectedVersionNo: 9 }),
+			expect.any(Object)
+		)
+	})
+
+	it("explains that a draft must be saved before assets can be added", () => {
+		render(<ContentFormView mode="create" />)
+
+		expect(screen.getByText("Save this draft before adding assets.")).toBeVisible()
+		expect(
+			screen.queryByRole("region", { name: "Draft assets integration" })
+		).not.toBeInTheDocument()
 	})
 
 	it("confirms submission of the saved draft and blocks a synchronous double submit", async () => {

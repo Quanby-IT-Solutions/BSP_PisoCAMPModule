@@ -30,6 +30,7 @@ import {
 	validateIdempotencyKey,
 } from "./idempotency-key"
 import { IdempotencyInterceptor } from "./idempotency.interceptor"
+import { IdempotencyService } from "./idempotency.service"
 
 const mockGetSession = jest.fn().mockResolvedValue(null)
 const mockIsActive = jest.fn().mockResolvedValue(true)
@@ -55,7 +56,11 @@ const GUEST_AUTHOR = "guest:AbCdEfGhIjKlMnOpQrSt_-"
 let dbReachable = false
 const databaseTestsEnabled = process.env.RUN_DB_IDEMPOTENCY_TESTS === "1"
 
-const interceptor = new IdempotencyInterceptor({ isActive: mockIsActive } as never, new Reflector())
+const interceptor = new IdempotencyInterceptor(
+	{ isActive: mockIsActive } as never,
+	new Reflector(),
+	new IdempotencyService()
+)
 
 beforeEach(() => {
 	mockGetSession.mockReset()

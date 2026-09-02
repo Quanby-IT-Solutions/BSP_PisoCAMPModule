@@ -14,18 +14,6 @@ const config: NextConfig = {
 	output: "standalone",
 	outputFileTracingRoot: path.resolve(import.meta.dirname, "../../"),
 
-	/**
-	 * Keep the Sentry SDK out of the bundled server graph.
-	 *
-	 * `@sentry/node` reaches for `node:inspector`, and bundling it makes
-	 * Turbopack emit a chunk whose filename contains that literal colon. Windows
-	 * cannot name a file that way, so `output: "standalone"` fails to copy it and
-	 * the build dies on a developer machine while passing in CI. Loading the SDK
-	 * from `node_modules` at runtime sidesteps the chunk entirely, and is what
-	 * Sentry's auto-instrumentation of other server packages wants anyway.
-	 */
-	serverExternalPackages: ["@sentry/nextjs"],
-
 	/** Enables hot reloading for local packages without a build step */
 	transpilePackages: [
 		"@repo/auth",

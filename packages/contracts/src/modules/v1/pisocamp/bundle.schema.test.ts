@@ -90,6 +90,14 @@ describe("CE-1 strict bundle schemas", () => {
 		]) {
 			expect(PisoCampBundleEnvelopeSchema.safeParse(value).success).toBe(false)
 		}
+
+		for (const payload of ["AA", "AAA"]) {
+			expect(PisoCampBundleEnvelopeSchema.safeParse({ ...envelope(), payload }).success).toBe(true)
+		}
+
+		for (const payload of ["AB", "AAB"]) {
+			expect(PisoCampBundleEnvelopeSchema.safeParse({ ...envelope(), payload }).success).toBe(false)
+		}
 	})
 
 	it("rejects noncanonical versions and non-UTC timestamps", () => {

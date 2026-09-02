@@ -4,8 +4,10 @@ import { APP_GUARD } from "@nestjs/core"
 import { RbacModule } from "@/common/rbac/rbac.module"
 import { ConsentGuard } from "@/shared/guards/consent.guard"
 import { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
+import { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 
 import { AnalyticsModule } from "./analytics/analytics.module"
+import { AssetsModule } from "./assets/assets.module"
 import { BundleModule } from "./bundle/bundle.module"
 import { ContentModule } from "./content/content.module"
 import { PisoCampAdminConfigService } from "./pisocamp-admin-config.service"
@@ -25,7 +27,7 @@ import { PisoCampController } from "./pisocamp.controller"
 import { PisoCampService } from "./pisocamp.service"
 
 @Module({
-	imports: [RbacModule, AnalyticsModule, ContentModule, BundleModule],
+	imports: [RbacModule, AnalyticsModule, AssetsModule, ContentModule, BundleModule],
 	controllers: [PisoCampController, PisoCampProfileController],
 	providers: [
 		PisoCampAdminConfigService,
@@ -35,6 +37,7 @@ import { PisoCampService } from "./pisocamp.service"
 		PisoCampProfileService,
 		pisoCampProfileDatabaseProvider,
 		pisoCampProfileTransactionProvider,
+		IdempotencyService,
 		IdempotencyInterceptor,
 		pisoCampConsentDatabaseProvider,
 		pisoCampConsentTransactionProvider,

@@ -5,13 +5,8 @@ import {
 	type NestInterceptor,
 } from "@nestjs/common"
 import { Reflector } from "@nestjs/core"
-import { createHash } from "node:crypto"
-import { and, eq, gt, sql } from "drizzle-orm"
 import { firstValueFrom, from, type Observable } from "rxjs"
 
-import { idempotencyKeys } from "@repo/db/schema"
-
-import { databaseTransactionContext } from "@/common/database/database-transaction.context"
 import { AccountAccessService } from "@/common/rbac/account-access.service"
 import {
 	IDEMPOTENCY_REQUIREMENT_KEY,
@@ -23,11 +18,8 @@ import {
 	type VerifiedSessionRequest,
 } from "@/shared/identity/verified-session"
 
-import {
-	describeIdempotencyKeyProblem,
-	IDEMPOTENCY_TTL_MS,
-	validateIdempotencyKey,
-} from "./idempotency-key"
+import { describeIdempotencyKeyProblem, validateIdempotencyKey } from "./idempotency-key"
+import { IdempotencyService, requireMatchingRequestId, type JsonValue } from "./idempotency.service"
 
 /**
  * Shape of the oRPC procedure a `@Implement()` controller method returns.
@@ -43,8 +35,6 @@ type OrpcProcedure = {
 		[key: string]: unknown
 	}
 }
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function isOrpcProcedure(value: unknown): value is OrpcProcedure {
 	return (
@@ -64,30 +54,6 @@ async function throwOrpcError(
 }
 
 type RequestOperation = { method: string; path: string }
-
-function canonicalize(value: unknown): unknown {
-	if (value === null || typeof value !== "object") return value
-	if (value instanceof Date) return value.toISOString()
-	if (Array.isArray(value)) return value.map(item => canonicalize(item))
-
-	return Object.fromEntries(
-		Object.entries(value)
-			.filter(([, item]) => item !== undefined)
-			.sort(([left], [right]) => left.localeCompare(right))
-			.map(([key, item]) => [key, canonicalize(item)])
-	)
-}
-
-function createRequestFingerprint(operation: RequestOperation, input: unknown): string {
-	const canonicalRequest = JSON.stringify({
-		operation: {
-			method: operation.method.toUpperCase(),
-			path: operation.path,
-		},
-		input: canonicalize(input),
-	})
-	return createHash("sha256").update(canonicalRequest).digest("hex")
-}
 
 function procedureOperation(procedure: OrpcProcedure): RequestOperation {
 	const route = procedure["~orpc"].route
@@ -161,7 +127,8 @@ function procedureOperation(procedure: OrpcProcedure): RequestOperation {
 export class IdempotencyInterceptor implements NestInterceptor {
 	constructor(
 		private readonly accountAccessService: AccountAccessService,
-		private readonly reflector: Reflector
+		private readonly reflector: Reflector,
+		private readonly idempotencyService: IdempotencyService
 	) {}
 
 	async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
@@ -195,6 +162,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
 			return from(
 				this.dispatch(
 					next,
+					rawKey,
 					undefined,
 					undefined,
 					undefined,
@@ -220,6 +188,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
 			return from(
 				this.dispatch(
 					next,
+					rawKey,
 					key,
 					undefined,
 					authenticatedAuthorId,
@@ -233,6 +202,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		return from(
 			this.dispatch(
 				next,
+				rawKey,
 				key,
 				authorId,
 				authenticatedAuthorId,
@@ -255,6 +225,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
 	 */
 	private async dispatch(
 		next: CallHandler,
+		rawKey: string | string[] | undefined,
 		key: string | undefined,
 		authorId: string | undefined,
 		authenticatedAuthorId: string | undefined,
@@ -265,7 +236,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		const emitted = await firstValueFrom(next.handle())
 
 		if (isOrpcProcedure(emitted)) {
-			return this.wrapProcedure(emitted, key, authorId, authenticatedAuthorId, requirement)
+			return this.wrapProcedure(emitted, rawKey, key, authorId, authenticatedAuthorId, requirement)
 		}
 
 		if (!key || !authorId) return emitted
@@ -273,17 +244,20 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		if (problem) {
 			return throwOrpcError("BAD_REQUEST", describeIdempotencyKeyProblem(problem))
 		}
-		return this.runWithIdempotency(
+		return this.idempotencyService.execute({
 			authorId,
 			key,
-			createRequestFingerprint(plainOperation, plainInput),
-			() => Promise.resolve(emitted)
-		)
+			method: plainOperation.method,
+			path: plainOperation.path,
+			input: plainInput,
+			run: async () => (await Promise.resolve(emitted)) as JsonValue,
+		})
 	}
 
 	/** Clone a procedure with its handler wrapped in the idempotency transaction. */
 	private wrapProcedure(
 		procedure: OrpcProcedure,
+		rawKey: string | string[] | undefined,
 		key: string | undefined,
 		authorId: string | undefined,
 		authenticatedAuthorId: string | undefined,
@@ -298,7 +272,8 @@ export class IdempotencyInterceptor implements NestInterceptor {
 				handler: async (options: unknown) => {
 					if (!key) {
 						if (requirement) {
-							return throwOrpcError("BAD_REQUEST", "Idempotency-Key is required")
+							const input = (options as { input?: Record<string, unknown> } | null)?.input
+							requireMatchingRequestId(rawKey, String(input?.[requirement.requestIdField] ?? ""))
 						}
 						return original(options)
 					}
@@ -307,13 +282,8 @@ export class IdempotencyInterceptor implements NestInterceptor {
 						return throwOrpcError("BAD_REQUEST", describeIdempotencyKeyProblem(problem))
 					}
 					if (requirement) {
-						if (!UUID_PATTERN.test(key)) {
-							return throwOrpcError("BAD_REQUEST", "Idempotency-Key must be a UUID")
-						}
 						const input = (options as { input?: Record<string, unknown> } | null)?.input
-						if (input?.[requirement.requestIdField] !== key) {
-							return throwOrpcError("BAD_REQUEST", "Idempotency-Key must match the request id")
-						}
+						requireMatchingRequestId(rawKey, String(input?.[requirement.requestIdField] ?? ""))
 						if (
 							requirement.requireActiveAccount &&
 							authenticatedAuthorId &&
@@ -324,12 +294,14 @@ export class IdempotencyInterceptor implements NestInterceptor {
 					}
 					if (!authorId) return original(options)
 					const input = (options as { input?: unknown } | null)?.input
-					return this.runWithIdempotency(
+					return this.idempotencyService.execute({
 						authorId,
 						key,
-						createRequestFingerprint(operation, input),
-						() => Promise.resolve(original(options))
-					)
+						method: operation.method,
+						path: operation.path,
+						input,
+						run: async () => (await Promise.resolve(original(options))) as JsonValue,
+					})
 				},
 			},
 		}
@@ -337,71 +309,5 @@ export class IdempotencyInterceptor implements NestInterceptor {
 		// oRPC identifies procedures by prototype as well as by the `~orpc` key.
 		Object.setPrototypeOf(clone, Object.getPrototypeOf(procedure) as object)
 		return clone
-	}
-
-	/**
-	 * Replay a stored response, or execute `run` once and store its result.
-	 *
-	 * Returns the value itself (not an Observable) so it can be awaited from
-	 * inside an oRPC handler.
-	 */
-	private runWithIdempotency<T>(
-		authorId: string,
-		key: string,
-		requestFingerprint: string,
-		run: () => Promise<T>
-	): Promise<T> {
-		return databaseTransactionContext.transaction(async tx => {
-			// Locked on author AND key: keying on the key alone let one user's
-			// requests block another's whenever both picked the same value.
-			await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${authorId}:${key}`}))`)
-
-			// Re-check under the lock — a concurrent duplicate that ran first has
-			// stored its response by now. Scoped to this author, and only rows that
-			// have not expired: an expired row is not a valid replay target, so the
-			// request executes fresh.
-			const now = new Date()
-			const existing = await tx
-				.select()
-				.from(idempotencyKeys)
-				.where(
-					and(
-						eq(idempotencyKeys.authorId, authorId),
-						eq(idempotencyKeys.key, key),
-						gt(idempotencyKeys.expiresAt, now)
-					)
-				)
-
-			if (existing[0]) {
-				if (existing[0].requestFingerprint !== requestFingerprint) {
-					return throwOrpcError(
-						"CONFLICT",
-						"Idempotency-Key was already used for a different request"
-					)
-				}
-				return existing[0].response as T
-			}
-
-			// First request for this key: run the handler exactly once, then persist
-			// inside the same transaction. A handler error rejects here and rolls
-			// back — nothing is stored, and the client sees the failure.
-			const response = await run()
-
-			const expiresAt = new Date(now.getTime() + IDEMPOTENCY_TTL_MS)
-
-			// Upsert on the composite key: the only row that can conflict is this
-			// author's own expired one, which the read above deliberately ignored.
-			// Overwriting it is correct — the fresh execution replaces a replay
-			// target that had already lapsed.
-			await tx
-				.insert(idempotencyKeys)
-				.values({ key, authorId, requestFingerprint, response: response as unknown, expiresAt })
-				.onConflictDoUpdate({
-					target: [idempotencyKeys.authorId, idempotencyKeys.key],
-					set: { requestFingerprint, response: response as unknown, createdAt: now, expiresAt },
-				})
-
-			return response
-		})
 	}
 }

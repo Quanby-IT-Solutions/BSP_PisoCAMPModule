@@ -1,7 +1,13 @@
 import { defineRelations, sql } from "drizzle-orm"
 import { bytea, check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core"
 
-import type { AnalyticsEvent, PisoCampContentStatus, PisoCampContentType } from "@repo/contracts"
+import type {
+	AnalyticsEvent,
+	PisoCampAssetMediaType,
+	PisoCampAssetRole,
+	PisoCampContentStatus,
+	PisoCampContentType,
+} from "@repo/contracts"
 
 import { createTable } from "./utils/table.js"
 
@@ -667,6 +673,100 @@ export const contentVersions = createTable(
 	]
 )
 
+export const assetObjects = createTable(
+	"asset_object",
+	t => ({
+		sha256: t.text("sha256").primaryKey(),
+		byteLength: t.integer("byte_length").notNull(),
+		mediaType: t.text("media_type").notNull().$type<PisoCampAssetMediaType>(),
+		body: bytea("body").notNull(),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("asset_object_metadata_unique").on(t.sha256, t.byteLength, t.mediaType),
+		check("asset_object_sha256_check", sql`${t.sha256} ~ '^[a-f0-9]{64}$'`),
+		check(
+			"asset_object_size_check",
+			sql`${t.byteLength} between 1 and 52428800 and (
+				(${t.mediaType} in ('image/png', 'image/jpeg', 'image/webp') and ${t.byteLength} <= 10485760)
+				or (${t.mediaType} in ('audio/mpeg', 'audio/aac') and ${t.byteLength} <= 26214400)
+				or (${t.mediaType} in ('model/gltf-binary', 'model/gltf+json', 'model/vnd.usdz+zip') and ${t.byteLength} <= 52428800)
+			)`
+		),
+		check(
+			"asset_object_media_type_check",
+			sql`${t.mediaType} in ('image/png', 'image/jpeg', 'image/webp', 'audio/mpeg', 'audio/aac', 'model/gltf-binary', 'model/gltf+json', 'model/vnd.usdz+zip')`
+		),
+		check("asset_object_body_length_check", sql`octet_length(${t.body}) = ${t.byteLength}`),
+	]
+)
+
+export const assets = createTable(
+	"asset",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		contentItemId: t
+			.uuid("content_item_id")
+			.notNull()
+			.references(() => contentItems.id, { onDelete: "restrict" }),
+		sha256: t.text("sha256").notNull(),
+		byteLength: t.integer("byte_length").notNull(),
+		mediaType: t.text("media_type").notNull().$type<PisoCampAssetMediaType>(),
+		version: t.integer("version").notNull().default(1),
+		uploadedBy: t
+			.text("uploaded_by")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		deletedAt: t.timestamp("deleted_at", { withTimezone: true }),
+		deletedBy: t.text("deleted_by").references(() => users.id, { onDelete: "restrict" }),
+	}),
+	t => [
+		unique("asset_content_item_id_id_unique").on(t.contentItemId, t.id),
+		foreignKey({
+			columns: [t.sha256, t.byteLength, t.mediaType],
+			foreignColumns: [assetObjects.sha256, assetObjects.byteLength, assetObjects.mediaType],
+			name: "asset_object_metadata_fkey",
+		}).onDelete("restrict"),
+		check("asset_version_check", sql`${t.version} > 0`),
+		check("asset_deletion_pair_check", sql`(${t.deletedAt} is null) = (${t.deletedBy} is null)`),
+		index("asset_content_item_created_idx").on(t.contentItemId, t.createdAt.desc()),
+		index("asset_sha256_idx").on(t.sha256),
+		index("asset_active_content_item_created_idx")
+			.on(t.contentItemId, t.createdAt.desc())
+			.where(sql`${t.deletedAt} is null`),
+	]
+)
+
+export const versionAssets = createTable(
+	"version_asset",
+	t => ({
+		contentItemId: t.uuid("content_item_id").notNull(),
+		contentVersionId: t.uuid("content_version_id").notNull(),
+		assetId: t.uuid("asset_id").notNull(),
+		role: t.text("role").notNull().$type<PisoCampAssetRole>(),
+	}),
+	t => [
+		primaryKey({ columns: [t.contentVersionId, t.role] }),
+		foreignKey({
+			columns: [t.contentItemId, t.contentVersionId],
+			foreignColumns: [contentVersions.itemId, contentVersions.id],
+			name: "version_asset_content_item_version_fkey",
+		}).onDelete("restrict"),
+		foreignKey({
+			columns: [t.contentItemId, t.assetId],
+			foreignColumns: [assets.contentItemId, assets.id],
+			name: "version_asset_asset_item_fkey",
+		}).onDelete("restrict"),
+		check(
+			"version_asset_role_check",
+			sql`${t.role} in ('obverse', 'reverse', 'edge', 'texture', 'audio', 'animation')`
+		),
+		index("version_asset_asset_idx").on(t.assetId),
+		index("version_asset_content_item_version_idx").on(t.contentItemId, t.contentVersionId),
+	]
+)
+
 export const contentBundles = createTable(
 	"content_bundle",
 	t => ({
@@ -1028,6 +1128,9 @@ export const relations = defineRelations(
 		pisoCampCurrencyDenominations,
 		contentItems,
 		contentVersions,
+		assetObjects,
+		assets,
+		versionAssets,
 		contentBundles,
 		contentBundleBlobs,
 		contentBundleManifestEntries,
@@ -1052,6 +1155,8 @@ export const relations = defineRelations(
 			contentItemsCreated: r.many.contentItems({ alias: "contentItemCreator" }),
 			contentItemsEdited: r.many.contentItems({ alias: "contentItemEditor" }),
 			contentVersionsCreated: r.many.contentVersions({ alias: "contentVersionCreator" }),
+			assetsUploaded: r.many.assets({ alias: "assetUploader" }),
+			assetsDeleted: r.many.assets({ alias: "assetDeleter" }),
 		},
 		sessions: {
 			user: r.one.users({
@@ -1166,6 +1271,8 @@ export const relations = defineRelations(
 			versions: r.many.contentVersions(),
 			bundleRebuildRequests: r.many.contentBundleRebuildRequests(),
 			bundleManifestEntries: r.many.contentBundleManifestEntries(),
+			assets: r.many.assets(),
+			versionAssets: r.many.versionAssets(),
 			topicLinks: r.many.relatedLinks(),
 		},
 		contentVersions: {
@@ -1185,6 +1292,45 @@ export const relations = defineRelations(
 			relatedLinks: r.many.relatedLinks(),
 			bundleRebuildRequests: r.many.contentBundleRebuildRequests(),
 			bundleManifestEntries: r.many.contentBundleManifestEntries(),
+			assets: r.many.versionAssets(),
+		},
+		assetObjects: {
+			assets: r.many.assets(),
+		},
+		assets: {
+			contentItem: r.one.contentItems({
+				from: r.assets.contentItemId,
+				to: r.contentItems.id,
+			}),
+			object: r.one.assetObjects({
+				from: [r.assets.sha256, r.assets.byteLength, r.assets.mediaType],
+				to: [r.assetObjects.sha256, r.assetObjects.byteLength, r.assetObjects.mediaType],
+			}),
+			uploader: r.one.users({
+				from: r.assets.uploadedBy,
+				to: r.users.id,
+				alias: "assetUploader",
+			}),
+			deleter: r.one.users({
+				from: r.assets.deletedBy,
+				to: r.users.id,
+				alias: "assetDeleter",
+			}),
+			versionAssets: r.many.versionAssets(),
+		},
+		versionAssets: {
+			contentItem: r.one.contentItems({
+				from: r.versionAssets.contentItemId,
+				to: r.contentItems.id,
+			}),
+			contentVersion: r.one.contentVersions({
+				from: [r.versionAssets.contentItemId, r.versionAssets.contentVersionId],
+				to: [r.contentVersions.itemId, r.contentVersions.id],
+			}),
+			asset: r.one.assets({
+				from: [r.versionAssets.contentItemId, r.versionAssets.assetId],
+				to: [r.assets.contentItemId, r.assets.id],
+			}),
 		},
 		contentBundles: {
 			manifestEntries: r.many.contentBundleManifestEntries(),
@@ -1287,6 +1433,9 @@ export const schema = Object.assign(
 		pisoCampCurrencyDenominations,
 		contentItems,
 		contentVersions,
+		assetObjects,
+		assets,
+		versionAssets,
 		contentBundles,
 		contentBundleBlobs,
 		contentBundleManifestEntries,

@@ -1,11 +1,14 @@
 import { and, eq, sql } from "drizzle-orm"
 
 import {
+	assetObjects,
+	assets,
 	auditLog,
 	contentBundleRebuildRequests,
 	contentItems,
 	contentVersions,
 	relatedLinks,
+	versionAssets,
 } from "@repo/db/schema"
 
 import { AuditService } from "@/common/audit/audit.service"
@@ -83,7 +86,7 @@ describe("ContentWorkflowService", () => {
 			databaseUrl: process.env.DATABASE_URL,
 		})
 		await db.execute(sql`
-			truncate table content_bundle_rebuild_request, related_link, content_version,
+			truncate table content_bundle_rebuild_request, version_asset, asset, asset_object, related_link, content_version,
 				content_item, audit_log, idempotency_keys, users restart identity cascade
 		`)
 		await db.execute(sql`
@@ -102,12 +105,16 @@ describe("ContentWorkflowService", () => {
 			databaseUrl: process.env.DATABASE_URL,
 		})
 		await db.execute(sql`
-			truncate table content_bundle_rebuild_request, related_link, content_version,
+			truncate table content_bundle_rebuild_request, version_asset, asset, asset_object, related_link, content_version,
 				content_item, audit_log, idempotency_keys restart identity cascade
 		`)
 		const audit = new AuditService()
 		contentService = new ContentService(audit)
 		service = new ContentWorkflowService(audit)
+	})
+
+	afterAll(async () => {
+		await db.$client.end()
 	})
 
 	it("appends complete immutable snapshots for submit, approve, publish, and reject", async () => {
@@ -300,6 +307,71 @@ describe("ContentWorkflowService", () => {
 			approvedBy: null,
 			publishedBy: null,
 		})
+	})
+
+	it("copies the exact attachment identity through submit, reject, approve, and publish", async () => {
+		const created = await contentService.create(
+			{ requestId: crypto.randomUUID(), content: advisory(), relatedLinks: [] },
+			EDITOR_ID
+		)
+		const assetId = crypto.randomUUID()
+		const sha256 = "b".repeat(64)
+		await db.insert(assetObjects).values({
+			sha256,
+			byteLength: 1,
+			mediaType: "image/png",
+			body: Buffer.from([0]),
+		})
+		await db.insert(assets).values({
+			id: assetId,
+			contentItemId: created.id,
+			sha256,
+			byteLength: 1,
+			mediaType: "image/png",
+			uploadedBy: EDITOR_ID,
+		})
+		await db.insert(versionAssets).values({
+			contentItemId: created.id,
+			contentVersionId: created.currentVersion.id,
+			assetId,
+			role: "obverse",
+		})
+
+		await service.transition("submit", transitionInput(created.id, 1), SUBMITTER_ID)
+		await service.transition(
+			"reject",
+			transitionInput(created.id, 2, "Needs another review"),
+			APPROVER_ID
+		)
+		await service.transition("submit", transitionInput(created.id, 3), SUBMITTER_ID)
+		await service.transition(
+			"approve",
+			transitionInput(created.id, 4, "Attachment verified"),
+			APPROVER_ID
+		)
+		await service.transition("publish", transitionInput(created.id, 5), PUBLISHER_ID)
+
+		const versions = await db
+			.select({ id: contentVersions.id, versionNo: contentVersions.versionNo })
+			.from(contentVersions)
+			.where(eq(contentVersions.itemId, created.id))
+			.orderBy(contentVersions.versionNo)
+		const references = await db
+			.select({
+				versionId: versionAssets.contentVersionId,
+				role: versionAssets.role,
+				assetId: versionAssets.assetId,
+			})
+			.from(versionAssets)
+			.where(eq(versionAssets.contentItemId, created.id))
+		expect(versions.map(version => version.versionNo)).toEqual([1, 2, 3, 4, 5, 6])
+		expect(
+			versions.map(version =>
+				references
+					.filter(reference => reference.versionId === version.id)
+					.map(reference => ({ role: reference.role, assetId: reference.assetId }))
+			)
+		).toEqual(Array.from({ length: 6 }, () => [{ role: "obverse", assetId }]))
 	})
 
 	it("rejects every illegal state/action pair without partial writes", async () => {

@@ -13,6 +13,7 @@ import {
 import { AuditService } from "@/common/audit/audit.service"
 import { db } from "@/common/database/database.client"
 import { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
+import { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 import { assertDisposablePostgres } from "@/test-support/destructive-database.guard"
 
 import { ContentService } from "./content.service"
@@ -60,6 +61,10 @@ describe("Content idempotency transaction boundary", () => {
 		)
 	})
 
+	afterAll(async () => {
+		await db.$client.end()
+	})
+
 	it("rolls back item, version, links, and audit when idempotency persistence fails", async () => {
 		const service = new ContentService(new AuditService())
 		const target = await service.create(
@@ -97,7 +102,8 @@ describe("Content idempotency transaction boundary", () => {
 			.mockReturnValue({ requestIdField: "requestId", requireActiveAccount: true })
 		const interceptor = new IdempotencyInterceptor(
 			{ isActive: async () => true } as never,
-			reflector
+			reflector,
+			new IdempotencyService()
 		)
 		const procedure = {
 			"~orpc": {

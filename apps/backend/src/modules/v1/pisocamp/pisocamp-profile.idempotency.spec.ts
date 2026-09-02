@@ -24,6 +24,7 @@ import type { db as DatabaseClient } from "@/common/database/database.client"
 import type { AccountAccessService } from "@/common/rbac/account-access.service"
 import { RequireIdempotency } from "@/shared/decorators/require-idempotency.decorator"
 import type { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
+import type { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 
 import type { PisoCampProfileService } from "./pisocamp-profile.service"
 
@@ -52,6 +53,7 @@ const functionName = "f3_fail_idempotency_insert_fn"
 let db: typeof DatabaseClient
 let transactionContext: typeof TransactionContext
 let Interceptor: typeof IdempotencyInterceptor
+let Idempotency: typeof IdempotencyService
 let AccountAccess: typeof AccountAccessService
 let ProfileService: typeof PisoCampProfileService
 let admin: pg.Client
@@ -130,6 +132,7 @@ beforeAll(async () => {
 	;({ AccountAccessService: AccountAccess } = await import("@/common/rbac/account-access.service"))
 	;({ IdempotencyInterceptor: Interceptor } =
 		await import("@/shared/interceptors/idempotency.interceptor"))
+	;({ IdempotencyService: Idempotency } = await import("@/shared/interceptors/idempotency.service"))
 	;({ PisoCampProfileService: ProfileService } = await import("./pisocamp-profile.service"))
 	const now = new Date()
 	await db.insert(users).values({
@@ -188,7 +191,7 @@ describe("F3 profile shared idempotency transaction", () => {
 		)
 		const service = new ProfileService(db, transactionContext)
 		await expect(
-			execute(new Interceptor(new AccountAccess(), new Reflector()), service)
+			execute(new Interceptor(new AccountAccess(), new Reflector(), new Idempotency()), service)
 		).rejects.toThrow()
 		expect(await db.select().from(pisoCampProfiles)).toHaveLength(0)
 		expect(await db.select().from(pisoCampDeviceAccountLinks)).toHaveLength(0)
@@ -204,7 +207,7 @@ describe("F3 profile shared idempotency transaction", () => {
 	it("retries once, persists once, and blocks deactivated replay", async () => {
 		await removeTrigger()
 		const service = new ProfileService(db, transactionContext),
-			interceptor = new Interceptor(new AccountAccess(), new Reflector())
+			interceptor = new Interceptor(new AccountAccess(), new Reflector(), new Idempotency())
 		const first = await execute(interceptor, service),
 			replay = await execute(interceptor, service)
 		expect(replay.result).toEqual(first.result)

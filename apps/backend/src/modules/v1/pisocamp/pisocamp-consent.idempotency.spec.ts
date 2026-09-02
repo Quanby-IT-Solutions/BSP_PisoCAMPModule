@@ -20,6 +20,7 @@ import type { db as DatabaseClient } from "@/common/database/database.client"
 import type { AccountAccessService } from "@/common/rbac/account-access.service"
 import { RequireIdempotency } from "@/shared/decorators/require-idempotency.decorator"
 import type { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
+import type { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 
 import type { PisoCampConsentService } from "./pisocamp-consent.service"
 
@@ -55,6 +56,7 @@ let db: typeof DatabaseClient
 let transactionContext: typeof TransactionContext
 let AccountAccessServiceConstructor: typeof AccountAccessService
 let InterceptorConstructor: typeof IdempotencyInterceptor
+let IdempotencyServiceConstructor: typeof IdempotencyService
 let ServiceConstructor: typeof PisoCampConsentService
 let admin: pg.Client
 
@@ -140,7 +142,11 @@ async function removeFailureTrigger() {
 }
 
 function createInterceptor() {
-	return new InterceptorConstructor(new AccountAccessServiceConstructor(), new Reflector())
+	return new InterceptorConstructor(
+		new AccountAccessServiceConstructor(),
+		new Reflector(),
+		new IdempotencyServiceConstructor()
+	)
 }
 
 beforeAll(async () => {
@@ -170,6 +176,8 @@ beforeAll(async () => {
 		await import("@/common/rbac/account-access.service"))
 	;({ IdempotencyInterceptor: InterceptorConstructor } =
 		await import("@/shared/interceptors/idempotency.interceptor"))
+	;({ IdempotencyService: IdempotencyServiceConstructor } =
+		await import("@/shared/interceptors/idempotency.service"))
 	;({ PisoCampConsentService: ServiceConstructor } = await import("./pisocamp-consent.service"))
 	await db.insert(privacyNotices).values(notice)
 	await db.insert(users).values({

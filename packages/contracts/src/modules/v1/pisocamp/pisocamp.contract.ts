@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract"
 
 import { pisoCampAnalyticsContract } from "./analytics.contract.js"
+import { pisoCampAssetContract } from "./asset.contract.js"
 import { pisoCampBundleContract } from "./bundle.contract.js"
 import { pisoCampContentContract } from "./content.contract.js"
 import {
@@ -21,6 +22,7 @@ export const pisoCampContract = {
 	analytics: pisoCampAnalyticsContract.analytics,
 	bundle: pisoCampBundleContract,
 	admin: {
+		assets: pisoCampAssetContract,
 		content: pisoCampContentContract,
 		config: {
 			get: oc

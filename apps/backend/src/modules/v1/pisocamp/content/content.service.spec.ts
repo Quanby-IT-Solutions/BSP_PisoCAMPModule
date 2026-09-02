@@ -1,6 +1,14 @@
 import { and, eq, sql } from "drizzle-orm"
 
-import { auditLog, contentItems, contentVersions, relatedLinks } from "@repo/db/schema"
+import {
+	assetObjects,
+	assets,
+	auditLog,
+	contentItems,
+	contentVersions,
+	relatedLinks,
+	versionAssets,
+} from "@repo/db/schema"
 
 import { AuditService } from "@/common/audit/audit.service"
 import { db } from "@/common/database/database.client"
@@ -46,7 +54,7 @@ describe("ContentService", () => {
 			databaseUrl: process.env.DATABASE_URL,
 		})
 		await db.execute(
-			sql`truncate table related_link, content_version, content_item, audit_log, idempotency_keys, users restart identity cascade`
+			sql`truncate table version_asset, asset, asset_object, related_link, content_version, content_item, audit_log, idempotency_keys, users restart identity cascade`
 		)
 		await db.execute(sql`
 			insert into users (id, name, email, email_verified, created_at, updated_at)
@@ -61,9 +69,13 @@ describe("ContentService", () => {
 			databaseUrl: process.env.DATABASE_URL,
 		})
 		await db.execute(
-			sql`truncate table related_link, content_version, content_item, audit_log, idempotency_keys restart identity cascade`
+			sql`truncate table version_asset, asset, asset_object, related_link, content_version, content_item, audit_log, idempotency_keys restart identity cascade`
 		)
 		service = new ContentService(new AuditService())
+	})
+
+	afterAll(async () => {
+		await db.$client.end()
 	})
 
 	it("creates the complete draft aggregate and bounded audit atomically", async () => {
@@ -173,6 +185,66 @@ describe("ContentService", () => {
 			changedFields: ["relatedLinks", "summary", "title"],
 		})
 		expect(JSON.stringify(editAudit)).not.toContain("Updated summary")
+	})
+
+	it("starts new content without attachments and copies exact asset identities through edits", async () => {
+		const created = await service.create(
+			{ requestId: REQUEST_ID, content: advisory(), relatedLinks: [] },
+			ACTOR_ID
+		)
+		expect(
+			await db
+				.select()
+				.from(versionAssets)
+				.where(eq(versionAssets.contentVersionId, created.currentVersion.id))
+		).toHaveLength(0)
+		const assetId = crypto.randomUUID()
+		const sha256 = "a".repeat(64)
+		await db.insert(assetObjects).values({
+			sha256,
+			byteLength: 1,
+			mediaType: "image/png",
+			body: Buffer.from([0]),
+		})
+		await db.insert(assets).values({
+			id: assetId,
+			contentItemId: created.id,
+			sha256,
+			byteLength: 1,
+			mediaType: "image/png",
+			uploadedBy: ACTOR_ID,
+		})
+		await db.insert(versionAssets).values({
+			contentItemId: created.id,
+			contentVersionId: created.currentVersion.id,
+			assetId,
+			role: "obverse",
+		})
+
+		const updated = await service.update(
+			{
+				itemId: created.id,
+				requestId: crypto.randomUUID(),
+				expectedVersionNo: 1,
+				content: advisory("Edited with attachment"),
+				relatedLinks: [],
+			},
+			OTHER_ID
+		)
+		const references = await db
+			.select({
+				versionId: versionAssets.contentVersionId,
+				role: versionAssets.role,
+				assetId: versionAssets.assetId,
+			})
+			.from(versionAssets)
+			.where(eq(versionAssets.contentItemId, created.id))
+		expect(references).toEqual(
+			expect.arrayContaining([
+				{ versionId: created.currentVersion.id, role: "obverse", assetId },
+				{ versionId: updated.currentVersion.id, role: "obverse", assetId },
+			])
+		)
 	})
 
 	it("rejects stale and non-draft edits without version or audit rows", async () => {

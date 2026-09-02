@@ -2,6 +2,7 @@ import { Test, type TestingModule } from "@nestjs/testing"
 
 import { AccountAccessService } from "@/common/rbac/account-access.service"
 import type { V1Outputs } from "@/config/contract-types"
+import { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 
 import { TodosController } from "./todos.controller"
 import { TodosService } from "./todos.service"
@@ -125,6 +126,7 @@ describe("TodosController (v1)", () => {
 			controllers: [TodosController],
 			providers: [
 				TodosService,
+				IdempotencyService,
 				{
 					provide: AccountAccessService,
 					useValue: { isActive: jest.fn().mockResolvedValue(true) },

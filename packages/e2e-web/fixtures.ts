@@ -26,7 +26,13 @@ const AUTH_API = process.env.E2E_AUTH_API_URL ?? "http://localhost:3000/api/v1/a
 const WEB_ORIGIN = process.env.BASE_URL ?? "http://localhost:3001"
 
 /** The identities the suite knows how to become. */
-export type TestRole = "admin" | "userA" | "userB"
+export type TestRole =
+	| "admin"
+	| "userA"
+	| "userB"
+	| "contentAdmin"
+	| "contentEditor"
+	| "contentApprover"
 
 export interface TestAccount {
 	email: string
@@ -48,6 +54,21 @@ export const ACCOUNTS: Record<TestRole, TestAccount> = {
 		email: process.env.E2E_ADMIN_EMAIL ?? "admin@turbo-template.local",
 		password: process.env.E2E_ADMIN_PASSWORD ?? "Password123",
 		name: "Admin User",
+	},
+	contentAdmin: {
+		email: process.env.E2E_ADMIN_EMAIL ?? "admin@turbo-template.local",
+		password: process.env.E2E_ADMIN_PASSWORD ?? "Password123",
+		name: "Admin User",
+	},
+	contentEditor: {
+		email: process.env.E2E_CONTENT_EDITOR_EMAIL ?? "alex@turbo-template.local",
+		password: process.env.E2E_CONTENT_EDITOR_PASSWORD ?? "Password123",
+		name: "Alex Johnson",
+	},
+	contentApprover: {
+		email: process.env.E2E_CONTENT_APPROVER_EMAIL ?? "sam@turbo-template.local",
+		password: process.env.E2E_CONTENT_APPROVER_PASSWORD ?? "Password123",
+		name: "Sam Rivera",
 	},
 	// The long-standing e2e account; registered on demand if absent.
 	userA: {
@@ -95,7 +116,12 @@ async function authenticate(page: Page, account: TestAccount): Promise<SignInRes
 		// Unknown account: create it, then sign in. Never for the admin, which
 		// the seeder owns — silently registering it would produce a second,
 		// unprivileged "admin" and make later permission assertions nonsense.
-		if (!res.ok() && res.status() !== 429 && account.email !== ACCOUNTS.admin.email) {
+		const seededEmails = new Set([
+			ACCOUNTS.admin.email,
+			ACCOUNTS.contentEditor.email,
+			ACCOUNTS.contentApprover.email,
+		])
+		if (!res.ok() && res.status() !== 429 && !seededEmails.has(account.email)) {
 			await api.post("sign-up/email", {
 				data: { email: account.email, password: account.password, name: account.name },
 			})
