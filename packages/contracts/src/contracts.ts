@@ -290,12 +290,17 @@ export {
 	PisoCampTactileMapSchema,
 	PisoCampTactilePatternIdSchema,
 	PisoCampTactileRegionSchema,
+	PisoCampTiltEffectIdSchema,
+	PisoCampTiltEffectSchema,
 	TACTILE_PATTERN_IDS,
+	TILT_EFFECT_IDS,
 } from "./modules/v1/pisocamp/tactile.schema.js"
 export type {
 	PisoCampTactileMap,
 	PisoCampTactilePatternId,
 	PisoCampTactileRegion,
+	PisoCampTiltEffect,
+	PisoCampTiltEffectId,
 } from "./modules/v1/pisocamp/tactile.schema.js"
 export type {
 	ApprovePisoCampContentInput,

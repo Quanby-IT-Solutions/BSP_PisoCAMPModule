@@ -63,7 +63,8 @@ enum ModuleEntryPoint {
 /// wrong surface.
 enum AnalyticsFeature {
   coin3d('3d_coin', 'coin_3d_viewer'),
-  haptic('haptic', 'tactile_viewer');
+  haptic('haptic', 'tactile_viewer'),
+  tilt('tilt', 'tilt_viewer');
 
   const AnalyticsFeature(this.wireValue, this.screen);
   final String wireValue;

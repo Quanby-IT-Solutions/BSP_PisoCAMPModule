@@ -180,6 +180,25 @@ abstract interface class TactileAnalytics {
   Future<void> recordUse(String logicalId);
 }
 
+final tiltAnalyticsProvider = Provider<TiltAnalytics>(
+  (ref) => _SdkTiltAnalytics(ref.watch(analyticsSdkProvider)),
+);
+
+abstract interface class TiltAnalytics {
+  Future<void> recordUse(String logicalId);
+}
+
+final class _SdkTiltAnalytics implements TiltAnalytics {
+  const _SdkTiltAnalytics(this._sdk);
+
+  final AnalyticsSdk _sdk;
+
+  @override
+  Future<void> recordUse(String logicalId) => _sdk.emit(
+    FeatureUseIntent(usedFeature: AnalyticsFeature.tilt, logicalId: logicalId),
+  );
+}
+
 final class _SdkTactileAnalytics implements TactileAnalytics {
   const _SdkTactileAnalytics(this._sdk);
 

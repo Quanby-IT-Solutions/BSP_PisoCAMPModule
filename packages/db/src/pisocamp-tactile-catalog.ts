@@ -1,4 +1,9 @@
-import { PisoCampTactileMapSchema, type PisoCampTactileMap } from "@repo/contracts"
+import {
+	PisoCampTactileMapSchema,
+	PisoCampTiltEffectSchema,
+	type PisoCampTactileMap,
+	type PisoCampTiltEffect,
+} from "@repo/contracts"
 
 /**
  * CE-4 approved tactile simulation map.
@@ -50,4 +55,26 @@ const NEUTRAL_BANKNOTE_TACTILE_MAP: PisoCampTactileMap = PisoCampTactileMapSchem
  */
 export function tactileMapFor(mediaKind: "banknote" | "coin"): PisoCampTactileMap | null {
 	return mediaKind === "banknote" ? NEUTRAL_BANKNOTE_TACTILE_MAP : null
+}
+
+/**
+ * CE-5 approved dynamic-feature effect.
+ *
+ * Anchored to the same neutral, fictional illustration as the tactile map, and
+ * shared by every mandatory banknote for the same reason. The viewer labels it
+ * an educational simulation.
+ */
+const NEUTRAL_BANKNOTE_TILT_EFFECT: PisoCampTiltEffect = PisoCampTiltEffectSchema.parse({
+	id: "dynamic-band",
+	label: "Colour-shifting band",
+	effect: "moving-band",
+	x: 380,
+	y: 560,
+	width: 400,
+	height: 200,
+})
+
+/** The tilt effect for a denomination, or `null` when it has none. */
+export function tiltEffectFor(mediaKind: "banknote" | "coin"): PisoCampTiltEffect | null {
+	return mediaKind === "banknote" ? NEUTRAL_BANKNOTE_TILT_EFFECT : null
 }

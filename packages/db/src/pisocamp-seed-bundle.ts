@@ -9,17 +9,18 @@ import {
 	PisoCampBundleManifestSchema,
 	type PisoCampBundleManifest,
 	type PisoCampTactileMap,
+	type PisoCampTiltEffect,
 } from "@repo/contracts"
 
 import { buildNeutralCoinModel } from "./pisocamp-coin-model.js"
-import { tactileMapFor } from "./pisocamp-tactile-catalog.js"
+import { tactileMapFor, tiltEffectFor } from "./pisocamp-tactile-catalog.js"
 import {
 	PISOCAMP_CURRENCY_CATALOG,
 	PISOCAMP_CURRENCY_CATALOG_VERSION,
 } from "./pisocamp-currency-catalog.js"
 
 const GENERATED_AT = "2026-08-27T00:00:00Z"
-const SEED_KEY_ID = "ce4-seed-v3"
+const SEED_KEY_ID = "ce5-seed-v4"
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
 const CHECKED_IN_SEED_ROOT = join(
 	REPOSITORY_ROOT,
@@ -42,10 +43,10 @@ const MAX_TOTAL_CORE_BYTES = 52_428_800
 // Raw 32-byte Ed25519 public key and signature only. Signing authority is not
 // retained: the seed is re-signed with a fresh throwaway key whenever its
 // contents legitimately change, and both constants move with it in one diff.
-// ce4-seed-v3 supersedes ce2-seed-v2, which superseded ce1-seed-v1.
-export const FROZEN_SEED_PUBLIC_KEY_BASE64URL = "UJNLxePUUX7ePS9WWKjB3M9V5JXeDAGCHR4zKDsqdQE"
+// ce5-seed-v4 is the current key; ce1, ce2 and ce4 signed earlier seeds.
+export const FROZEN_SEED_PUBLIC_KEY_BASE64URL = "CQe_FzbprCazHgNKvcEUihlyQSJt8apYO3aqc1vnQE8"
 export const FROZEN_SEED_SIGNATURE_BASE64URL =
-	"ZWDP7rFw4WlNFqTHjTsSoQLh1Ez2bmmKtDaxcEwFWv7j7BNYuni8X1UfK1JxgDMyrBJe2jxNxA0cInCyDPqmDA"
+	"MmClg5Xfkwo5YZdyDVlQfV1DLcswkMoJmn-PNB_7iK-Ovt1x1d4JyNXgSHJ1SMxzki5j7xLyVC_Fn2XmvRmtAQ"
 
 export interface SeedSourceImages {
 	banknote: Buffer
@@ -72,6 +73,7 @@ export interface SeedCurrencyDocument {
 	modelSha256?: string
 	modelAlt?: string
 	tactileRegions?: PisoCampTactileMap
+	tiltEffect?: PisoCampTiltEffect
 	relatedLinks: { label: string; url: string }[]
 }
 
@@ -192,6 +194,7 @@ export function buildUnsignedSeedBundle(images: SeedSourceImages): UnsignedSeedB
 
 	PISOCAMP_CURRENCY_CATALOG.forEach((currencySeries, seriesOrder) => {
 		const tactileMap = tactileMapFor(currencySeries.mediaKind)
+		const tiltEffect = tiltEffectFor(currencySeries.mediaKind)
 		currencySeries.denominations.forEach(currencyDenomination => {
 			const logicalId = `catalog.${currencySeries.code}.${currencyDenomination.code}`
 			const chosenImage = currencySeries.mediaKind === "banknote" ? banknote : coin
@@ -225,6 +228,7 @@ export function buildUnsignedSeedBundle(images: SeedSourceImages): UnsignedSeedB
 				// Mirror image: only banknotes carry a tactile map, because CE-4
 				// simulates what a note feels like.
 				...(tactileMap === null ? {} : { tactileRegions: tactileMap }),
+				...(tiltEffect === null ? {} : { tiltEffect }),
 				relatedLinks: [
 					{
 						label: "Bangko Sentral ng Pilipinas source",

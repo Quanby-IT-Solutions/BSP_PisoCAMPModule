@@ -181,6 +181,13 @@ class _DetailBody extends StatelessWidget {
                   catalog: detail.catalog,
                 ),
               ],
+              if (document.hasTiltEffect) ...[
+                const SizedBox(height: 16),
+                _TiltDynamicFeature(
+                  document: document,
+                  catalog: detail.catalog,
+                ),
+              ],
               const SizedBox(height: 16),
               Text(document.body),
               if (features.isNotEmpty) ...[
@@ -281,6 +288,33 @@ class _FeelTactileFeatures extends StatelessWidget {
         ),
         icon: const Icon(Icons.vibration),
         label: const Text('Feel The Tactile Features'),
+      ),
+    );
+  }
+}
+
+/// CE-5 entry point. Offered only when the frozen catalog carries an approved
+/// tilt effect for this denomination.
+class _TiltDynamicFeature extends StatelessWidget {
+  const _TiltDynamicFeature({required this.document, required this.catalog});
+
+  final CurrencyContentDocument document;
+  final CurrencyCatalogView catalog;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: OutlinedButton.icon(
+        onPressed: () => context.push(
+          AppRoutes.currencyTilt(
+            kind: CurrencyRouteKind.banknotes.pathSegment,
+            logicalId: document.logicalId,
+          ),
+          extra: catalog,
+        ),
+        icon: const Icon(Icons.screen_rotation),
+        label: const Text('Tilt To See The Dynamic Feature'),
       ),
     );
   }

@@ -81,6 +81,31 @@ final class CurrencyTactileRegion {
   }
 }
 
+/// The one region of a banknote illustration that responds to tilt, in
+/// permille of the image's width and height.
+final class CurrencyTiltEffect {
+  const CurrencyTiltEffect({
+    required this.id,
+    required this.label,
+    required this.effect,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final String id;
+  final String label;
+  final String effect;
+  final int x;
+  final int y;
+  final int width;
+  final int height;
+
+  Rect get fraction =>
+      Rect.fromLTWH(x / 1000, y / 1000, width / 1000, height / 1000);
+}
+
 final class CurrencyContentDocument {
   CurrencyContentDocument._({
     required this.logicalId,
@@ -100,6 +125,7 @@ final class CurrencyContentDocument {
     required this.modelAlt,
     required this.hotspot,
     required List<CurrencyTactileRegion> tactileRegions,
+    required this.tiltEffect,
     required List<CurrencyRelatedLink> relatedLinks,
     required this.catalogVersion,
     required this.sourceUrl,
@@ -137,6 +163,9 @@ final class CurrencyContentDocument {
   /// CE-4 approved tactile simulation map. Banknotes only, and empty until a
   /// map is approved for the denomination.
   final List<CurrencyTactileRegion> tactileRegions;
+
+  /// CE-5 approved dynamic-feature effect. Banknotes only.
+  final CurrencyTiltEffect? tiltEffect;
   final List<CurrencyRelatedLink> relatedLinks;
   final String catalogVersion;
   final Uri sourceUrl;
@@ -146,6 +175,7 @@ final class CurrencyContentDocument {
 
   bool get hasModel => modelSha256 != null && modelAlt != null;
   bool get hasTactileMap => tactileRegions.isNotEmpty;
+  bool get hasTiltEffect => tiltEffect != null;
 
   static CurrencyContentDocument parseSeed(Uint8List bytes) {
     final json = decodeStrictJsonObject(
@@ -178,6 +208,7 @@ final class CurrencyContentDocument {
         'modelSha256',
         'modelAlt',
         'tactileRegions',
+        'tiltEffect',
       },
       context: 'currency seed document',
     );
@@ -216,6 +247,7 @@ final class CurrencyContentDocument {
     }
 
     final tactileRegions = _seedTactileRegions(json['tactileRegions'], kind);
+    final tiltEffect = _seedTiltEffect(json['tiltEffect'], kind);
 
     final sourceUrl = _bspUrl(json, 'sourceUrl');
     final relatedLinks = _seedRelatedLinks(json['relatedLinks']);
@@ -243,6 +275,7 @@ final class CurrencyContentDocument {
       modelAlt: modelAlt,
       hotspot: null,
       tactileRegions: tactileRegions,
+      tiltEffect: tiltEffect,
       relatedLinks: relatedLinks,
       catalogVersion: _plainText(json, 'catalogVersion', maximum: 64),
       sourceUrl: sourceUrl,
@@ -348,6 +381,9 @@ final class CurrencyContentDocument {
       tactileRegions: kind == CurrencyContentKind.securityFeature
           ? const []
           : catalogEntry.tactileRegions,
+      tiltEffect: kind == CurrencyContentKind.securityFeature
+          ? null
+          : catalogEntry.tiltEffect,
       relatedLinks: relatedLinks,
       catalogVersion: catalogEntry.catalogVersion,
       sourceUrl: catalogEntry.sourceUrl,
@@ -755,6 +791,49 @@ List<CurrencyTactileRegion> _seedTactileRegions(
     );
   }
   return List.unmodifiable(regions);
+}
+
+/// The approved tilt effect for a denomination. Banknotes only, for the same
+/// reason as the tactile map: CE-5 simulates a note's dynamic feature.
+CurrencyTiltEffect? _seedTiltEffect(Object? value, CurrencyContentKind kind) {
+  if (value == null) return null;
+  if (kind != CurrencyContentKind.banknote) {
+    throw const BundleValidationException(
+      'Only a banknote may carry a tilt effect.',
+    );
+  }
+  if (value is! Map<String, Object?>) {
+    throw const BundleValidationException('Currency tilt effect is invalid.');
+  }
+  requireExactJsonKeys(value, const {
+    'id',
+    'label',
+    'effect',
+    'x',
+    'y',
+    'width',
+    'height',
+  }, context: 'currency tilt effect');
+
+  final x = _permille(value, 'x', minimum: 0);
+  final y = _permille(value, 'y', minimum: 0);
+  final width = _permille(value, 'width', minimum: 1);
+  final height = _permille(value, 'height', minimum: 1);
+  if (x + width > 1000 || y + height > 1000) {
+    throw const BundleValidationException(
+      'Currency tilt effect extends past the edge of the image.',
+    );
+  }
+
+  return CurrencyTiltEffect(
+    id: _code(value, 'id'),
+    label: _plainText(value, 'label', maximum: 100),
+    effect: _code(value, 'effect'),
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+  );
 }
 
 int _permille(Map<String, Object?> json, String key, {required int minimum}) {

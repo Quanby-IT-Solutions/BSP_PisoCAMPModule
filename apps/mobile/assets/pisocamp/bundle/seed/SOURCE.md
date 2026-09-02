@@ -94,3 +94,18 @@ than silently do nothing.
 
 `ce4-seed-v3` supersedes `ce2-seed-v2`, re-signed with a fresh throwaway key
 when the tactile map joined the seed.
+
+# CE-5 tilt effect provenance
+
+Source: `packages/db/src/pisocamp-tactile-catalog.ts`
+
+One named rectangle, in permille of the packaged neutral banknote illustration,
+naming an approved effect from the client's effect catalog in
+`apps/mobile/lib/features/pisocamp/data/tilt_effects.dart`.
+
+Like the tactile map, the region is a position on that fictional illustration
+rather than on any real note, and every mandatory banknote shares it. The viewer
+labels the result an educational simulation before it can be used.
+
+`ce5-seed-v4` supersedes `ce4-seed-v3`, re-signed with a fresh throwaway key
+when the tilt effect joined the seed.

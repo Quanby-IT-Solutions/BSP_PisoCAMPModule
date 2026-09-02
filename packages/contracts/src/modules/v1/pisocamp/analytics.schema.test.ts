@@ -91,6 +91,7 @@ describe("AN-1 analytics event catalog", () => {
 		expect(ANALYTICS_FEATURE_USE_SCREENS).toEqual({
 			"3d_coin": "coin_3d_viewer",
 			haptic: "tactile_viewer",
+			tilt: "tilt_viewer",
 		})
 
 		expect(

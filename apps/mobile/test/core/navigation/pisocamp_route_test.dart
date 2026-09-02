@@ -35,6 +35,8 @@ void main() {
       '/pisocamp/currency/coins/catalog.ngc-coins.php-1/3d',
       // CE-4's tactile simulation likewise.
       '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tactile',
+      // CE-5's tilt simulation likewise.
+      '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tilt',
     ];
     const protected = <String>[
       '/pisocamp/currency',
@@ -46,6 +48,7 @@ void main() {
       '/pisocamp/currency/coins/catalog..bad',
       '/pisocamp/currency/coins/catalog.ngc-coins.php-1/4d',
       '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tactile/more',
+      '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tilting',
       '/pisocamp/currency/banknotes/UPPER/tactile',
       '/pisocamp/currency/coins/catalog.ngc-coins.php-1/3d/more',
       '/pisocamp/currency/coins/UPPER/3d',
@@ -114,6 +117,17 @@ void main() {
     );
     expect(
       () => AppRoutes.currencyTactile(kind: 'notes', logicalId: 'catalog.valid'),
+      throwsArgumentError,
+    );
+    expect(
+      AppRoutes.currencyTilt(
+        kind: 'banknotes',
+        logicalId: 'catalog.ngc-banknotes.php-20',
+      ),
+      '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tilt',
+    );
+    expect(
+      () => AppRoutes.currencyTilt(kind: 'notes', logicalId: 'catalog.valid'),
       throwsArgumentError,
     );
   });

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
-import { TACTILE_PATTERN_IDS } from "@repo/contracts"
+import { TACTILE_PATTERN_IDS, TILT_EFFECT_IDS } from "@repo/contracts"
 
 import {
 	buildUnsignedSeedBundle,
@@ -134,6 +134,23 @@ describe("CE-1 packaged currency seed", () => {
 		}
 		for (const coin of coins) {
 			expect(coin.tactileRegions, coin.logicalId).toBeUndefined()
+		}
+	})
+
+	it("gives every mandatory banknote a tilt effect and no coin one", async () => {
+		const bundle = buildUnsignedSeedBundle(await readSeedSourceImages())
+
+		for (const banknote of bundle.documents.filter(
+			document => document.contentType === "banknote"
+		)) {
+			const effect = banknote.tiltEffect
+			expect(effect, banknote.logicalId).toBeDefined()
+			expect(TILT_EFFECT_IDS, banknote.logicalId).toContain(effect!.effect)
+			expect(effect!.x + effect!.width, effect!.id).toBeLessThanOrEqual(1000)
+			expect(effect!.y + effect!.height, effect!.id).toBeLessThanOrEqual(1000)
+		}
+		for (const coin of bundle.documents.filter(document => document.contentType === "coin")) {
+			expect(coin.tiltEffect, coin.logicalId).toBeUndefined()
 		}
 	})
 
