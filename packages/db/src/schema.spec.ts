@@ -280,6 +280,7 @@ describe("CM-1 content database schema", () => {
 			"itemId",
 			"versionNo",
 			"parentVersionId",
+			"restoredFromVersionId",
 			"status",
 			"contentType",
 			"title",

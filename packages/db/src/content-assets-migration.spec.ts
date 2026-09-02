@@ -148,7 +148,10 @@ describe.sequential("single additive CM-2 content-assets migration", () => {
 				// A generator parity probe without SQL is not a migration.
 			}
 		}
-		expect(names).toEqual([migrationName])
+		// CM-2 contributed exactly one migration, and it is the first one after
+		// AN-1. Later tickets legitimately append their own after it.
+		expect(names.filter(name => name.endsWith("_cm2_content_assets"))).toEqual([migrationName])
+		expect(names[0]).toBe(migrationName)
 	})
 
 	it("migrates a fresh database twice and seeds two governed item histories", async () => {

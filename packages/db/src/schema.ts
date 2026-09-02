@@ -562,6 +562,15 @@ export const contentVersions = createTable(
 			.references(() => contentItems.id, { onDelete: "restrict" }),
 		versionNo: t.integer("version_no").notNull(),
 		parentVersionId: t.uuid("parent_version_id"),
+		/**
+		 * CM-4: the prior version this one was restored from.
+		 *
+		 * A restore is an approval like any other, but history has to be able to
+		 * say why an approved version appeared with no draft behind it. Left
+		 * without a foreign key for the same reason as `parentVersionId`: a
+		 * self-referential composite key makes the table's own type circular.
+		 */
+		restoredFromVersionId: t.uuid("restored_from_version_id"),
 		status: t.text("status").notNull().$type<PisoCampContentStatus>(),
 		contentType: t.text("content_type").notNull().$type<PisoCampContentType>(),
 		title: t.text("title").notNull(),
@@ -650,6 +659,10 @@ export const contentVersions = createTable(
 		check(
 			"content_version_transition_comments_check",
 			sql`${t.transitionComments} is null or (${t.transitionComments} = btrim(${t.transitionComments}) and char_length(${t.transitionComments}) between 1 and 2000 and ${t.transitionComments} !~ '<!--|</?[A-Za-z]|<!|<\\?')`
+		),
+		check(
+			"content_version_restored_from_check",
+			sql`${t.restoredFromVersionId} is null or (${t.restoredFromVersionId} <> ${t.id} and ${t.status} = 'approved' and ${t.transitionAction} = 'approve')`
 		),
 		check(
 			"content_version_transition_lifecycle_check",

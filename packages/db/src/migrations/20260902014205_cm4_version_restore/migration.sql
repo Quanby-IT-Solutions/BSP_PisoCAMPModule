@@ -1,0 +1,2 @@
+ALTER TABLE "content_version" ADD COLUMN "restored_from_version_id" uuid;--> statement-breakpoint
+ALTER TABLE "content_version" ADD CONSTRAINT "content_version_restored_from_check" CHECK ("restored_from_version_id" is null or ("restored_from_version_id" <> "id" and "status" = 'approved' and "transition_action" = 'approve'));

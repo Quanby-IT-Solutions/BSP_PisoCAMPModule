@@ -20,6 +20,10 @@
 		"./pisocamp-preview": {
 			"types": "./dist/modules/v1/pisocamp/preview.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/preview.schema.js"
+		},
+		"./pisocamp-version-history": {
+			"types": "./dist/modules/v1/pisocamp/version-history.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/version-history.schema.js"
 		}
 	},
 	"scripts": {

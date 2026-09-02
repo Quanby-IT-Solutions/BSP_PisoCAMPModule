@@ -19,6 +19,7 @@ export default async function PisoCampContentReviewDetailPage({
 	const canApprove = canAccess(profile, { requiredPermission: "content.items.approve" })
 	const canPublish = canAccess(profile, { requiredPermission: "content.items.publish" })
 	const canPreview = canAccess(profile, { requiredPermission: "content.items.preview" })
+	const canRestore = canAccess(profile, { requiredPermission: "content.items.restore" })
 
 	if (access.status !== "loaded" || !canApprove) {
 		redirect("/dashboard")
@@ -31,6 +32,7 @@ export default async function PisoCampContentReviewDetailPage({
 			canApprove={canApprove}
 			canPreview={canPreview}
 			canPublish={canPublish}
+			canRestore={canRestore}
 		/>
 	)
 }

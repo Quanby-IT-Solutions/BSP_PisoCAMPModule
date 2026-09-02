@@ -339,4 +339,18 @@ describe("ContentReviewView", () => {
 
 		expect(screen.queryByRole("link", { name: /Preview Version/ })).not.toBeInTheDocument()
 	})
+
+	it("links to version history only for a restore-permission holder", () => {
+		const { rerender } = render(
+			<ContentReviewView itemId={detail.id} canApprove canRestore canPublish={false} />
+		)
+
+		expect(screen.getByRole("link", { name: "View Version History" })).toHaveAttribute(
+			"href",
+			`/pisocamp/content/${detail.id}/versions`
+		)
+
+		rerender(<ContentReviewView itemId={detail.id} canApprove canPublish={false} />)
+		expect(screen.queryByRole("link", { name: "View Version History" })).not.toBeInTheDocument()
+	})
 })

@@ -62,13 +62,20 @@ export default defineConfig({
 							storageState: AUTH_FILE,
 						},
 						testMatch: /authenticated\.spec\.ts/,
-						testIgnore: /(cm2-assets|cm5-preview(-shots)?)\.authenticated\.spec\.ts/,
+						testIgnore: /(cm2-assets|cm4-versions(-shots)?|cm5-preview(-shots)?)\.authenticated\.spec\.ts/,
 						dependencies: ["setup"],
 					},
 					{
 						name: "cm2-assets-authenticated",
 						use: { ...devices["Desktop Chrome"] },
 						testMatch: /cm2-assets\.authenticated\.spec\.ts/,
+					},
+					{
+						// CM-4 signs in for itself against the same dedicated acceptance
+						// database as CM-5.
+						name: "cm4-versions-authenticated",
+						use: { ...devices["Desktop Chrome"] },
+						testMatch: /cm4-versions(-shots)?\.authenticated\.spec\.ts/,
 					},
 					{
 						// CM-5 signs in for itself against a dedicated acceptance

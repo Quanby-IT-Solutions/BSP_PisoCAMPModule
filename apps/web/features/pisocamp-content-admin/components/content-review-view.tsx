@@ -76,11 +76,13 @@ export function ContentReviewView({
 	canApprove,
 	canPreview = false,
 	canPublish,
+	canRestore = false,
 	itemId,
 }: {
 	canApprove: boolean
 	canPreview?: boolean
 	canPublish: boolean
+	canRestore?: boolean
 	itemId: string
 }) {
 	const review = usePisoCampContentReviewDetailQuery({ itemId })
@@ -307,6 +309,16 @@ export function ContentReviewView({
 					<WorkflowMetadata detail={detail} />
 				</CardContent>
 			</Card>
+
+			{canRestore ? (
+				<Button
+					variant="outline"
+					className="min-h-11 touch-manipulation transition-colors"
+					render={<Link href={`/pisocamp/content/${detail.id}/versions`} />}
+				>
+					View Version History
+				</Button>
+			) : null}
 
 			{canPreview && detail.status !== "published" ? (
 				<Button

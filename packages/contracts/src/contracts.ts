@@ -199,6 +199,30 @@ export type {
 	UploadPisoCampAssetOutput,
 } from "./modules/v1/pisocamp/asset.schema.js"
 
+// CM-4 version history and restore protocol
+export {
+	ListPisoCampContentVersionsInputSchema,
+	ListPisoCampContentVersionsOutputSchema,
+	PISO_CAMP_CONTENT_DIFF_FIELDS,
+	PISO_CAMP_RESTORABLE_STATUSES,
+	PISO_CAMP_RESTORE_SOURCE_ITEM_STATUSES,
+	PisoCampContentDifferenceSchema,
+	PisoCampContentDiffFieldSchema,
+	PisoCampContentVersionHistoryEntrySchema,
+	PisoCampRestorableStatusSchema,
+	PisoCampRestoreSourceItemStatusSchema,
+	RestorePisoCampContentVersionInputSchema,
+} from "./modules/v1/pisocamp/version-history.schema.js"
+export type {
+	ListPisoCampContentVersionsInput,
+	ListPisoCampContentVersionsOutput,
+	PisoCampContentDiffField,
+	PisoCampContentDifference,
+	PisoCampContentVersionHistoryEntry,
+	PisoCampRestorableStatus,
+	RestorePisoCampContentVersionInput,
+} from "./modules/v1/pisocamp/version-history.schema.js"
+
 // CM-5 pre-publication content preview protocol
 export {
 	pisoCampContentPreviewContract,

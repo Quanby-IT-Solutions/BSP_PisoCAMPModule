@@ -15,6 +15,11 @@ import {
 	SubmitPisoCampContentInputSchema,
 	UpdatePisoCampContentInputSchema,
 } from "./content.schema.js"
+import {
+	ListPisoCampContentVersionsInputSchema,
+	ListPisoCampContentVersionsOutputSchema,
+	RestorePisoCampContentVersionInputSchema,
+} from "./version-history.schema.js"
 
 const tags = ["Piso CAMP Content Administration"]
 
@@ -108,5 +113,23 @@ export const pisoCampContentContract = {
 			tags,
 		})
 		.input(PublishPisoCampContentInputSchema)
+		.output(PisoCampContentReviewDetailSchema),
+	versions: oc
+		.route({
+			method: "GET",
+			path: "/admin/pisocamp/content/{itemId}/versions",
+			summary: "List Piso CAMP content version history with field-level differences",
+			tags,
+		})
+		.input(ListPisoCampContentVersionsInputSchema)
+		.output(ListPisoCampContentVersionsOutputSchema),
+	restore: oc
+		.route({
+			method: "POST",
+			path: "/admin/pisocamp/content/{itemId}/versions/{versionNo}/restore",
+			summary: "Restore a prior approved Piso CAMP content version",
+			tags,
+		})
+		.input(RestorePisoCampContentVersionInputSchema)
 		.output(PisoCampContentReviewDetailSchema),
 }

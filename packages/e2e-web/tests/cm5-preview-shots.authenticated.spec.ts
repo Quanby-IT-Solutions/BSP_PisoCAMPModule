@@ -10,6 +10,10 @@ const SHOT_DIR = process.env.CM5_SHOT_DIR
 /**
  * Capture-only run for the acceptance record. Skipped unless CM5_SHOT_DIR is
  * set, so an ordinary suite run never writes into the repository.
+ *
+ * Run it on its own (`-g "captures the"`): it shares an acceptance database
+ * with the assertion specs, and Playwright would otherwise run both files in
+ * parallel workers against the same rows.
  */
 test.describe("CM-5 preview evidence capture", () => {
 	test.skip(!SHOT_DIR, "CM5_SHOT_DIR is not set")

@@ -127,6 +127,32 @@ export class ContentController {
 		)
 	}
 
+	/**
+	 * History is readable by the approver who may act on it.
+	 *
+	 * `content.items.restore` rather than `content.items.edit`: the diff shows
+	 * exactly what a restore would change, so the people who can see it are the
+	 * people who can do it.
+	 */
+	@RequirePermissions("content.items.restore")
+	@Implement(v1.pisocamp.admin.content.versions)
+	async listContentVersions() {
+		return implement(v1.pisocamp.admin.content.versions).handler(({ input }) =>
+			this.safe("versions", () => this.contentWorkflowService.listVersionHistory(input))
+		)
+	}
+
+	@StrictThrottle()
+	@RequirePermissions("content.items.restore")
+	@RequireIdempotency({ requestIdField: "requestId", requireActiveAccount: true })
+	@UseInterceptors(IdempotencyInterceptor)
+	@Implement(v1.pisocamp.admin.content.restore)
+	async restoreContentVersion(@Session() session: UserSession) {
+		return implement(v1.pisocamp.admin.content.restore).handler(({ input }) =>
+			this.safe("restore", () => this.contentWorkflowService.restore(input, session.user.id))
+		)
+	}
+
 	private async safe<T>(operation: string, work: () => Promise<T>): Promise<T> {
 		try {
 			return await work()
