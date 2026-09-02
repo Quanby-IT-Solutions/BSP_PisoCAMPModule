@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/features/pisocamp/data/trivia_question_document.dart';
+import 'package:mobile/features/pisocamp/data/trivia_response.dart';
 import 'package:mobile/features/pisocamp/data/trivia_selection.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/trivia_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/trivia_prompt.dart';
@@ -46,6 +47,14 @@ final class _RecordingTriviaAnalytics implements TriviaAnalytics {
   @override
   Future<void> recordSkipped(TriviaQuestionDocument question) async =>
       events.add('skipped:${question.contentItemId}');
+}
+
+final class _RecordingSink implements TriviaResponseSink {
+  final List<TriviaResponseRecord> responses = [];
+
+  @override
+  Future<void> record(TriviaResponseRecord response) async =>
+      responses.add(response);
 }
 
 final class _MemoryHistory implements TriviaHistoryStore {
@@ -281,6 +290,77 @@ void main() {
       expect(await coordinator.next(const []), isNull);
       expect(history.sightings, isEmpty);
       expect(analytics.events, isEmpty);
+    });
+
+    test('keeps the answer itself, not only the event', () async {
+      // GM-2 emits telemetry; GM-3 keeps the person's own progress. The
+      // prompt's single record() call has to do both, so a caller cannot wire
+      // one and forget the other.
+      final sink = _RecordingSink();
+      final coordinator = TriviaPromptCoordinator(
+        selector: TriviaSelector(),
+        history: _MemoryHistory(),
+        analytics: _RecordingTriviaAnalytics(),
+        repeatDays: kDefaultTriviaRepeatDays,
+        responses: sink,
+        clock: () => DateTime.utc(2026, 9, 2, 4, 5, 6),
+      );
+      final question = buildQuestion();
+
+      await coordinator.record(
+        question,
+        const TriviaPromptResult(
+          outcome: TriviaPromptOutcome.answeredCorrectly,
+          openedTopic: false,
+        ),
+      );
+      await coordinator.record(
+        question,
+        const TriviaPromptResult(
+          outcome: TriviaPromptOutcome.answeredIncorrectly,
+          openedTopic: true,
+        ),
+      );
+      await coordinator.record(
+        question,
+        const TriviaPromptResult(
+          outcome: TriviaPromptOutcome.skipped,
+          openedTopic: false,
+        ),
+      );
+
+      expect(sink.responses, hasLength(3));
+      expect(sink.responses[0].correct, isTrue);
+      expect(sink.responses[0].points, 1);
+      expect(sink.responses[0].answeredAt, DateTime.utc(2026, 9, 2, 4, 5, 6));
+      expect(sink.responses[1].linkOpened, isTrue);
+      expect(sink.responses[1].points, 0);
+      expect(sink.responses[2].skipped, isTrue);
+      // Three answers, three ids: nothing is overwritten.
+      expect(
+        sink.responses.map((entry) => entry.responseId).toSet(),
+        hasLength(3),
+      );
+    });
+
+    test('records nothing extra when no sink is wired', () async {
+      final coordinator = TriviaPromptCoordinator(
+        selector: TriviaSelector(),
+        history: _MemoryHistory(),
+        analytics: _RecordingTriviaAnalytics(),
+        repeatDays: kDefaultTriviaRepeatDays,
+      );
+
+      await expectLater(
+        coordinator.record(
+          buildQuestion(),
+          const TriviaPromptResult(
+            outcome: TriviaPromptOutcome.skipped,
+            openedTopic: false,
+          ),
+        ),
+        completes,
+      );
     });
 
     test('reports each outcome as its own event', () async {

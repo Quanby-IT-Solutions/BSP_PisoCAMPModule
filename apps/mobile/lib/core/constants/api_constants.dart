@@ -89,6 +89,11 @@ class ApiConstants {
 
   static String get pisoCampEvents => '$versionedUrl/pisocamp/events';
 
+  // GM-3 answer sync. Registered accounts only; a guest's answers stay on the
+  // device until they register.
+  static String get pisoCampTriviaResponses =>
+      '$versionedUrl/pisocamp/trivia/responses';
+
   // CM-5 pre-publication preview. Reached only from a preview build and only
   // with a signed, short-lived grant; the responses are never cached.
   static String get pisoCampPreview => '$versionedUrl/pisocamp/preview';

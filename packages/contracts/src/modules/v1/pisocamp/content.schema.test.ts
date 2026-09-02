@@ -833,7 +833,9 @@ describe("GM-1 trivia questions", () => {
 	it("makes the active flag explicit rather than assumed", () => {
 		// Required, so an editor toggling a question off is a deliberate act and
 		// the input and output shapes agree.
-		const { active: _active, ...withoutActive } = question
+		const withoutActive = Object.fromEntries(
+			Object.entries(question).filter(([key]) => key !== "active")
+		)
 		expect(PisoCampContentDraftSchema.safeParse(withoutActive).success).toBe(false)
 		expect(
 			PisoCampContentDraftSchema.safeParse({ ...question, active: false }).success

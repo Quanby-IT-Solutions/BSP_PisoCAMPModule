@@ -26,9 +26,18 @@ import {
 import { PisoCampController } from "./pisocamp.controller"
 import { PisoCampService } from "./pisocamp.service"
 import { PreviewModule } from "./preview/preview.module"
+import { TriviaModule } from "./trivia/trivia.module"
 
 @Module({
-	imports: [RbacModule, AnalyticsModule, AssetsModule, ContentModule, PreviewModule, BundleModule],
+	imports: [
+		RbacModule,
+		AnalyticsModule,
+		AssetsModule,
+		ContentModule,
+		PreviewModule,
+		BundleModule,
+		TriviaModule,
+	],
 	controllers: [PisoCampController, PisoCampProfileController],
 	providers: [
 		PisoCampAdminConfigService,

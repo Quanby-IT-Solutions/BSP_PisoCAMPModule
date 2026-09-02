@@ -4,6 +4,7 @@ import 'package:toastification/toastification.dart';
 import 'package:mobile/core/navigation/app_router.dart';
 import 'package:mobile/core/theme/theme_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/trivia_provider.dart';
 
 /// Root widget for the application.
 ///
@@ -16,6 +17,10 @@ class App extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(consentSyncControllerProvider);
+    // Kept alive here for the same reason as consent: an answer given offline,
+    // or by a guest who has since registered, has to reach the account even if
+    // the module itself is never reopened.
+    ref.watch(triviaSyncControllerProvider);
     final mode = ref.watch(themeModeProvider);
     final light = ref.watch(lightThemeProvider);
     final dark = ref.watch(darkThemeProvider);

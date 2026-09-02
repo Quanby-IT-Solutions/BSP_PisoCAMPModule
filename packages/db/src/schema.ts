@@ -957,6 +957,61 @@ export const triviaQuestionDetails = createTable(
 	]
 )
 
+/**
+ * GM-3 trivia response.
+ *
+ * The primary key is the **client's** `response_id`, which is the whole
+ * idempotency story: a re-uploaded batch collides and does nothing, so an
+ * interrupted sync can be retried without counting an answer twice. The same
+ * shape RF-2 uses.
+ *
+ * A row belongs to an account. A guest's answers live only on their device
+ * until they register, and are then uploaded under the new account — which is
+ * why the merge "happens once" for free: the ids do not change.
+ */
+export const triviaResponses = createTable(
+	"trivia_response",
+	t => ({
+		responseId: t.uuid("response_id").primaryKey(),
+		accountId: t
+			.text("account_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		contentItemId: t.uuid("content_item_id").notNull(),
+		contentVersionId: t.uuid("content_version_id").notNull(),
+		category: t.text("category").notNull(),
+		difficulty: t.text("difficulty").notNull().$type<"easy" | "medium" | "hard">(),
+		/** True only for an answered, correct response. */
+		correct: t.boolean("correct").notNull(),
+		skipped: t.boolean("skipped").notNull(),
+		linkOpened: t.boolean("link_opened").notNull(),
+		points: t.integer("points").notNull(),
+		answeredAt: t.timestamp("answered_at", { withTimezone: true }).notNull(),
+		receivedAt: t.timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		check(
+			"trivia_response_category_check",
+			sql`${t.category} = btrim(${t.category}) and char_length(${t.category}) between 1 and 64 and ${t.category} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`
+		),
+		check("trivia_response_difficulty_check", sql`${t.difficulty} in ('easy', 'medium', 'hard')`),
+		check(
+			"trivia_response_outcome_check",
+			// A skipped question was not answered, so it can be neither correct
+			// nor worth points; and only a wrong answer is offered a link.
+			sql`(${t.skipped} is false or (${t.correct} is false and ${t.points} = 0 and ${t.linkOpened} is false))
+				and (${t.correct} is false or ${t.linkOpened} is false)`
+		),
+		check("trivia_response_points_check", sql`${t.points} between 0 and 100`),
+		check(
+			"trivia_response_correct_points_check",
+			sql`(${t.correct} is false) = (${t.points} = 0)`
+		),
+		index("trivia_response_account_idx").on(t.accountId, t.answeredAt.desc()),
+		index("trivia_response_item_idx").on(t.contentItemId),
+	]
+)
+
 export const contentBundleBlobs = createTable(
 	"content_bundle_blob",
 	t => ({

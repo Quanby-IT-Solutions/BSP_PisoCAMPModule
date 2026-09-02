@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract"
 
 import { pisoCampAnalyticsContract } from "./analytics.contract.js"
+import { pisoCampTriviaContract } from "./trivia.contract.js"
 import { pisoCampAssetContract } from "./asset.contract.js"
 import { pisoCampBundleContract } from "./bundle.contract.js"
 import { pisoCampContentContract } from "./content.contract.js"
@@ -21,6 +22,7 @@ import { pisoCampContentPreviewContract, pisoCampPreviewContract } from "./previ
 export const pisoCampContract = {
 	events: pisoCampAnalyticsContract.events,
 	analytics: pisoCampAnalyticsContract.analytics,
+	trivia: pisoCampTriviaContract.responses,
 	bundle: pisoCampBundleContract,
 	preview: pisoCampPreviewContract,
 	admin: {

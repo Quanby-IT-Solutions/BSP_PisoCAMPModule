@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:mobile/core/utils/retry_waiter.dart';
 import 'package:mobile/features/pisocamp/data/analytics_event.dart';
 import 'package:mobile/features/pisocamp/data/analytics_repository.dart';
 
@@ -21,39 +21,9 @@ abstract interface class AnalyticsQueuePort {
   Future<void> acknowledge(Iterable<String> eventIds);
 }
 
-abstract interface class AnalyticsRetryWaiter {
-  Future<void> wait(Duration delay);
-  void cancel();
-}
-
-final class TimerAnalyticsRetryWaiter implements AnalyticsRetryWaiter {
-  Timer? _timer;
-  Completer<void>? _completion;
-
-  @override
-  Future<void> wait(Duration delay) {
-    cancel();
-    final completion = Completer<void>();
-    _completion = completion;
-    _timer = Timer(delay, () {
-      if (!completion.isCompleted) completion.complete();
-      if (identical(_completion, completion)) {
-        _completion = null;
-        _timer = null;
-      }
-    });
-    return completion.future;
-  }
-
-  @override
-  void cancel() {
-    _timer?.cancel();
-    _timer = null;
-    final completion = _completion;
-    if (completion != null && !completion.isCompleted) completion.complete();
-    _completion = null;
-  }
-}
+/// The shared retry waiter, under the name AN-1 introduced it.
+typedef AnalyticsRetryWaiter = RetryWaiter;
+typedef TimerAnalyticsRetryWaiter = TimerRetryWaiter;
 
 enum AnalyticsSyncTrigger { startup, reconnect, manual }
 
@@ -100,8 +70,8 @@ final class AnalyticsSyncController {
   }) : _queue = queue,
        _uploader = uploader,
        _isOnline = isOnline,
-       _retryWaiter = retryWaiter ?? TimerAnalyticsRetryWaiter(),
-       _jitter = jitter ?? _secureJitter,
+       _retryWaiter = retryWaiter ?? TimerRetryWaiter(),
+       _jitter = jitter ?? secureRetryJitter,
        _elapsedOverride = monotonicElapsed;
 
   final AnalyticsQueuePort _queue;
@@ -273,7 +243,7 @@ final class AnalyticsSyncController {
             error.code,
             error.httpStatusClass,
           );
-          final delay = _jitter(_backoff(attempt));
+          final delay = _jitter(retryBackoff(attempt));
           final retryEpoch = _reconnectEpoch;
           await _retryWaiter.wait(delay);
           if (_reconnectEpoch != retryEpoch) {
@@ -315,11 +285,6 @@ final class AnalyticsSyncController {
         ids.every((id) => isAnalyticsUuidV4(id) && submitted.contains(id));
   }
 
-  Duration _backoff(int attempt) {
-    final seconds = min(300, 1 << min(attempt - 1, 9));
-    return Duration(seconds: seconds);
-  }
-
   void _publish(
     AnalyticsSyncPhase phase,
     AnalyticsSyncOutcome outcome,
@@ -340,11 +305,6 @@ final class AnalyticsSyncController {
       reasonCode: reason,
       httpStatusClass: status,
     );
-  }
-
-  static Duration _secureJitter(Duration base) {
-    final factor = .8 + Random.secure().nextDouble() * .4;
-    return Duration(microseconds: (base.inMicroseconds * factor).round());
   }
 
   Duration _now() => _elapsedOverride?.call() ?? _stopwatch.elapsed;

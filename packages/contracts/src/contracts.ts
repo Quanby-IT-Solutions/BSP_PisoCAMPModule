@@ -285,6 +285,20 @@ export type {
 	PisoCampBundleManifestEntry,
 } from "./modules/v1/pisocamp/bundle.schema.js"
 
+// GM-3 trivia responses
+export {
+	IngestTriviaResponsesInputSchema,
+	IngestTriviaResponsesOutputSchema,
+	MAX_TRIVIA_RESPONSE_BATCH,
+	PisoCampTriviaResponseSchema,
+	TRIVIA_POINTS,
+} from "./modules/v1/pisocamp/trivia.schema.js"
+export type {
+	IngestTriviaResponsesInput,
+	IngestTriviaResponsesOutput,
+	PisoCampTriviaResponse,
+} from "./modules/v1/pisocamp/trivia.schema.js"
+
 // CE-4 approved tactile simulation vocabulary
 export {
 	PisoCampTactileMapSchema,
