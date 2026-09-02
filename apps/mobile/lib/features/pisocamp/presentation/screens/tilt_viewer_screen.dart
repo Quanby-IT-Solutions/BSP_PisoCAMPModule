@@ -7,6 +7,7 @@ import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
 import 'package:mobile/features/pisocamp/data/tilt_effects.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/utils/reduced_motion.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/tilt_banknote_view.dart';
 
 /// CE-5 tilt simulation of a banknote's dynamic security feature.
@@ -63,7 +64,7 @@ class _TiltViewerScreenState extends ConsumerState<TiltViewerScreen> {
   void _updateSource() {
     final available =
         (widget.sensorAvailable ?? tiltSensorAvailable()) &&
-        !MediaQuery.disableAnimationsOf(context);
+        !prefersReducedMotion(context);
     if (available == _sensorDriving) return;
     _sensorDriving = available;
     unawaited(_subscription?.cancel());

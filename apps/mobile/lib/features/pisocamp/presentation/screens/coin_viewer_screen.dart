@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/features/pisocamp/data/analytics_event.dart';
@@ -5,6 +7,7 @@ import 'package:mobile/features/pisocamp/data/coin_model.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/utils/reduced_motion.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/coin_viewer.dart';
 
 /// CE-2 interactive coin viewer.
@@ -108,7 +111,7 @@ class _CoinViewerScreenState extends ConsumerState<CoinViewerScreen>
   void _moveTo(CoinOrientation target) {
     // F6's reduced-motion contract: an animated camera move is a courtesy, the
     // orientation change is the point, so it lands immediately instead.
-    if (MediaQuery.disableAnimationsOf(context)) {
+    if (prefersReducedMotion(context)) {
       _presetController.stop();
       setState(() => _orientation = target);
       return;
@@ -200,48 +203,59 @@ class _CoinStage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Semantics(
-              header: true,
-              child: Text(document.title, style: theme.textTheme.titleLarge),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: CoinModelView(
-                  model: model,
-                  orientation: orientation,
-                  onOrientationChanged: onOrientationChanged,
-                  semanticLabel:
-                      document.modelAlt ??
-                      'A neutral coin model, not a reproduction.',
+      // Scrollable, and the stage takes a share of the viewport rather than
+      // whatever is left: at 200% text a fixed column overflows, and an
+      // overflowing control is an unreachable one.
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    document.title,
+                    style: theme.textTheme.titleLarge,
+                  ),
                 ),
               ),
-            ),
+              SizedBox(
+                height: math.max(240, constraints.maxHeight * 0.45),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: CoinModelView(
+                      model: model,
+                      orientation: orientation,
+                      onOrientationChanged: onOrientationChanged,
+                      semanticLabel:
+                          document.modelAlt ??
+                          'A neutral coin model, not a reproduction.',
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  'Drag to rotate. Pinch, or use the zoom buttons, to look closer.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              _ViewerControls(
+                orientation: orientation,
+                onMoveTo: onMoveTo,
+                onZoom: onZoom,
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Text(
-              'Drag to rotate. Pinch, or use the zoom buttons, to look closer.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          _ViewerControls(
-            orientation: orientation,
-            onMoveTo: onMoveTo,
-            onZoom: onZoom,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -285,7 +299,13 @@ class _ViewerControls extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
+          // A Wrap, not a Row: at 320 px with the text scaled up, a fixed row
+          // of three buttons and a readout overflows, and an overflowing
+          // control is an unreachable one.
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _ControlButton(
                 label: 'Zoom out',
@@ -293,19 +313,16 @@ class _ViewerControls extends StatelessWidget {
                     ? () => onZoom(1 / CoinOrientation.zoomStep)
                     : null,
               ),
-              const SizedBox(width: 8),
               _ControlButton(
                 label: 'Zoom in',
                 onPressed: orientation.canZoomIn
                     ? () => onZoom(CoinOrientation.zoomStep)
                     : null,
               ),
-              const SizedBox(width: 8),
               _ControlButton(
                 label: 'Reset',
                 onPressed: () => onMoveTo(CoinOrientation.initial),
               ),
-              const Spacer(),
               Semantics(liveRegion: true, child: Text('Zoom $zoomPercent%')),
             ],
           ),
