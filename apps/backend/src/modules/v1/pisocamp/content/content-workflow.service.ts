@@ -101,6 +101,38 @@ export interface PisoCampPublishedBundleCandidate {
 	relatedLinks: PisoCampRelatedLinkOutput[]
 }
 
+/**
+ * A published item the bundle must not carry. BR-012 keeps second-level
+ * security features away from devices entirely, so they are dropped here, at
+ * the one place that decides what a bundle contains, and reported so the build
+ * can say out loud what it left out.
+ */
+export interface PisoCampBundleExclusion {
+	itemId: string
+	versionId: string
+	reason: "second_level_security_feature"
+}
+
+/**
+ * The editorial payload a new version inherits unchanged from the version it
+ * follows. Derived from one place so a column added to the content model cannot
+ * be silently dropped the first time an item is submitted or restored.
+ */
+function carriedContentFields(source: typeof contentVersions.$inferSelect) {
+	return {
+		contentType: source.contentType,
+		title: source.title,
+		summary: source.summary,
+		body: source.body,
+		seriesCode: source.seriesCode,
+		denominationCode: source.denominationCode,
+		primaryUrl: source.primaryUrl,
+		featureLevel: source.featureLevel,
+		hotspotXPermille: source.hotspotXPermille,
+		hotspotYPermille: source.hotspotYPermille,
+	}
+}
+
 const itemCreator = alias(users, "workflow_item_creator")
 const itemEditor = alias(users, "workflow_item_editor")
 const versionCreator = alias(users, "workflow_version_creator")
@@ -237,13 +269,7 @@ export class ContentWorkflowService {
 				versionNo,
 				parentVersionId: current.id,
 				status: rule.to,
-				contentType: current.contentType,
-				title: current.title,
-				summary: current.summary,
-				body: current.body,
-				seriesCode: current.seriesCode,
-				denominationCode: current.denominationCode,
-				primaryUrl: current.primaryUrl,
+				...carriedContentFields(current),
 				createdBy: actorId,
 				createdAt: now,
 				approvedBy,
@@ -417,13 +443,7 @@ export class ContentWorkflowService {
 				parentVersionId: current.id,
 				restoredFromVersionId: source.id,
 				status: "approved",
-				contentType: source.contentType,
-				title: source.title,
-				summary: source.summary,
-				body: source.body,
-				seriesCode: source.seriesCode,
-				denominationCode: source.denominationCode,
-				primaryUrl: source.primaryUrl,
+				...carriedContentFields(source),
 				createdBy: actorId,
 				createdAt: now,
 				approvedBy: actorId,
@@ -669,6 +689,9 @@ export class ContentWorkflowService {
 				seriesCode: contentVersions.seriesCode,
 				denominationCode: contentVersions.denominationCode,
 				primaryUrl: contentVersions.primaryUrl,
+				featureLevel: contentVersions.featureLevel,
+				hotspotXPermille: contentVersions.hotspotXPermille,
+				hotspotYPermille: contentVersions.hotspotYPermille,
 				createdAt: contentVersions.createdAt,
 				creatorId: versionCreator.id,
 				creatorName: versionCreator.name,
@@ -858,6 +881,9 @@ export class ContentWorkflowService {
 				seriesCode: contentVersions.seriesCode,
 				denominationCode: contentVersions.denominationCode,
 				primaryUrl: contentVersions.primaryUrl,
+				featureLevel: contentVersions.featureLevel,
+				hotspotXPermille: contentVersions.hotspotXPermille,
+				hotspotYPermille: contentVersions.hotspotYPermille,
 				versionCreatedAt: contentVersions.createdAt,
 				transitionAction: contentVersions.transitionAction,
 				transitionComments: contentVersions.transitionComments,
@@ -923,7 +949,10 @@ export class ContentWorkflowService {
 
 	async listPublishedBundleCandidates(
 		database: ContentDatabase = db
-	): Promise<PisoCampPublishedBundleCandidate[]> {
+	): Promise<{
+		candidates: PisoCampPublishedBundleCandidate[]
+		exclusions: PisoCampBundleExclusion[]
+	}> {
 		const rows = await database
 			.select({
 				itemId: contentItems.id,
@@ -936,6 +965,9 @@ export class ContentWorkflowService {
 				seriesCode: contentVersions.seriesCode,
 				denominationCode: contentVersions.denominationCode,
 				primaryUrl: contentVersions.primaryUrl,
+				featureLevel: contentVersions.featureLevel,
+				hotspotXPermille: contentVersions.hotspotXPermille,
+				hotspotYPermille: contentVersions.hotspotYPermille,
 			})
 			.from(contentItems)
 			.innerJoin(
@@ -947,16 +979,25 @@ export class ContentWorkflowService {
 			)
 			.where(and(eq(contentItems.status, "published"), eq(contentVersions.status, "published")))
 			.orderBy(asc(contentItems.id))
+		const excluded = rows.filter(row => row.featureLevel === "second")
+		const included = rows.filter(row => row.featureLevel !== "second")
 		const linksByVersionId = await selectContentLinksByVersionIds(
 			database,
-			rows.map(row => row.versionId)
+			included.map(row => row.versionId)
 		)
-		return rows.map(row => ({
-			itemId: row.itemId,
-			versionId: row.versionId,
-			versionNo: row.versionNo,
-			content: fromContentVersion(row),
-			relatedLinks: linksByVersionId.get(row.versionId) ?? [],
-		}))
+		return {
+			candidates: included.map(row => ({
+				itemId: row.itemId,
+				versionId: row.versionId,
+				versionNo: row.versionNo,
+				content: fromContentVersion(row),
+				relatedLinks: linksByVersionId.get(row.versionId) ?? [],
+			})),
+			exclusions: excluded.map(row => ({
+				itemId: row.itemId,
+				versionId: row.versionId,
+				reason: "second_level_security_feature" as const,
+			})),
+		}
 	}
 }

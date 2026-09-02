@@ -596,3 +596,127 @@ describe("ContentFormView", () => {
 		}
 	})
 })
+
+describe("ContentFormView security feature disclosure level", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		useDetail.mockReturnValue({ isPending: false, isError: false, data: detail, refetch: vi.fn() })
+		useCreate.mockReturnValue(mutation())
+		useUpdate.mockReturnValue(mutation())
+		useSubmit.mockReturnValue(mutation())
+	})
+
+	async function chooseSecurityFeature(user: ReturnType<typeof userEvent.setup>) {
+		await chooseSelect(user, /content type/i, "Security feature")
+	}
+
+	it("asks for a level only for a security feature", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+
+		expect(screen.queryByRole("combobox", { name: /disclosure level/i })).not.toBeInTheDocument()
+
+		await chooseSecurityFeature(user)
+		expect(screen.getByRole("combobox", { name: /disclosure level/i })).toBeInTheDocument()
+		expect(
+			screen.getByText(/left out of the offline bundle entirely/i)
+		).toBeInTheDocument()
+	})
+
+	it("offers a hotspot only for a level that reaches a device", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+		await chooseSecurityFeature(user)
+
+		await chooseSelect(user, /disclosure level/i, "Second level — withheld from the app")
+		expect(screen.queryByLabelText(/position across the image/i)).not.toBeInTheDocument()
+
+		await chooseSelect(user, /disclosure level/i, "First level — shown to the public")
+		expect(screen.getByLabelText(/position across the image/i)).toBeInTheDocument()
+		expect(screen.getByLabelText(/position down the image/i)).toBeInTheDocument()
+	})
+
+	it("forgets a hotspot when the feature is reclassified as withheld", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseSecurityFeature(user)
+		await chooseSelect(user, /disclosure level/i, "First level — shown to the public")
+		await user.type(screen.getByLabelText(/position across the image/i), "250")
+		await user.type(screen.getByLabelText(/position down the image/i), "640")
+
+		await chooseSelect(user, /disclosure level/i, "Second level — withheld from the app")
+		await chooseSelect(user, /disclosure level/i, "First level — shown to the public")
+
+		expect(screen.getByLabelText(/position across the image/i)).toHaveValue(null)
+		expect(screen.getByLabelText(/position down the image/i)).toHaveValue(null)
+	})
+
+	it("sends the level and the hotspot it was given", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseSecurityFeature(user)
+		await user.type(screen.getByLabelText(/^title/i), "Watermark")
+		await user.type(screen.getByLabelText(/^summary/i), "Approved summary copy.")
+		await user.type(screen.getByLabelText(/^body/i), "Approved body copy.")
+		await chooseSelect(user, /currency series/i, "Enhanced New Generation Currency Banknotes")
+		await chooseSelect(user, /denomination/i, "PHP 100")
+		await chooseSelect(user, /disclosure level/i, "First level — shown to the public")
+		await user.type(screen.getByLabelText(/position across the image/i), "250")
+		await user.type(screen.getByLabelText(/position down the image/i), "640")
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+		expect(create.mock.calls[0]?.[0]).toMatchObject({
+			content: {
+				contentType: "security_feature",
+				featureLevel: "first",
+				hotspot: { x: 250, y: 640 },
+			},
+		})
+	})
+
+	it("refuses to save a feature with no level, and says which field", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseSecurityFeature(user)
+		await user.type(screen.getByLabelText(/^title/i), "Watermark")
+		await user.type(screen.getByLabelText(/^summary/i), "Approved summary copy.")
+		await user.type(screen.getByLabelText(/^body/i), "Approved body copy.")
+		await chooseSelect(user, /currency series/i, "Enhanced New Generation Currency Banknotes")
+		await chooseSelect(user, /denomination/i, "PHP 100")
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		expect(create).not.toHaveBeenCalled()
+		expect(await screen.findByText("Disclosure level is required.")).toBeInTheDocument()
+	})
+
+	it("refuses half a hotspot rather than sending an anchor it cannot place", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseSecurityFeature(user)
+		await user.type(screen.getByLabelText(/^title/i), "Watermark")
+		await user.type(screen.getByLabelText(/^summary/i), "Approved summary copy.")
+		await user.type(screen.getByLabelText(/^body/i), "Approved body copy.")
+		await chooseSelect(user, /currency series/i, "Enhanced New Generation Currency Banknotes")
+		await chooseSelect(user, /denomination/i, "PHP 100")
+		await chooseSelect(user, /disclosure level/i, "First level — shown to the public")
+		await user.type(screen.getByLabelText(/position across the image/i), "250")
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		expect(create).not.toHaveBeenCalled()
+		expect(
+			await screen.findByText("Enter both positions as whole numbers between 0 and 1000.")
+		).toBeInTheDocument()
+	})
+})

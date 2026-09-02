@@ -35,6 +35,11 @@ export function renderPublishedContentResources(
 					seriesCode: "seriesCode" in content ? content.seriesCode : null,
 					denominationCode: "denominationCode" in content ? content.denominationCode : null,
 					primaryUrl: "primaryUrl" in content ? content.primaryUrl : null,
+					// Only ever "first": a second-level feature is dropped before it
+					// reaches the renderer, so the field a device reads can never
+					// say otherwise.
+					featureLevel: "featureLevel" in content ? content.featureLevel : null,
+					hotspot: "hotspot" in content ? (content.hotspot ?? null) : null,
 					relatedLinks: candidate.relatedLinks,
 				}),
 				"utf8"

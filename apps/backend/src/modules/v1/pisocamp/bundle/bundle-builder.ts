@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common"
+import { Injectable, Logger } from "@nestjs/common"
 import { createHash } from "node:crypto"
 
 import {
@@ -31,6 +31,8 @@ function entriesMatch(
 
 @Injectable()
 export class BundleBuilder {
+	private readonly logger = new Logger(BundleBuilder.name)
+
 	constructor(
 		private readonly repository: BundleRepository,
 		private readonly objectStore: PostgresBundleObjectStore,
@@ -62,7 +64,18 @@ export class BundleBuilder {
 					throw new BundleLeaseLostError()
 				}
 				const lockedCurrent = await this.repository.getCurrentReady(transaction)
-				const candidates = await this.workflow.listPublishedBundleCandidates(transaction)
+				const { candidates, exclusions } =
+					await this.workflow.listPublishedBundleCandidates(transaction)
+				// BR-012: say out loud what the bundle left behind. A silent
+				// exclusion is indistinguishable from content that was never
+				// published, which is exactly the confusion an audit must not have.
+				// Identifiers only: a title is editor-supplied text, and a log line
+				// is not the place to carry it.
+				for (const exclusion of exclusions) {
+					this.logger.warn(
+						`bundle_content_excluded reason=${exclusion.reason} item=${exclusion.itemId} version=${exclusion.versionId}`
+					)
+				}
 				const resources = renderPublishedContentResources(candidates)
 				const entries: PisoCampBundleManifestEntry[] = resources.map(resource => ({
 					logicalId: resource.logicalId,

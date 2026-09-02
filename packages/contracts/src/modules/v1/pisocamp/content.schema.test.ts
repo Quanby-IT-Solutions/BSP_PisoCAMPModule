@@ -13,6 +13,7 @@ import {
 	type PisoCampRelatedLinkOutput,
 } from "../../../contracts.js"
 import {
+	CONTENT_FEATURE_LEVELS,
 	CONTENT_STATUSES,
 	CONTENT_TYPES,
 	CreatePisoCampContentInputSchema,
@@ -58,6 +59,8 @@ const currencyDrafts = [
 		body: "Approved plain-text description.",
 		seriesCode: "engc-banknotes",
 		denominationCode: "php-100",
+		featureLevel: "first",
+		hotspot: { x: 420, y: 615 },
 	},
 ] as const
 
@@ -625,5 +628,87 @@ describe("CM-1 list and output schemas", () => {
 				series: [{ ...catalog.series[0], sourceUrl: "http://www.bsp.gov.ph" }],
 			})
 		).toThrow()
+	})
+})
+
+describe("CE-3 security feature disclosure level", () => {
+	const feature = {
+		contentType: "security_feature",
+		title: "Security thread",
+		summary: "A denomination-specific security feature",
+		body: "Approved plain-text description.",
+		seriesCode: "engc-banknotes",
+		denominationCode: "php-100",
+	} as const
+
+	it("exports the exact disclosure vocabulary", () => {
+		expect([...CONTENT_FEATURE_LEVELS]).toEqual(["first", "second"])
+	})
+
+	it("requires a level on a security feature and refuses one anywhere else", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({ ...feature, featureLevel: "second" }).success
+		).toBe(true)
+		// A feature with no stated level cannot be classified, so it cannot be
+		// kept out of the bundle either.
+		expect(PisoCampContentDraftSchema.safeParse(feature).success).toBe(false)
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				contentType: "advisory",
+				title: "Advisory",
+				summary: "An advisory",
+				body: "Body copy.",
+				featureLevel: "first",
+			}).success
+		).toBe(false)
+		expect(
+			PisoCampContentDraftSchema.safeParse({ ...feature, featureLevel: "third" }).success
+		).toBe(false)
+	})
+
+	it("treats an absent hotspot as absent rather than as a position", () => {
+		const parsed = PisoCampContentDraftSchema.parse({ ...feature, featureLevel: "first" })
+
+		expect(parsed).toMatchObject({ featureLevel: "first" })
+		expect((parsed as { hotspot?: unknown }).hotspot ?? null).toBeNull()
+		expect(
+			PisoCampContentDraftSchema.safeParse({ ...feature, featureLevel: "first", hotspot: null })
+				.success
+		).toBe(true)
+	})
+
+	it("anchors a hotspot in permille and bounds it to the image", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				...feature,
+				featureLevel: "first",
+				hotspot: { x: 0, y: 1000 },
+			}).success
+		).toBe(true)
+		for (const hotspot of [
+			{ x: -1, y: 500 },
+			{ x: 1001, y: 500 },
+			{ x: 500, y: 1001 },
+			{ x: 12.5, y: 500 },
+			{ x: 500 },
+			{ x: 500, y: 500, z: 500 },
+		]) {
+			expect(
+				PisoCampContentDraftSchema.safeParse({ ...feature, featureLevel: "first", hotspot })
+					.success,
+				JSON.stringify(hotspot)
+			).toBe(false)
+		}
+	})
+
+	it("refuses a hotspot on a feature that will never reach a device", () => {
+		const parsed = PisoCampContentDraftSchema.safeParse({
+			...feature,
+			featureLevel: "second",
+			hotspot: { x: 400, y: 400 },
+		})
+
+		expect(parsed.success).toBe(false)
+		expect(parsed.error?.issues.some(issue => issue.path.includes("hotspot"))).toBe(true)
 	})
 })

@@ -602,6 +602,15 @@ export const contentVersions = createTable(
 		seriesCode: t.text("series_code"),
 		denominationCode: t.text("denomination_code"),
 		primaryUrl: t.text("primary_url"),
+		/**
+		 * CE-3 / BR-012. First-level features are the ones the public may be
+		 * taught to check unaided; second-level features are excluded from the
+		 * bundle entirely, so this is a disclosure control, not a display hint.
+		 */
+		featureLevel: t.text("feature_level").$type<"first" | "second">(),
+		/** Where the feature sits on its denomination's image, in permille. */
+		hotspotXPermille: t.integer("hotspot_x_permille"),
+		hotspotYPermille: t.integer("hotspot_y_permille"),
 		createdBy: t
 			.text("created_by")
 			.notNull()
@@ -652,6 +661,23 @@ export const contentVersions = createTable(
 				or (${t.contentType} = 'advisory' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
 				or (${t.contentType} = 'link' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.primaryUrl} is not null)
 			)`
+		),
+		check(
+			"content_version_feature_level_check",
+			sql`(${t.contentType} = 'security_feature') = (${t.featureLevel} is not null)
+				and (${t.featureLevel} is null or ${t.featureLevel} in ('first', 'second'))`
+		),
+		check(
+			"content_version_hotspot_check",
+			sql`(${t.hotspotXPermille} is null) = (${t.hotspotYPermille} is null)
+				and (
+					${t.hotspotXPermille} is null
+					or (
+						${t.featureLevel} = 'first'
+						and ${t.hotspotXPermille} between 0 and 1000
+						and ${t.hotspotYPermille} between 0 and 1000
+					)
+				)`
 		),
 		check(
 			"content_version_common_text_check",

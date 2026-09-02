@@ -6,6 +6,26 @@ enum CurrencyContentKind { banknote, coin, securityFeature }
 
 enum CurrencyRelatedLinkKind { external, internal, topic }
 
+/// Where a security feature sits on its denomination's image, in permille of
+/// the image's width and height, so the anchor survives any rendered size.
+final class CurrencyFeatureHotspot {
+  const CurrencyFeatureHotspot({required this.x, required this.y});
+
+  final int x;
+  final int y;
+
+  /// The anchor as a fraction of the image, ready to place in a layout.
+  double get fractionX => x / 1000;
+  double get fractionY => y / 1000;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CurrencyFeatureHotspot && other.x == x && other.y == y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
+}
+
 final class CurrencyRelatedLink {
   const CurrencyRelatedLink._({
     required this.kind,
@@ -43,6 +63,7 @@ final class CurrencyContentDocument {
     required this.imageAlt,
     required this.modelSha256,
     required this.modelAlt,
+    required this.hotspot,
     required List<CurrencyRelatedLink> relatedLinks,
     required this.catalogVersion,
     required this.sourceUrl,
@@ -70,6 +91,11 @@ final class CurrencyContentDocument {
   /// banknote 3D out of scope.
   final String? modelSha256;
   final String? modelAlt;
+
+  /// Set only for a first-level security feature whose position was approved.
+  /// BR-012 keeps second-level features out of the bundle, so a document that
+  /// claims one is rejected rather than merely hidden.
+  final CurrencyFeatureHotspot? hotspot;
   final List<CurrencyRelatedLink> relatedLinks;
   final String catalogVersion;
   final Uri sourceUrl;
@@ -170,6 +196,7 @@ final class CurrencyContentDocument {
       imageAlt: imageAlt,
       modelSha256: modelSha256,
       modelAlt: modelAlt,
+      hotspot: null,
       relatedLinks: relatedLinks,
       catalogVersion: _plainText(json, 'catalogVersion', maximum: 64),
       sourceUrl: sourceUrl,
@@ -201,6 +228,8 @@ final class CurrencyContentDocument {
       'seriesCode',
       'denominationCode',
       'primaryUrl',
+      'featureLevel',
+      'hotspot',
       'relatedLinks',
     }, context: 'published currency document');
 
@@ -228,6 +257,7 @@ final class CurrencyContentDocument {
         'Published currency primaryUrl must be null.',
       );
     }
+    final hotspot = _publishedHotspot(json, kind);
 
     final publishedLinks = _publishedRelatedLinks(json['relatedLinks']);
     final relatedLinks = catalogEntry.relatedLinks.toList(growable: true);
@@ -266,6 +296,7 @@ final class CurrencyContentDocument {
       modelAlt: kind == CurrencyContentKind.securityFeature
           ? null
           : catalogEntry.modelAlt,
+      hotspot: hotspot,
       relatedLinks: relatedLinks,
       catalogVersion: catalogEntry.catalogVersion,
       sourceUrl: catalogEntry.sourceUrl,
@@ -558,6 +589,52 @@ Uri _bspUrl(Map<String, Object?> json, String key) {
     );
   }
   return uri;
+}
+
+/// A published feature's disclosure level and anchor.
+///
+/// Only a first-level feature may reach a device, so a document that names any
+/// other level is refused outright rather than filtered later: the bundle is
+/// supposed to have excluded it, and a client that quietly tolerates one would
+/// hide the fact that it did not.
+CurrencyFeatureHotspot? _publishedHotspot(
+  Map<String, Object?> json,
+  CurrencyContentKind kind,
+) {
+  final level = json['featureLevel'];
+  if (kind != CurrencyContentKind.securityFeature) {
+    if (level != null || json['hotspot'] != null) {
+      throw const BundleValidationException(
+        'Only a security feature may carry a disclosure level or hotspot.',
+      );
+    }
+    return null;
+  }
+  if (level != 'first') {
+    throw const BundleValidationException(
+      'A published security feature must be first level.',
+    );
+  }
+
+  final hotspot = json['hotspot'];
+  if (hotspot == null) return null;
+  if (hotspot is! Map<String, Object?>) {
+    throw const BundleValidationException(
+      'Published security feature hotspot is invalid.',
+    );
+  }
+  requireExactJsonKeys(hotspot, const {
+    'x',
+    'y',
+  }, context: 'published security feature hotspot');
+  final x = hotspot['x'];
+  final y = hotspot['y'];
+  if (x is! int || y is! int || x < 0 || x > 1000 || y < 0 || y > 1000) {
+    throw const BundleValidationException(
+      'Published security feature hotspot is outside the image.',
+    );
+  }
+  return CurrencyFeatureHotspot(x: x, y: y);
 }
 
 List<CurrencyRelatedLink> _seedRelatedLinks(Object? value) {

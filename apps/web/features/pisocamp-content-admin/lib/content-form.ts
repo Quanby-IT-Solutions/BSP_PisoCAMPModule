@@ -21,7 +21,25 @@ export interface ContentFormValues {
 	seriesCode: string
 	denominationCode: string
 	primaryUrl: string
+	/** Security features only; "" until the editor has classified one. */
+	featureLevel: "" | "first" | "second"
+	/** Permille of the image's width and height, as typed. */
+	hotspotX: string
+	hotspotY: string
 	relatedLinks: RelatedLinkFormValue[]
+}
+
+/**
+ * A hotspot is only sent when both coordinates are given: half a position is
+ * not a position, and the contract and the database both refuse one.
+ */
+function rawHotspot(values: ContentFormValues) {
+	const x = values.hotspotX.trim()
+	const y = values.hotspotY.trim()
+	if (!x && !y) return {}
+	// A blank coordinate is left out rather than sent as zero, so the schema
+	// reports the missing half instead of quietly anchoring to a corner.
+	return { hotspot: { ...(x ? { x: Number(x) } : {}), ...(y ? { y: Number(y) } : {}) } }
 }
 
 interface CatalogOption {
@@ -113,6 +131,9 @@ export function createEmptyContentForm(contentType: PisoCampContentType): Conten
 		seriesCode: "",
 		denominationCode: "",
 		primaryUrl: "",
+		featureLevel: "",
+		hotspotX: "",
+		hotspotY: "",
 		relatedLinks: [],
 	}
 }
@@ -188,6 +209,8 @@ function rawContent(values: ContentFormValues) {
 			contentType: values.contentType,
 			seriesCode: values.seriesCode,
 			denominationCode: values.denominationCode,
+			featureLevel: values.featureLevel,
+			...rawHotspot(values),
 		}
 	}
 	if (values.contentType === "link") {
@@ -216,6 +239,8 @@ function friendlyFieldName(key: string) {
 			seriesCode: "Currency series",
 			denominationCode: "Denomination",
 			primaryUrl: "Primary URL",
+			featureLevel: "Disclosure level",
+			hotspot: "Hotspot position",
 			relatedLinks: "Related links",
 		}[key] ?? "Field"
 	)
@@ -253,9 +278,14 @@ function errorsFromIssues(
 			errors[key] = "Enter a valid HTTPS URL."
 			continue
 		}
+		if (key === "hotspot") {
+			errors[key] = "Enter both positions as whole numbers between 0 and 1000."
+			continue
+		}
 		const required =
 			issue.message.toLowerCase().includes("too small") ||
-			((key === "seriesCode" || key === "denominationCode") && !values[key])
+			((key === "seriesCode" || key === "denominationCode") && !values[key]) ||
+			(key === "featureLevel" && !values.featureLevel)
 		errors[key] = required ? `${friendlyFieldName(key)} is required.` : issue.message
 	}
 	return errors

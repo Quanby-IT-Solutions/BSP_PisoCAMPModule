@@ -502,6 +502,18 @@ function ContentSpecificFields({ detail }: { detail: PisoCampContentReviewDetail
 					{content.denominationCode}
 				</dd>
 			</div>
+			{content.contentType === "security_feature" ? (
+				<div>
+					{/* An approver decides whether this reaches the public at all, so
+					    the level is shown beside what it governs. */}
+					<dt className="text-muted-foreground text-sm">Disclosure level</dt>
+					<dd className="break-words">
+						{content.featureLevel === "first"
+							? "First level — shown to the public"
+							: "Second level — withheld from the app"}
+					</dd>
+				</div>
+			) : null}
 		</dl>
 	)
 }

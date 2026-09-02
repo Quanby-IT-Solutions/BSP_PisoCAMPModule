@@ -119,7 +119,8 @@ describe("CM-6 withdrawal transitions and scheduled publication", () => {
 	}
 
 	async function bundleCandidateIds() {
-		return (await service.listPublishedBundleCandidates()).map(candidate => candidate.itemId)
+		const { candidates } = await service.listPublishedBundleCandidates()
+		return candidates.map(candidate => candidate.itemId)
 	}
 
 	it("unpublishes a published item, drops it from the bundle and queues a rebuild", async () => {

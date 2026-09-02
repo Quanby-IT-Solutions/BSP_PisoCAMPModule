@@ -376,14 +376,18 @@ describe.sequential("single additive CM-1 content migration", () => {
 		] as const
 
 		for (const [itemId, contentType, seriesCode, denominationCode] of requiredCurrencyCases) {
+			// A security feature also needs its CE-3 disclosure level, so it is
+			// supplied here: the rule under test is the missing body, and a row
+			// that broke two rules would not say which one refused it.
+			const featureLevel = contentType === "security_feature" ? "first" : null
 			await expectRejected(
 				activePool,
 				`insert into content_version
 				 (item_id, version_no, status, content_type, title, summary, body,
-				  series_code, denomination_code, created_by)
-				 values ($1, 2, 'draft', $2, 'Title', 'Summary', null, $3, $4, $5)`,
+				  series_code, denomination_code, created_by, feature_level)
+				 values ($1, 2, 'draft', $2, 'Title', 'Summary', null, $3, $4, $5, $6)`,
 				"content_version_fields_check",
-				[itemId, contentType, seriesCode, denominationCode, actorId]
+				[itemId, contentType, seriesCode, denominationCode, actorId, featureLevel]
 			)
 		}
 		await expectRejected(

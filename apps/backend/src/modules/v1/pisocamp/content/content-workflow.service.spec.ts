@@ -652,7 +652,7 @@ describe("ContentWorkflowService", () => {
 			createdAt: new Date(),
 		})
 
-		const candidates = await service.listPublishedBundleCandidates()
+		const { candidates } = await service.listPublishedBundleCandidates()
 		expect(candidates).toHaveLength(1)
 		expect(candidates[0]).toMatchObject({
 			itemId: publishedItem.id,
@@ -688,7 +688,7 @@ describe("ContentWorkflowService", () => {
 		const selectSpy = jest.spyOn(db, "select")
 
 		try {
-			const candidates = await service.listPublishedBundleCandidates()
+			const { candidates } = await service.listPublishedBundleCandidates()
 			expect(candidates.map(candidate => candidate.itemId)).toEqual([firstId, secondId].sort())
 			expect(
 				candidates.flatMap(candidate => candidate.relatedLinks.map(link => link.label)).sort()

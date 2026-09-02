@@ -2,6 +2,8 @@ import {
 	PisoCampBundleEnvelopeSchema,
 	PisoCampBundleManifestSchema,
 } from "../../../../../../../packages/contracts/src/modules/v1/pisocamp/bundle.schema"
+import { Logger } from "@nestjs/common"
+
 import { BundleBuilder } from "./bundle-builder"
 
 jest.mock("@repo/contracts", () =>
@@ -49,7 +51,51 @@ describe("BundleBuilder", () => {
 		})
 		repository.reconcileBundle.mockResolvedValue({ entryCount: 0, coreByteLength: 0 })
 		repository.promote.mockResolvedValue(true)
-		workflow.listPublishedBundleCandidates.mockResolvedValue([])
+		workflow.listPublishedBundleCandidates.mockResolvedValue({ candidates: [], exclusions: [] })
+	})
+
+
+	it("warns for each second-level feature the build leaves out", async () => {
+		const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+		workflow.listPublishedBundleCandidates.mockResolvedValue({
+			candidates: [],
+			exclusions: [
+				{
+					itemId: "11111111-1111-4111-8111-111111111111",
+					versionId: "22222222-2222-4222-8222-222222222222",
+					reason: "second_level_security_feature",
+				},
+				{
+					itemId: "33333333-3333-4333-8333-333333333333",
+					versionId: "44444444-4444-4444-8444-444444444444",
+					reason: "second_level_security_feature",
+				},
+			],
+		})
+		const builder = new BundleBuilder(
+			repository as never,
+			objectStore as never,
+			signer,
+			workflow as never,
+			{ leaseSeconds: 120, batchSize: 50, owner: "builder-a" },
+			() => now
+		)
+
+		try {
+			await expect(builder.buildNextBundle("bootstrap")).resolves.toMatchObject({
+				outcome: "built",
+			})
+
+			expect(warn.mock.calls.map(call => call[0])).toEqual([
+				"bundle_content_excluded reason=second_level_security_feature item=11111111-1111-4111-8111-111111111111 version=22222222-2222-4222-8222-222222222222",
+				"bundle_content_excluded reason=second_level_security_feature item=33333333-3333-4333-8333-333333333333 version=44444444-4444-4444-8444-444444444444",
+			])
+			// One argument per call: the line above is the whole warning, so no
+			// second parameter can carry editor-supplied text alongside it.
+			expect(warn.mock.calls.every(call => call.length === 1)).toBe(true)
+		} finally {
+			warn.mockRestore()
+		}
 	})
 
 	it("builds and schema-validates an empty bootstrap bundle", async () => {

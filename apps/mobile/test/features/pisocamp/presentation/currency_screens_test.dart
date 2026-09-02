@@ -969,6 +969,8 @@ TestBundleResource _publishedResource({
           'seriesCode': 'ngc-coins',
           'denominationCode': denominationCode,
           'primaryUrl': null,
+          'featureLevel': contentType == 'security_feature' ? 'first' : null,
+          'hotspot': null,
           'relatedLinks': relatedLinks,
         }),
       ),

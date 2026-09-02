@@ -69,7 +69,7 @@ void main() {
       final document = CurrencyContentDocument.parsePublished(
         Uint8List.fromList(
           utf8.encode(
-            '{"schemaVersion":1,"logicalId":"content.11111111-1111-4111-8111-111111111111","contentItemId":"11111111-1111-4111-8111-111111111111","contentVersionId":"22222222-2222-4222-8222-222222222222","versionNo":7,"contentType":"security_feature","title":"Feature","summary":"Summary","body":"Body","seriesCode":"ngc-banknotes","denominationCode":"php-20","primaryUrl":null,"relatedLinks":[]}',
+            '{"schemaVersion":1,"logicalId":"content.11111111-1111-4111-8111-111111111111","contentItemId":"11111111-1111-4111-8111-111111111111","contentVersionId":"22222222-2222-4222-8222-222222222222","versionNo":7,"contentType":"security_feature","title":"Feature","summary":"Summary","body":"Body","seriesCode":"ngc-banknotes","denominationCode":"php-20","primaryUrl":null,"featureLevel":"first","hotspot":null,"relatedLinks":[]}',
           ),
         ),
         catalog,
@@ -113,7 +113,7 @@ void main() {
     ]);
     final bytes = Uint8List.fromList(
       utf8.encode(
-        '{"schemaVersion":1,"logicalId":"content.11111111-1111-4111-8111-111111111111","contentItemId":"11111111-1111-4111-8111-111111111111","contentVersionId":"22222222-2222-4222-8222-222222222222","versionNo":7,"contentType":"security_feature","title":"Feature","summary":"Summary","body":"Body","seriesCode":"ngc-banknotes","denominationCode":"php-999","primaryUrl":null,"relatedLinks":[]}',
+        '{"schemaVersion":1,"logicalId":"content.11111111-1111-4111-8111-111111111111","contentItemId":"11111111-1111-4111-8111-111111111111","contentVersionId":"22222222-2222-4222-8222-222222222222","versionNo":7,"contentType":"security_feature","title":"Feature","summary":"Summary","body":"Body","seriesCode":"ngc-banknotes","denominationCode":"php-999","primaryUrl":null,"featureLevel":"first","hotspot":null,"relatedLinks":[]}',
       ),
     );
 
@@ -193,6 +193,8 @@ void main() {
               'seriesCode': 'ngc-banknotes',
               'denominationCode': 'php-20',
               'primaryUrl': null,
+              'featureLevel': 'first',
+              'hotspot': null,
               'relatedLinks': [linkCase.value],
             }),
           ),
@@ -265,6 +267,8 @@ void main() {
             'seriesCode': 'ngc-banknotes',
             'denominationCode': 'php-20',
             'primaryUrl': null,
+            'featureLevel': 'first',
+            'hotspot': null,
             'relatedLinks': [invalidLink],
           }),
         ),
@@ -274,5 +278,117 @@ void main() {
         throwsA(isA<BundleValidationException>()),
       );
     }
+  });
+
+  group('CE-3 disclosure level and hotspot', () {
+    final catalog = CurrencyCatalogLookup.fromSeedDocuments([
+      CurrencyContentDocument.parseSeed(seedDocumentBytes()),
+    ]);
+
+    Uint8List published({
+      String contentType = 'security_feature',
+      Object? featureLevel = 'first',
+      Object? hotspot,
+    }) {
+      return Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'schemaVersion': 1,
+            'logicalId': 'content.11111111-1111-4111-8111-111111111111',
+            'contentItemId': '11111111-1111-4111-8111-111111111111',
+            'contentVersionId': '22222222-2222-4222-8222-222222222222',
+            'versionNo': 7,
+            'contentType': contentType,
+            'title': 'Watermark',
+            'summary': 'Approved summary.',
+            'body': 'Approved body.',
+            'seriesCode': 'ngc-banknotes',
+            'denominationCode': 'php-20',
+            'primaryUrl': null,
+            'featureLevel': featureLevel,
+            'hotspot': hotspot,
+            'relatedLinks': <Object?>[],
+          }),
+        ),
+      );
+    }
+
+    void rejects(String reason, Uint8List bytes) {
+      test('rejects $reason', () {
+        expect(
+          () => CurrencyContentDocument.parsePublished(bytes, catalog),
+          throwsA(isA<BundleValidationException>()),
+        );
+      });
+    }
+
+    test('reads an approved hotspot as a fraction of the image', () {
+      final document = CurrencyContentDocument.parsePublished(
+        published(hotspot: {'x': 250, 'y': 640}),
+        catalog,
+      );
+
+      expect(document.hotspot, const CurrencyFeatureHotspot(x: 250, y: 640));
+      expect(document.hotspot!.fractionX, closeTo(0.25, 1e-9));
+      expect(document.hotspot!.fractionY, closeTo(0.64, 1e-9));
+    });
+
+    test('accepts a first-level feature with no approved position', () {
+      final document = CurrencyContentDocument.parsePublished(
+        published(),
+        catalog,
+      );
+
+      expect(document.hotspot, isNull);
+      expect(document.kind, CurrencyContentKind.securityFeature);
+    });
+
+    test('leaves a banknote without a level or a hotspot', () {
+      final document = CurrencyContentDocument.parsePublished(
+        published(contentType: 'banknote', featureLevel: null),
+        catalog,
+      );
+
+      expect(document.hotspot, isNull);
+    });
+
+    // BR-012: a second-level feature should never have been in the bundle, so a
+    // client that met one would be looking at a bundle that broke its promise.
+    rejects(
+      'a second-level feature outright',
+      published(featureLevel: 'second'),
+    );
+    rejects('a feature with no level', published(featureLevel: null));
+    rejects(
+      'a level this client does not know',
+      published(featureLevel: 'third'),
+    );
+    rejects(
+      'a level on a banknote',
+      published(contentType: 'banknote', featureLevel: 'first'),
+    );
+    rejects(
+      'a hotspot on a banknote',
+      published(
+        contentType: 'banknote',
+        featureLevel: null,
+        hotspot: {'x': 10, 'y': 10},
+      ),
+    );
+    rejects(
+      'a hotspot past the right edge',
+      published(hotspot: {'x': 1001, 'y': 10}),
+    );
+    rejects(
+      'a hotspot past the bottom edge',
+      published(hotspot: {'x': 10, 'y': 1001}),
+    );
+    rejects('a negative hotspot', published(hotspot: {'x': -1, 'y': 10}));
+    rejects('half a hotspot', published(hotspot: {'x': 10}));
+    rejects('a fractional hotspot', published(hotspot: {'x': 10.5, 'y': 10}));
+    rejects(
+      'a hotspot carrying anything else',
+      published(hotspot: {'x': 10, 'y': 10, 'z': 10}),
+    );
   });
 }

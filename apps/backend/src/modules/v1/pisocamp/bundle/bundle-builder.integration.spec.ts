@@ -521,7 +521,7 @@ describePostgres("BundleBuilder PostgreSQL integration", () => {
 					externalUrl: "https://example.test/snapshot",
 				})
 			})
-			return workflow.listPublishedBundleCandidates(staged)
+			return (await workflow.listPublishedBundleCandidates(staged)).candidates
 		})
 		expect(isolation).toBe("repeatable read")
 		expect(candidates[0]!.relatedLinks).toEqual([])

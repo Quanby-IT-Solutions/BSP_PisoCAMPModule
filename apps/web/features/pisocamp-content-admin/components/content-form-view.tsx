@@ -124,6 +124,15 @@ function formValuesFromDetail(detail: PisoCampContentDetail): ContentFormValues 
 				? content.denominationCode
 				: "",
 		primaryUrl: content.contentType === "link" ? content.primaryUrl : "",
+		featureLevel: content.contentType === "security_feature" ? content.featureLevel : "",
+		hotspotX:
+			content.contentType === "security_feature" && content.hotspot
+				? String(content.hotspot.x)
+				: "",
+		hotspotY:
+			content.contentType === "security_feature" && content.hotspot
+				? String(content.hotspot.y)
+				: "",
 		relatedLinks,
 	}
 }
@@ -292,6 +301,8 @@ function ContentFormEditor({
 	const primaryUrlRef = useRef<HTMLInputElement>(null)
 	const seriesRef = useRef<HTMLButtonElement>(null)
 	const denominationRef = useRef<HTMLButtonElement>(null)
+	const featureLevelRef = useRef<HTMLButtonElement>(null)
+	const hotspotRef = useRef<HTMLInputElement>(null)
 	const relatedControlRefs = useRef(new Map<string, HTMLElement>())
 	const leaveDirtyHistory = useRef<(navigate: () => void) => void>(navigate => navigate())
 	const ownsDirtyHistoryGuard = useRef(false)
@@ -486,6 +497,8 @@ function ContentFormEditor({
 			["body", bodyRef],
 			["seriesCode", seriesRef],
 			["denominationCode", denominationRef],
+			["featureLevel", featureLevelRef],
+			["hotspot", hotspotRef],
 			["primaryUrl", primaryUrlRef],
 		]
 		const regularTarget = focusTargets.find(([key]) => nextErrors[key])?.[1].current
@@ -598,6 +611,8 @@ function ContentFormEditor({
 							primaryUrlRef={primaryUrlRef}
 							seriesRef={seriesRef}
 							denominationRef={denominationRef}
+							featureLevelRef={featureLevelRef}
+							hotspotRef={hotspotRef}
 							onChange={changeValues}
 						/>
 						<RelatedLinksEditor

@@ -25,10 +25,13 @@ export function toContentVersionValues(content: PisoCampContentDraft) {
 		seriesCode: "seriesCode" in content ? content.seriesCode : null,
 		denominationCode: "denominationCode" in content ? content.denominationCode : null,
 		primaryUrl: "primaryUrl" in content ? content.primaryUrl : null,
+		featureLevel: "featureLevel" in content ? content.featureLevel : null,
+		hotspotXPermille: "hotspot" in content ? (content.hotspot?.x ?? null) : null,
+		hotspotYPermille: "hotspot" in content ? (content.hotspot?.y ?? null) : null,
 	}
 }
 
-export function fromContentVersion(row: {
+export interface ContentVersionRow {
 	contentType: PisoCampContentDraft["contentType"]
 	title: string
 	summary: string
@@ -36,7 +39,12 @@ export function fromContentVersion(row: {
 	seriesCode: string | null
 	denominationCode: string | null
 	primaryUrl: string | null
-}): PisoCampContentDraft {
+	featureLevel: "first" | "second" | null
+	hotspotXPermille: number | null
+	hotspotYPermille: number | null
+}
+
+export function fromContentVersion(row: ContentVersionRow): PisoCampContentDraft {
 	const common = { contentType: row.contentType, title: row.title, summary: row.summary }
 	if (row.contentType === "link") {
 		return {
@@ -48,6 +56,20 @@ export function fromContentVersion(row: {
 	}
 	if (row.contentType === "advisory") {
 		return { ...common, contentType: "advisory", body: row.body! }
+	}
+	if (row.contentType === "security_feature") {
+		return {
+			...common,
+			contentType: "security_feature",
+			body: row.body!,
+			seriesCode: row.seriesCode as never,
+			denominationCode: row.denominationCode!,
+			featureLevel: row.featureLevel!,
+			hotspot:
+				row.hotspotXPermille === null || row.hotspotYPermille === null
+					? null
+					: { x: row.hotspotXPermille, y: row.hotspotYPermille },
+		}
 	}
 	return {
 		...common,
@@ -115,6 +137,9 @@ export async function getContentDetail(
 			seriesCode: contentVersions.seriesCode,
 			denominationCode: contentVersions.denominationCode,
 			primaryUrl: contentVersions.primaryUrl,
+			featureLevel: contentVersions.featureLevel,
+			hotspotXPermille: contentVersions.hotspotXPermille,
+			hotspotYPermille: contentVersions.hotspotYPermille,
 		})
 		.from(contentItems)
 		.innerJoin(contentVersions, eq(contentItems.currentWorkingVersionId, contentVersions.id))

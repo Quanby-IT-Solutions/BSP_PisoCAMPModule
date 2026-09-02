@@ -43,6 +43,8 @@ interface ContentTypeFieldsProps {
 	bodyRef: React.RefObject<HTMLTextAreaElement | null>
 	primaryUrlRef: React.RefObject<HTMLInputElement | null>
 	seriesRef: React.RefObject<HTMLButtonElement | null>
+	featureLevelRef: React.RefObject<HTMLButtonElement | null>
+	hotspotRef: React.RefObject<HTMLInputElement | null>
 	denominationRef: React.RefObject<HTMLButtonElement | null>
 	onChange: (values: ContentFormValues) => void
 }
@@ -55,6 +57,8 @@ export function ContentTypeFields({
 	bodyRef,
 	primaryUrlRef,
 	seriesRef,
+	featureLevelRef,
+	hotspotRef,
 	denominationRef,
 	onChange,
 }: ContentTypeFieldsProps) {
@@ -191,6 +195,101 @@ export function ContentTypeFields({
 						</Select>
 						<FieldError id="denomination-code-error">{errors.denominationCode}</FieldError>
 					</Field>
+				</div>
+			) : null}
+
+			{values.contentType === "security_feature" ? (
+				<div className="grid w-full max-w-full min-w-0 gap-4 sm:grid-cols-2">
+					<Field className="max-w-full min-w-0">
+						<FieldLabel htmlFor="feature-level">Disclosure level</FieldLabel>
+						<Select
+							name="featureLevel"
+							value={values.featureLevel || null}
+							onValueChange={value => {
+								if (typeof value !== "string") return
+								// A second-level feature never reaches a device, so any
+								// hotspot recorded for it is dropped with the change.
+								onChange({
+									...values,
+									featureLevel: value as ContentFormValues["featureLevel"],
+									...(value === "second" ? { hotspotX: "", hotspotY: "" } : {}),
+								})
+							}}
+						>
+							<SelectTrigger
+								ref={featureLevelRef}
+								id="feature-level"
+								wrapValue
+								className={REFLOW_SELECT_TRIGGER_CLASS}
+								aria-invalid={errors.featureLevel ? true : undefined}
+								aria-describedby={
+									errors.featureLevel ? "feature-level-error" : "feature-level-help"
+								}
+							>
+								<SelectValue className={REFLOW_SELECT_VALUE_CLASS}>
+									{values.featureLevel === "first"
+										? "First level — shown to the public"
+										: values.featureLevel === "second"
+											? "Second level — withheld from the app"
+											: "Select a level"}
+								</SelectValue>
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="first">First level — shown to the public</SelectItem>
+								<SelectItem value="second">Second level — withheld from the app</SelectItem>
+							</SelectContent>
+						</Select>
+						<p id="feature-level-help" className="text-muted-foreground text-sm">
+							A second-level feature is left out of the offline bundle entirely, so it never
+							reaches a device.
+						</p>
+						<FieldError id="feature-level-error">{errors.featureLevel}</FieldError>
+					</Field>
+					{values.featureLevel === "first" ? (
+						<Field className="max-w-full min-w-0">
+							<FieldLabel htmlFor="hotspot-x">Hotspot position (optional)</FieldLabel>
+							<div className="flex max-w-full min-w-0 gap-3">
+								<Input
+									ref={hotspotRef}
+									id="hotspot-x"
+									name="hotspotX"
+									type="number"
+									inputMode="numeric"
+									min={0}
+									max={1000}
+									step={1}
+									placeholder="Across"
+									aria-label="Hotspot position across the image, in permille"
+									className="min-h-11 min-w-0"
+									value={values.hotspotX}
+									onChange={event => set("hotspotX", event.target.value)}
+									aria-invalid={errors.hotspot ? true : undefined}
+									aria-describedby={errors.hotspot ? "hotspot-error" : "hotspot-help"}
+								/>
+								<Input
+									id="hotspot-y"
+									name="hotspotY"
+									type="number"
+									inputMode="numeric"
+									min={0}
+									max={1000}
+									step={1}
+									placeholder="Down"
+									aria-label="Hotspot position down the image, in permille"
+									className="min-h-11 min-w-0"
+									value={values.hotspotY}
+									onChange={event => set("hotspotY", event.target.value)}
+									aria-invalid={errors.hotspot ? true : undefined}
+									aria-describedby={errors.hotspot ? "hotspot-error" : "hotspot-help"}
+								/>
+							</div>
+							<p id="hotspot-help" className="text-muted-foreground text-sm">
+								Thousandths of the image, measured from its top-left corner. Leave both blank
+								for no marker.
+							</p>
+							<FieldError id="hotspot-error">{errors.hotspot}</FieldError>
+						</Field>
+					) : null}
 				</div>
 			) : null}
 

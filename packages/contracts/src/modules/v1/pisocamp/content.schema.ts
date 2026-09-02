@@ -33,6 +33,25 @@ const CatalogCodeSchema = z
 	.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
 const DenominationCodeSchema = CatalogCodeSchema
 
+/**
+ * BR-012. First-level features are the ones the public may be taught to check
+ * unaided. Second-level features are for trained examiners, so they are kept out
+ * of the offline bundle entirely rather than merely hidden by a client.
+ */
+export const CONTENT_FEATURE_LEVELS = ["first", "second"] as const
+export const PisoCampFeatureLevelSchema = z.enum(CONTENT_FEATURE_LEVELS)
+
+/**
+ * Where a feature sits on its denomination's image, in permille of the image's
+ * width and height, so the anchor survives any rendered size.
+ */
+export const PisoCampFeatureHotspotSchema = z
+	.object({
+		x: z.number().int().min(0).max(1000),
+		y: z.number().int().min(0).max(1000),
+	})
+	.strict()
+
 const HTML_MARKUP_PATTERN = /<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>|<![^>]*>|<\?[\s\S]*?\?>/
 
 const UtcTimestampSchema = z.iso
@@ -109,8 +128,16 @@ const SecurityFeatureDraftSchema = z
 		body: BodySchema,
 		seriesCode: PisoCampCurrencySeriesCodeSchema,
 		denominationCode: DenominationCodeSchema,
+		featureLevel: PisoCampFeatureLevelSchema,
+		hotspot: PisoCampFeatureHotspotSchema.nullish(),
 	})
 	.strict()
+	.refine(
+		content => content.featureLevel === "first" || !content.hotspot,
+		// A second-level feature never reaches a device, so a hotspot for one
+		// would be an anchor to something the map does not show.
+		{ message: "Only a first-level feature can carry a hotspot", path: ["hotspot"] }
+	)
 
 const AdvisoryDraftSchema = z
 	.object({

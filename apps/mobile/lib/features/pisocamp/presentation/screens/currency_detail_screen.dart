@@ -7,6 +7,7 @@ import 'package:mobile/features/pisocamp/data/analytics_event.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/widgets/zoomable_currency_image.dart';
 
 class CurrencyDetailScreen extends ConsumerStatefulWidget {
   const CurrencyDetailScreen({
@@ -147,7 +148,11 @@ class _DetailBody extends StatelessWidget {
               const SizedBox(height: 16),
               if (document.imageSha256 != null && document.imageAlt != null)
                 if (detail.catalog.loadedImage(document) case final image?)
-                  _CurrencyImage(image: image, alt: document.imageAlt!)
+                  _CurrencyImage(
+                    image: image,
+                    alt: document.imageAlt!,
+                    features: features,
+                  )
                 else
                   FutureBuilder<VerifiedCurrencyImage?>(
                     future: detail.image,
@@ -158,6 +163,7 @@ class _DetailBody extends StatelessWidget {
                           : _CurrencyImage(
                               image: image,
                               alt: document.imageAlt!,
+                              features: features,
                             );
                     },
                   ),
@@ -248,34 +254,19 @@ class _ViewInThreeDimensions extends StatelessWidget {
 }
 
 class _CurrencyImage extends StatelessWidget {
-  const _CurrencyImage({required this.image, required this.alt});
+  const _CurrencyImage({
+    required this.image,
+    required this.alt,
+    required this.features,
+  });
 
   final VerifiedCurrencyImage image;
   final String alt;
+  final List<CurrencyContentDocument> features;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Semantics(
-          container: true,
-          image: true,
-          label: alt,
-          child: ExcludeSemantics(
-            child: Image.memory(
-              image.bytes,
-              fit: BoxFit.contain,
-              gaplessPlayback: true,
-              cacheWidth: image.cacheWidth,
-              cacheHeight: image.cacheHeight,
-              errorBuilder: (context, error, stackTrace) =>
-                  const SizedBox.shrink(),
-            ),
-          ),
-        ),
-      ),
-    );
+    return ZoomableCurrencyImage(image: image, alt: alt, features: features);
   }
 }
 

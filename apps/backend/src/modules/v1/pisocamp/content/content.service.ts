@@ -31,6 +31,7 @@ import type { V1Inputs } from "@/config/contract-types"
 import { copyVersionAssets } from "../assets/version-assets"
 import {
 	fromContentVersion,
+	type ContentVersionRow,
 	getContentDetail,
 	selectContentLinks,
 	toContentVersionValues,
@@ -265,15 +266,7 @@ export class ContentService {
 		return toContentVersionValues(content)
 	}
 
-	private fromVersion(row: {
-		contentType: PisoCampContentDraft["contentType"]
-		title: string
-		summary: string
-		body: string | null
-		seriesCode: string | null
-		denominationCode: string | null
-		primaryUrl: string | null
-	}): PisoCampContentDraft {
+	private fromVersion(row: ContentVersionRow): PisoCampContentDraft {
 		return fromContentVersion(row)
 	}
 
@@ -315,6 +308,8 @@ export class ContentService {
 			"body",
 			"contentType",
 			"denominationCode",
+			"featureLevel",
+			"hotspot",
 			"primaryUrl",
 			"seriesCode",
 			"summary",

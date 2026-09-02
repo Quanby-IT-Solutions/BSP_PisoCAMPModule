@@ -29,7 +29,7 @@ describe("renderPublishedContentResources", () => {
 		expect(resources).toHaveLength(1)
 		expect(resources[0]!.logicalId).toBe("content.11111111-1111-4111-8111-111111111111")
 		expect(resources[0]!.bytes.toString("utf8")).toBe(
-			'{"schemaVersion":1,"logicalId":"content.11111111-1111-4111-8111-111111111111","contentItemId":"11111111-1111-4111-8111-111111111111","contentVersionId":"22222222-2222-4222-8222-222222222222","versionNo":7,"contentType":"link","title":"BSP currency guide","summary":"Plain <b>text</b> remains text.","body":"Optional details","seriesCode":null,"denominationCode":null,"primaryUrl":"https://www.bsp.gov.ph/currency","relatedLinks":[{"id":"33333333-3333-4333-8333-333333333333","position":0,"kind":"external","label":"BSP","url":"https://www.bsp.gov.ph/Pages/CoinsAndNotes/CoinsAndNotes.aspx"}]}'
+			'{"schemaVersion":1,"logicalId":"content.11111111-1111-4111-8111-111111111111","contentItemId":"11111111-1111-4111-8111-111111111111","contentVersionId":"22222222-2222-4222-8222-222222222222","versionNo":7,"contentType":"link","title":"BSP currency guide","summary":"Plain <b>text</b> remains text.","body":"Optional details","seriesCode":null,"denominationCode":null,"primaryUrl":"https://www.bsp.gov.ph/currency","featureLevel":null,"hotspot":null,"relatedLinks":[{"id":"33333333-3333-4333-8333-333333333333","position":0,"kind":"external","label":"BSP","url":"https://www.bsp.gov.ph/Pages/CoinsAndNotes/CoinsAndNotes.aspx"}]}'
 		)
 		const parsed = JSON.parse(resources[0]!.bytes.toString("utf8")) as Record<string, unknown>
 		expect(Object.keys(parsed)).toEqual([
@@ -45,6 +45,8 @@ describe("renderPublishedContentResources", () => {
 			"seriesCode",
 			"denominationCode",
 			"primaryUrl",
+			"featureLevel",
+			"hotspot",
 			"relatedLinks",
 		])
 		expect(resources[0]!.bytes.toString("utf8")).not.toMatch(
