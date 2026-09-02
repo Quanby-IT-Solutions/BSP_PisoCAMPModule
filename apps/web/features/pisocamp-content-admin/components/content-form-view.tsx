@@ -44,6 +44,7 @@ import {
 	buildCreateContentRequest,
 	buildUpdateContentRequest,
 	createEmptyContentForm,
+	emptyTriviaChoice,
 	getOrCreateRequestId,
 	type ContentFormErrors,
 	type ContentFormValues,
@@ -133,6 +134,17 @@ function formValuesFromDetail(detail: PisoCampContentDetail): ContentFormValues 
 			content.contentType === "security_feature" && content.hotspot
 				? String(content.hotspot.y)
 				: "",
+		category: content.contentType === "trivia_question" ? content.category : "",
+		difficulty: content.contentType === "trivia_question" ? content.difficulty : "",
+		choices:
+			content.contentType === "trivia_question"
+				? content.choices.map(choice => ({
+						clientId: crypto.randomUUID(),
+						label: choice.label,
+						correct: choice.correct,
+					}))
+				: [emptyTriviaChoice(), emptyTriviaChoice()],
+		active: content.contentType === "trivia_question" ? content.active : true,
 		relatedLinks,
 	}
 }
@@ -303,6 +315,8 @@ function ContentFormEditor({
 	const denominationRef = useRef<HTMLButtonElement>(null)
 	const featureLevelRef = useRef<HTMLButtonElement>(null)
 	const hotspotRef = useRef<HTMLInputElement>(null)
+	const categoryRef = useRef<HTMLInputElement>(null)
+	const difficultyRef = useRef<HTMLButtonElement>(null)
 	const relatedControlRefs = useRef(new Map<string, HTMLElement>())
 	const leaveDirtyHistory = useRef<(navigate: () => void) => void>(navigate => navigate())
 	const ownsDirtyHistoryGuard = useRef(false)
@@ -499,6 +513,8 @@ function ContentFormEditor({
 			["denominationCode", denominationRef],
 			["featureLevel", featureLevelRef],
 			["hotspot", hotspotRef],
+			["category", categoryRef],
+			["difficulty", difficultyRef],
 			["primaryUrl", primaryUrlRef],
 		]
 		const regularTarget = focusTargets.find(([key]) => nextErrors[key])?.[1].current
@@ -613,6 +629,8 @@ function ContentFormEditor({
 							denominationRef={denominationRef}
 							featureLevelRef={featureLevelRef}
 							hotspotRef={hotspotRef}
+							categoryRef={categoryRef}
+							difficultyRef={difficultyRef}
 							onChange={changeValues}
 						/>
 						<RelatedLinksEditor

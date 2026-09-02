@@ -720,3 +720,139 @@ describe("ContentFormView security feature disclosure level", () => {
 		).toBeInTheDocument()
 	})
 })
+
+describe("ContentFormView trivia questions", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		useDetail.mockReturnValue({ isPending: false, isError: false, data: detail, refetch: vi.fn() })
+		useCreate.mockReturnValue(mutation())
+		useUpdate.mockReturnValue(mutation())
+		useSubmit.mockReturnValue(mutation())
+	})
+
+	async function chooseQuestion(user: ReturnType<typeof userEvent.setup>) {
+		await chooseSelect(user, /content type/i, "Trivia question")
+	}
+
+	async function fillCommon(user: ReturnType<typeof userEvent.setup>) {
+		await user.type(screen.getByLabelText(/^title/i), "Which feature is raised to the touch?")
+		await user.type(screen.getByLabelText(/^summary/i), "A question about a banknote.")
+		await user.type(screen.getByLabelText(/^body/i), "The embossed value is raised.")
+		await user.type(screen.getByLabelText(/^category/i), "security-features")
+		await chooseSelect(user, /difficulty/i, "Easy")
+	}
+
+	it("asks for question fields only for a question", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+
+		expect(screen.queryByLabelText(/^category/i)).not.toBeInTheDocument()
+
+		await chooseQuestion(user)
+		expect(screen.getByLabelText(/^category/i)).toBeInTheDocument()
+		expect(screen.getByRole("combobox", { name: /difficulty/i })).toBeInTheDocument()
+		expect(screen.getByRole("group", { name: /choices/i })).toBeInTheDocument()
+	})
+
+	it("starts with the two choices a question needs", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+		await chooseQuestion(user)
+
+		expect(screen.getByLabelText("Choice 1")).toBeInTheDocument()
+		expect(screen.getByLabelText("Choice 2")).toBeInTheDocument()
+		// Neither of the two may be removed: a question with one answer is not
+		// a question.
+		expect(screen.getByRole("button", { name: "Remove choice 1" })).toBeDisabled()
+	})
+
+	it("adds choices up to six and no further", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+		await chooseQuestion(user)
+
+		const add = screen.getByRole("button", { name: "Add choice" })
+		for (let index = 0; index < 4; index += 1) await user.click(add)
+
+		expect(screen.getByLabelText("Choice 6")).toBeInTheDocument()
+		expect(add).toBeDisabled()
+	})
+
+	it("lets exactly one choice be correct, by construction", async () => {
+		const user = userEvent.setup()
+		render(<ContentFormView mode="create" />)
+		await chooseQuestion(user)
+
+		const correct = screen.getAllByRole("radio", { name: /correct/i })
+		await user.click(correct[0]!)
+		expect(correct[0]).toBeChecked()
+
+		await user.click(correct[1]!)
+		// Choosing another answer unchooses the first: the control cannot
+		// express two correct answers at all.
+		expect(correct[1]).toBeChecked()
+		expect(correct[0]).not.toBeChecked()
+	})
+
+	it("sends the whole question, with its choices and active flag", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseQuestion(user)
+		await fillCommon(user)
+		await user.type(screen.getByLabelText("Choice 1"), "The embossed value")
+		await user.type(screen.getByLabelText("Choice 2"), "The serial number")
+		await user.click(screen.getAllByRole("radio", { name: /correct/i })[0]!)
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+		expect(create.mock.calls[0]?.[0]).toMatchObject({
+			content: {
+				contentType: "trivia_question",
+				category: "security-features",
+				difficulty: "easy",
+				active: true,
+				choices: [
+					{ label: "The embossed value", correct: true },
+					{ label: "The serial number", correct: false },
+				],
+			},
+		})
+	})
+
+	it("refuses to save a question with no correct answer, and says why", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseQuestion(user)
+		await fillCommon(user)
+		await user.type(screen.getByLabelText("Choice 1"), "The embossed value")
+		await user.type(screen.getByLabelText("Choice 2"), "The serial number")
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		expect(create).not.toHaveBeenCalled()
+		expect(await screen.findByText("Exactly one choice must be correct")).toBeInTheDocument()
+	})
+
+	it("carries the active toggle, which withholds a published question", async () => {
+		const user = userEvent.setup()
+		const create = vi.fn()
+		useCreate.mockReturnValue(mutation(create))
+		render(<ContentFormView mode="create" />)
+		await chooseQuestion(user)
+		await fillCommon(user)
+		await user.type(screen.getByLabelText("Choice 1"), "The embossed value")
+		await user.type(screen.getByLabelText("Choice 2"), "The serial number")
+		await user.click(screen.getAllByRole("radio", { name: /correct/i })[0]!)
+		await user.click(screen.getByRole("checkbox", { name: /active/i }))
+
+		await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+		expect(create.mock.calls[0]?.[0]).toMatchObject({ content: { active: false } })
+	})
+})

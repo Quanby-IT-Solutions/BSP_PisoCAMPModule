@@ -46,6 +46,7 @@ const CONTENT_TYPE_FILTERS: readonly {
 	{ value: "security_feature", label: "Security feature" },
 	{ value: "advisory", label: "Advisory" },
 	{ value: "link", label: "Link" },
+	{ value: "trivia_question", label: "Trivia question" },
 ]
 const STATUS_FILTERS: readonly { value: PisoCampContentStatus | "all"; label: string }[] = [
 	{ value: "all", label: "All statuses" },
@@ -76,6 +77,17 @@ function isContentStatus(value: string | null): value is PisoCampContentStatus {
 	return STATUS_FILTERS.some(option => option.value === value && value !== "all")
 }
 
+const DIFFICULTY_FILTERS = [
+	{ value: "all", label: "All difficulties" },
+	{ value: "easy", label: "Easy" },
+	{ value: "medium", label: "Medium" },
+	{ value: "hard", label: "Hard" },
+] as const
+
+function isTriviaDifficulty(value: unknown): value is "easy" | "medium" | "hard" {
+	return value === "easy" || value === "medium" || value === "hard"
+}
+
 function positivePage(value: string | null) {
 	const page = Number(value)
 	return Number.isInteger(page) && page > 0 ? page : 1
@@ -86,17 +98,29 @@ export function ContentListView() {
 	const router = useRouter()
 	const searchParams = useSearchParams()
 	const searchRef = useRef<HTMLInputElement>(null)
+	const categoryRef = useRef<HTMLInputElement>(null)
 	const contentTypeParam = searchParams.get("contentType")
 	const statusParam = searchParams.get("status")
 	const contentType = isContentType(contentTypeParam) ? contentTypeParam : undefined
 	const status = isContentStatus(statusParam) ? statusParam : undefined
 	const search = searchParams.get("search")?.trim() || undefined
 	const page = positivePage(searchParams.get("page"))
+	// GM-1: a question pool is browsed by subject and difficulty, so those
+	// filters are offered only while questions are what is being listed.
+	const showsQuestions = contentType === "trivia_question"
+	const category = showsQuestions
+		? (searchParams.get("category")?.trim() || undefined)
+		: undefined
+	const difficultyParam = searchParams.get("difficulty")
+	const difficulty =
+		showsQuestions && isTriviaDifficulty(difficultyParam) ? difficultyParam : undefined
 	const content = usePisoCampContentListQuery({
 		page,
 		limit: 20,
 		...(contentType ? { contentType } : {}),
 		...(status ? { status } : {}),
+		...(category ? { category } : {}),
+		...(difficulty ? { difficulty } : {}),
 		...(search ? { search } : {}),
 	})
 
@@ -200,6 +224,70 @@ export function ContentListView() {
 					</Select>
 				</div>
 			</div>
+
+			{showsQuestions ? (
+				<div className="grid min-w-0 gap-4 rounded-xl border p-4 sm:grid-cols-2">
+					<form
+						className="min-w-0 space-y-2"
+						onSubmit={event => {
+							event.preventDefault()
+							updateUrl({
+								category: categoryRef.current?.value.trim() || undefined,
+								page: undefined,
+							})
+						}}
+					>
+						<Label htmlFor="content-category-filter">Category</Label>
+						<div className="flex min-w-0 flex-wrap gap-2">
+							<Input
+								key={category ?? "empty-category"}
+								ref={categoryRef}
+								id="content-category-filter"
+								name="category"
+								autoComplete="off"
+								defaultValue={category}
+								placeholder="security-features"
+							/>
+							<Button
+								type="submit"
+								variant="outline"
+								className="h-auto min-h-8 whitespace-normal"
+							>
+								Apply Category
+							</Button>
+						</div>
+					</form>
+					<div className="min-w-0 space-y-2">
+						<Label htmlFor="content-difficulty-filter">Difficulty</Label>
+						<Select
+							name="difficulty"
+							value={difficulty ?? "all"}
+							onValueChange={value => {
+								if (typeof value !== "string") return
+								updateUrl({
+									difficulty: value === "all" ? undefined : value,
+									page: undefined,
+								})
+							}}
+						>
+							<SelectTrigger id="content-difficulty-filter" wrapValue className="w-full">
+								<SelectValue>
+									{DIFFICULTY_FILTERS.find(
+										option => option.value === (difficulty ?? "all")
+									)?.label}
+								</SelectValue>
+							</SelectTrigger>
+							<SelectContent>
+								{DIFFICULTY_FILTERS.map(option => (
+									<SelectItem key={option.value} value={option.value}>
+										{option.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+				</div>
+			) : null}
 
 			{content.isPending ? (
 				<div role="status" aria-label="Loading content…" className="space-y-3">

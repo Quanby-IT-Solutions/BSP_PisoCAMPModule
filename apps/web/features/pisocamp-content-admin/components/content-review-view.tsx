@@ -487,6 +487,41 @@ function ContentSpecificFields({ detail }: { detail: PisoCampContentReviewDetail
 		)
 	}
 	if (content.contentType === "advisory") return null
+	if (content.contentType === "trivia_question") {
+		return (
+			<dl className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+				<div>
+					<dt className="text-muted-foreground text-sm">Category</dt>
+					<dd className="break-words" translate="no">
+						{content.category}
+					</dd>
+				</div>
+				<div>
+					<dt className="text-muted-foreground text-sm">Difficulty</dt>
+					<dd className="break-words">{content.difficulty}</dd>
+				</div>
+				<div>
+					{/* An approver has to see which answer is marked correct, or
+					    there is nothing here to approve. */}
+					<dt className="text-muted-foreground text-sm">Choices</dt>
+					<dd>
+						<ul className="min-w-0 list-disc pl-5">
+							{content.choices.map(choice => (
+								<li key={choice.label} className="break-words">
+									{choice.label}
+									{choice.correct ? " — correct answer" : ""}
+								</li>
+							))}
+						</ul>
+					</dd>
+				</div>
+				<div>
+					<dt className="text-muted-foreground text-sm">Selection</dt>
+					<dd>{content.active ? "Active" : "Inactive — withheld from the app"}</dd>
+				</div>
+			</dl>
+		)
+	}
 
 	return (
 		<dl className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">

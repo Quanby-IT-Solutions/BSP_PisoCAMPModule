@@ -6,6 +6,12 @@ import {
 	type UpdatePisoCampContentInput,
 } from "@repo/contracts"
 
+export interface TriviaChoiceFormValue {
+	clientId: string
+	label: string
+	correct: boolean
+}
+
 export interface RelatedLinkFormValue {
 	clientId: string
 	kind: "external" | "internal" | "topic"
@@ -26,6 +32,11 @@ export interface ContentFormValues {
 	/** Permille of the image's width and height, as typed. */
 	hotspotX: string
 	hotspotY: string
+	/** Trivia questions only. */
+	category: string
+	difficulty: "" | "easy" | "medium" | "hard"
+	choices: TriviaChoiceFormValue[]
+	active: boolean
 	relatedLinks: RelatedLinkFormValue[]
 }
 
@@ -122,6 +133,16 @@ export const CURRENCY_SERIES_OPTIONS: readonly SeriesOption[] = [
 	},
 ] as const
 
+export function emptyTriviaChoice(
+	generate: () => string = () => crypto.randomUUID()
+): TriviaChoiceFormValue {
+	return { clientId: generate(), label: "", correct: false }
+}
+
+/** The most choices a question may offer, from the contract. */
+export const MAXIMUM_TRIVIA_CHOICES = 6
+export const MINIMUM_TRIVIA_CHOICES = 2
+
 export function createEmptyContentForm(contentType: PisoCampContentType): ContentFormValues {
 	return {
 		contentType,
@@ -134,6 +155,12 @@ export function createEmptyContentForm(contentType: PisoCampContentType): Conten
 		featureLevel: "",
 		hotspotX: "",
 		hotspotY: "",
+		category: "",
+		difficulty: "",
+		// Two blank choices, because a question needs at least two and an empty
+		// list makes the editor guess how many to add.
+		choices: [emptyTriviaChoice(), emptyTriviaChoice()],
+		active: true,
 		relatedLinks: [],
 	}
 }
@@ -213,6 +240,19 @@ function rawContent(values: ContentFormValues) {
 			...rawHotspot(values),
 		}
 	}
+	if (values.contentType === "trivia_question") {
+		return {
+			...common,
+			contentType: values.contentType,
+			category: values.category,
+			difficulty: values.difficulty,
+			choices: values.choices.map(choice => ({
+				label: choice.label,
+				correct: choice.correct,
+			})),
+			active: values.active,
+		}
+	}
 	if (values.contentType === "link") {
 		return {
 			contentType: values.contentType,
@@ -241,6 +281,9 @@ function friendlyFieldName(key: string) {
 			primaryUrl: "Primary URL",
 			featureLevel: "Disclosure level",
 			hotspot: "Hotspot position",
+			category: "Category",
+			difficulty: "Difficulty",
+			choices: "Choices",
 			relatedLinks: "Related links",
 		}[key] ?? "Field"
 	)
@@ -278,6 +321,12 @@ function errorsFromIssues(
 			errors[key] = "Enter a valid HTTPS URL."
 			continue
 		}
+		if (key === "choices") {
+			// The contract reports the reason precisely; a generic "invalid" here
+			// would tell an editor nothing about which rule they broke.
+			errors[key] = issue.message
+			continue
+		}
 		if (key === "hotspot") {
 			errors[key] = "Enter both positions as whole numbers between 0 and 1000."
 			continue
@@ -285,7 +334,9 @@ function errorsFromIssues(
 		const required =
 			issue.message.toLowerCase().includes("too small") ||
 			((key === "seriesCode" || key === "denominationCode") && !values[key]) ||
-			(key === "featureLevel" && !values.featureLevel)
+			(key === "featureLevel" && !values.featureLevel) ||
+			(key === "difficulty" && !values.difficulty) ||
+			(key === "category" && !values.category)
 		errors[key] = required ? `${friendlyFieldName(key)} is required.` : issue.message
 	}
 	return errors

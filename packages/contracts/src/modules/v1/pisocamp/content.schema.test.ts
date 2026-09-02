@@ -16,6 +16,7 @@ import {
 	CONTENT_FEATURE_LEVELS,
 	CONTENT_STATUSES,
 	CONTENT_TYPES,
+	TRIVIA_DIFFICULTIES,
 	CreatePisoCampContentInputSchema,
 	ListPisoCampContentInputSchema,
 	ListPisoCampContentOutputSchema,
@@ -102,7 +103,14 @@ describe("CM-1 draft input schemas", () => {
 	})
 
 	it("exports the exact content type and lifecycle vocabularies", () => {
-		expect([...CONTENT_TYPES]).toEqual(["banknote", "coin", "security_feature", "advisory", "link"])
+		expect([...CONTENT_TYPES]).toEqual([
+			"banknote",
+			"coin",
+			"security_feature",
+			"advisory",
+			"link",
+			"trivia_question",
+		])
 		expect([...CONTENT_STATUSES]).toEqual([
 			"draft",
 			"submitted_for_review",
@@ -710,5 +718,137 @@ describe("CE-3 security feature disclosure level", () => {
 
 		expect(parsed.success).toBe(false)
 		expect(parsed.error?.issues.some(issue => issue.path.includes("hotspot"))).toBe(true)
+	})
+})
+
+describe("GM-1 trivia questions", () => {
+	const question = {
+		contentType: "trivia_question",
+		title: "Which feature is raised to the touch?",
+		summary: "A question about what to check on a banknote.",
+		body: "The embossed value is raised, so it can be felt with a fingertip.",
+		category: "security-features",
+		difficulty: "easy",
+		choices: [
+			{ label: "The embossed value", correct: true },
+			{ label: "The serial number", correct: false },
+		],
+		active: true,
+	} as const
+
+	it("is a content type like any other", () => {
+		expect([...CONTENT_TYPES]).toContain("trivia_question")
+		expect([...TRIVIA_DIFFICULTIES]).toEqual(["easy", "medium", "hard"])
+		expect(PisoCampContentDraftSchema.safeParse(question).success).toBe(true)
+	})
+
+	it("accepts two to six choices and nothing else", () => {
+		const choices = (count: number) =>
+			Array.from({ length: count }, (_, index) => ({
+				label: `Choice ${index}`,
+				correct: index === 0,
+			}))
+
+		for (const count of [2, 3, 4, 5, 6]) {
+			expect(
+				PisoCampContentDraftSchema.safeParse({ ...question, choices: choices(count) }).success,
+				`${count} choices`
+			).toBe(true)
+		}
+		for (const count of [0, 1, 7]) {
+			expect(
+				PisoCampContentDraftSchema.safeParse({ ...question, choices: choices(count) }).success,
+				`${count} choices`
+			).toBe(false)
+		}
+	})
+
+	it("requires exactly one correct answer", () => {
+		for (const choices of [
+			[
+				{ label: "A", correct: false },
+				{ label: "B", correct: false },
+			],
+			[
+				{ label: "A", correct: true },
+				{ label: "B", correct: true },
+			],
+		]) {
+			const parsed = PisoCampContentDraftSchema.safeParse({ ...question, choices })
+			expect(parsed.success).toBe(false)
+			expect(parsed.error?.issues.some(issue => issue.path.includes("choices"))).toBe(true)
+		}
+	})
+
+	it("refuses repeated, empty or marked-up choices", () => {
+		for (const choices of [
+			[
+				{ label: "Same", correct: true },
+				{ label: "Same", correct: false },
+			],
+			[
+				{ label: "", correct: true },
+				{ label: "B", correct: false },
+			],
+			[
+				{ label: "<b>A</b>", correct: true },
+				{ label: "B", correct: false },
+			],
+		]) {
+			expect(
+				PisoCampContentDraftSchema.safeParse({ ...question, choices }).success,
+				JSON.stringify(choices)
+			).toBe(false)
+		}
+	})
+
+	it("trims a padded label rather than refusing it", () => {
+		// The contract normalises and the database's `btrim(label) = label`
+		// check is the backstop, so the two cannot disagree about what is
+		// stored.
+		const parsed = PisoCampContentDraftSchema.parse({
+			...question,
+			choices: [
+				{ label: "  The embossed value  ", correct: true },
+				{ label: "The serial number", correct: false },
+			],
+		}) as { choices: { label: string }[] }
+
+		expect(parsed.choices[0]?.label).toBe("The embossed value")
+	})
+
+	it("requires a catalog-shaped category and a known difficulty", () => {
+		for (const override of [
+			{ category: "Security Features" },
+			{ category: "" },
+			{ difficulty: "impossible" },
+		]) {
+			expect(
+				PisoCampContentDraftSchema.safeParse({ ...question, ...override }).success,
+				JSON.stringify(override)
+			).toBe(false)
+		}
+	})
+
+	it("makes the active flag explicit rather than assumed", () => {
+		// Required, so an editor toggling a question off is a deliberate act and
+		// the input and output shapes agree.
+		const { active: _active, ...withoutActive } = question
+		expect(PisoCampContentDraftSchema.safeParse(withoutActive).success).toBe(false)
+		expect(
+			PisoCampContentDraftSchema.safeParse({ ...question, active: false }).success
+		).toBe(true)
+	})
+
+	it("refuses question fields on any other content type", () => {
+		expect(
+			PisoCampContentDraftSchema.safeParse({
+				contentType: "advisory",
+				title: "Advisory",
+				summary: "An advisory",
+				body: "Body copy.",
+				category: "security-features",
+			}).success
+		).toBe(false)
 	})
 })

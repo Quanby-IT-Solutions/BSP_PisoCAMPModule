@@ -17,6 +17,7 @@ import {
 	pisoCampCurrencyDenominations,
 	pisoCampCurrencySeries,
 	relatedLinks,
+	triviaQuestionDetails,
 	users,
 } from "@repo/db/schema"
 
@@ -31,6 +32,8 @@ import type { V1Inputs } from "@/config/contract-types"
 import { copyVersionAssets } from "../assets/version-assets"
 import {
 	fromContentVersion,
+	toTriviaDetailValues,
+	withTriviaDetail,
 	type ContentVersionRow,
 	getContentDetail,
 	selectContentLinks,
@@ -68,6 +71,10 @@ export class ContentService {
 				status: "draft",
 				createdBy: actorId,
 				...this.toVersionValues(input.content),
+			})
+			await this.insertTriviaDetail(tx, input.content, {
+				contentItemId: itemId,
+				contentVersionId: versionId,
 			})
 			await this.insertLinks(tx, versionId, input.relatedLinks)
 			await tx
@@ -127,6 +134,10 @@ export class ContentService {
 				createdBy: actorId,
 				...this.toVersionValues(input.content),
 			})
+			await this.insertTriviaDetail(tx, input.content, {
+				contentItemId: item.id,
+				contentVersionId: versionId,
+			})
 			await copyVersionAssets(tx, {
 				contentItemId: item.id,
 				sourceVersionId: current.id,
@@ -137,7 +148,12 @@ export class ContentService {
 				.update(contentItems)
 				.set({ currentWorkingVersionId: versionId, lastEditedBy: actorId, updatedAt: new Date() })
 				.where(eq(contentItems.id, item.id))
-			const changedFields = this.changedFields(current, oldLinks, input.content, input.relatedLinks)
+			const changedFields = this.changedFields(
+				await withTriviaDetail(tx, current),
+				oldLinks,
+				input.content,
+				input.relatedLinks
+			)
 			await this.auditService.record(
 				{
 					domain: "content",
@@ -168,6 +184,8 @@ export class ContentService {
 			input.denominationCode
 				? eq(contentVersions.denominationCode, input.denominationCode)
 				: undefined,
+			input.category ? eq(triviaQuestionDetails.category, input.category) : undefined,
+			input.difficulty ? eq(triviaQuestionDetails.difficulty, input.difficulty) : undefined,
 			input.search
 				? sql`to_tsvector('simple', ${contentVersions.title} || ' ' || ${contentVersions.summary}) @@ plainto_tsquery('simple', ${input.search})`
 				: undefined,
@@ -181,6 +199,9 @@ export class ContentService {
 			currentVersionNo: contentVersions.versionNo,
 			seriesCode: contentVersions.seriesCode,
 			denominationCode: contentVersions.denominationCode,
+			triviaCategory: triviaQuestionDetails.category,
+			triviaDifficulty: triviaQuestionDetails.difficulty,
+			triviaActive: triviaQuestionDetails.active,
 			creatorId: creator.id,
 			creatorName: creator.name,
 			editorId: editor.id,
@@ -194,6 +215,10 @@ export class ContentService {
 			.innerJoin(contentVersions, eq(contentItems.currentWorkingVersionId, contentVersions.id))
 			.innerJoin(creator, eq(contentItems.createdBy, creator.id))
 			.innerJoin(editor, eq(contentItems.lastEditedBy, editor.id))
+			.leftJoin(
+				triviaQuestionDetails,
+				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
+			)
 			.where(where)
 			.orderBy(desc(contentItems.updatedAt), asc(contentItems.id))
 			.limit(limit)
@@ -202,6 +227,10 @@ export class ContentService {
 			.select({ total: count() })
 			.from(contentItems)
 			.innerJoin(contentVersions, eq(contentItems.currentWorkingVersionId, contentVersions.id))
+			.leftJoin(
+				triviaQuestionDetails,
+				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
+			)
 			.where(where)
 		return {
 			items: rows.map(row => this.toSummary(row)),
@@ -270,6 +299,16 @@ export class ContentService {
 		return fromContentVersion(row)
 	}
 
+	private async insertTriviaDetail(
+		tx: DatabaseTransaction,
+		content: PisoCampContentDraft,
+		identity: { contentItemId: string; contentVersionId: string }
+	) {
+		const values = toTriviaDetailValues(content, identity)
+		if (values === null) return
+		await tx.insert(triviaQuestionDetails).values(values)
+	}
+
 	private async insertLinks(
 		tx: DatabaseTransaction,
 		versionId: string,
@@ -298,7 +337,7 @@ export class ContentService {
 	}
 
 	private changedFields(
-		current: typeof contentVersions.$inferSelect,
+		current: ContentVersionRow,
 		oldLinks: PisoCampRelatedLinkOutput[],
 		content: PisoCampContentDraft,
 		newLinks: PisoCampRelatedLinkInput[]
@@ -308,6 +347,10 @@ export class ContentService {
 			"body",
 			"contentType",
 			"denominationCode",
+			"active",
+			"category",
+			"choices",
+			"difficulty",
 			"featureLevel",
 			"hotspot",
 			"primaryUrl",
@@ -342,6 +385,9 @@ export class ContentService {
 		currentVersionNo: number
 		seriesCode: string | null
 		denominationCode: string | null
+		triviaCategory: string | null
+		triviaDifficulty: "easy" | "medium" | "hard" | null
+		triviaActive: boolean | null
 		creatorId: string
 		creatorName: string
 		editorId: string
@@ -362,6 +408,14 @@ export class ContentService {
 		}
 		if (row.contentType === "advisory" || row.contentType === "link")
 			return common as PisoCampContentSummary
+		if (row.contentType === "trivia_question") {
+			return {
+				...common,
+				category: row.triviaCategory!,
+				difficulty: row.triviaDifficulty!,
+				active: row.triviaActive ?? true,
+			} as PisoCampContentSummary
+		}
 		return {
 			...common,
 			seriesCode: row.seriesCode!,

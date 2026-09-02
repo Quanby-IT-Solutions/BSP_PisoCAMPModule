@@ -35,6 +35,7 @@ import {
 	contentItems,
 	contentVersions,
 	relatedLinks,
+	triviaQuestionDetails,
 	users,
 } from "@repo/db/schema"
 
@@ -45,6 +46,7 @@ import { db } from "@/common/database/database.client"
 import { copyVersionAssets, selectVersionAssets } from "../assets/version-assets"
 import {
 	fromContentVersion,
+	triviaDetailColumns,
 	selectContentLinks,
 	selectContentLinksByVersionIds,
 	type ContentDatabase,
@@ -110,7 +112,7 @@ export interface PisoCampPublishedBundleCandidate {
 export interface PisoCampBundleExclusion {
 	itemId: string
 	versionId: string
-	reason: "second_level_security_feature"
+	reason: "second_level_security_feature" | "inactive_trivia_question"
 }
 
 /**
@@ -131,6 +133,29 @@ function carriedContentFields(source: typeof contentVersions.$inferSelect) {
 		hotspotXPermille: source.hotspotXPermille,
 		hotspotYPermille: source.hotspotYPermille,
 	}
+}
+
+/**
+ * Carries a version's GM-1 child row forward.
+ *
+ * A transition creates a new version row, and a question whose choices did not
+ * come with it would be a question with no answers. Copied here so the workflow
+ * needs to know only that some content types have a child row, not what one is.
+ */
+async function copyTriviaDetail(
+	tx: ContentDatabase,
+	input: { contentItemId: string; sourceVersionId: string; targetVersionId: string }
+): Promise<void> {
+	const [detail] = await tx
+		.select()
+		.from(triviaQuestionDetails)
+		.where(eq(triviaQuestionDetails.contentVersionId, input.sourceVersionId))
+	if (!detail) return
+	await tx.insert(triviaQuestionDetails).values({
+		...detail,
+		contentVersionId: input.targetVersionId,
+		contentItemId: input.contentItemId,
+	})
 }
 
 const itemCreator = alias(users, "workflow_item_creator")
@@ -278,6 +303,11 @@ export class ContentWorkflowService {
 				publishedAt,
 				transitionAction: action,
 				transitionComments: comments,
+			})
+			await copyTriviaDetail(tx, {
+				contentItemId: item.id,
+				sourceVersionId: current.id,
+				targetVersionId: versionId,
 			})
 			await copyVersionAssets(tx, {
 				contentItemId: item.id,
@@ -453,9 +483,14 @@ export class ContentWorkflowService {
 				transitionAction: "approve",
 				transitionComments: input.comments,
 			})
-			// Assets and links come from the SOURCE, not the working version:
-			// restoring copy while keeping the current attachments would produce
-			// a combination nobody ever approved.
+			// Assets, choices and links come from the SOURCE, not the working
+			// version: restoring copy while keeping the current attachments would
+			// produce a combination nobody ever approved.
+			await copyTriviaDetail(tx, {
+				contentItemId: item.id,
+				sourceVersionId: source.id,
+				targetVersionId: versionId,
+			})
 			await copyVersionAssets(tx, {
 				contentItemId: item.id,
 				sourceVersionId: source.id,
@@ -692,6 +727,7 @@ export class ContentWorkflowService {
 				featureLevel: contentVersions.featureLevel,
 				hotspotXPermille: contentVersions.hotspotXPermille,
 				hotspotYPermille: contentVersions.hotspotYPermille,
+				...triviaDetailColumns,
 				createdAt: contentVersions.createdAt,
 				creatorId: versionCreator.id,
 				creatorName: versionCreator.name,
@@ -709,6 +745,10 @@ export class ContentWorkflowService {
 			.innerJoin(versionCreator, eq(contentVersions.createdBy, versionCreator.id))
 			.leftJoin(approver, eq(contentVersions.approvedBy, approver.id))
 			.leftJoin(publisher, eq(contentVersions.publishedBy, publisher.id))
+			.leftJoin(
+				triviaQuestionDetails,
+				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
+			)
 			.where(eq(contentVersions.itemId, item.id))
 			.orderBy(desc(contentVersions.versionNo))
 			.limit(limit)
@@ -884,6 +924,7 @@ export class ContentWorkflowService {
 				featureLevel: contentVersions.featureLevel,
 				hotspotXPermille: contentVersions.hotspotXPermille,
 				hotspotYPermille: contentVersions.hotspotYPermille,
+				...triviaDetailColumns,
 				versionCreatedAt: contentVersions.createdAt,
 				transitionAction: contentVersions.transitionAction,
 				transitionComments: contentVersions.transitionComments,
@@ -903,6 +944,10 @@ export class ContentWorkflowService {
 			.innerJoin(versionCreator, eq(contentVersions.createdBy, versionCreator.id))
 			.leftJoin(approver, eq(contentVersions.approvedBy, approver.id))
 			.leftJoin(publisher, eq(contentVersions.publishedBy, publisher.id))
+			.leftJoin(
+				triviaQuestionDetails,
+				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
+			)
 			.where(eq(contentItems.id, itemId))
 		if (!row) throw new ORPCError("NOT_FOUND", { message: "Content item not found" })
 		if (!row.transitionAction) {
@@ -968,6 +1013,7 @@ export class ContentWorkflowService {
 				featureLevel: contentVersions.featureLevel,
 				hotspotXPermille: contentVersions.hotspotXPermille,
 				hotspotYPermille: contentVersions.hotspotYPermille,
+				...triviaDetailColumns,
 			})
 			.from(contentItems)
 			.innerJoin(
@@ -977,10 +1023,19 @@ export class ContentWorkflowService {
 					eq(contentVersions.itemId, contentItems.id)
 				)
 			)
+			.leftJoin(
+				triviaQuestionDetails,
+				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
+			)
 			.where(and(eq(contentItems.status, "published"), eq(contentVersions.status, "published")))
 			.orderBy(asc(contentItems.id))
-		const excluded = rows.filter(row => row.featureLevel === "second")
-		const included = rows.filter(row => row.featureLevel !== "second")
+		// GM-1: an inactive question is withheld from the bundle exactly as a
+		// second-level feature is — published, but not presented.
+		const isWithheld = (row: (typeof rows)[number]) =>
+			row.featureLevel === "second" ||
+			(row.contentType === "trivia_question" && row.triviaActive === false)
+		const excluded = rows.filter(isWithheld)
+		const included = rows.filter(row => !isWithheld(row))
 		const linksByVersionId = await selectContentLinksByVersionIds(
 			database,
 			included.map(row => row.versionId)
@@ -996,7 +1051,10 @@ export class ContentWorkflowService {
 			exclusions: excluded.map(row => ({
 				itemId: row.itemId,
 				versionId: row.versionId,
-				reason: "second_level_security_feature" as const,
+				reason:
+					row.featureLevel === "second"
+						? ("second_level_security_feature" as const)
+						: ("inactive_trivia_question" as const),
 			})),
 		}
 	}

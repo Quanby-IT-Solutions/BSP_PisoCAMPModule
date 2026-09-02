@@ -160,3 +160,100 @@ describe("ContentListView", () => {
 		)
 	})
 })
+
+describe("ContentListView trivia filters", () => {
+	beforeEach(() => {
+		searchParams = new URLSearchParams()
+		replace.mockReset()
+		replace.mockImplementation((url: string) => {
+			searchParams = new URLSearchParams(url.split("?")[1] ?? "")
+		})
+		useContentList.mockReset()
+		useContentList.mockReturnValue({
+			isPending: false,
+			isError: false,
+			data: { items: [], page: 1, limit: 20, total: 0 },
+			refetch: vi.fn(),
+		})
+	})
+
+	it("offers category and difficulty only while listing questions", () => {
+		const { rerender } = render(<ContentListView />)
+		expect(screen.queryByLabelText(/^category/i)).not.toBeInTheDocument()
+		expect(screen.queryByRole("combobox", { name: /difficulty/i })).not.toBeInTheDocument()
+
+		searchParams = new URLSearchParams("contentType=trivia_question")
+		rerender(<ContentListView />)
+
+		expect(screen.getByLabelText(/^category/i)).toBeInTheDocument()
+		expect(screen.getByRole("combobox", { name: /difficulty/i })).toBeInTheDocument()
+	})
+
+	it("narrows by category and returns to the first page", async () => {
+		const user = userEvent.setup()
+		searchParams = new URLSearchParams("contentType=trivia_question&page=3")
+		render(<ContentListView />)
+
+		await user.type(screen.getByLabelText(/^category/i), "security-features")
+		await user.click(screen.getByRole("button", { name: /apply category/i }))
+
+		expect(replace).toHaveBeenCalledWith(
+			"/pisocamp/content?contentType=trivia_question&category=security-features"
+		)
+	})
+
+	it("narrows by difficulty", async () => {
+		const user = userEvent.setup()
+		searchParams = new URLSearchParams("contentType=trivia_question")
+		render(<ContentListView />)
+
+		const trigger = screen.getByRole("combobox", { name: /difficulty/i })
+		await user.click(trigger)
+		await user.click(await screen.findByRole("option", { name: "Hard" }))
+
+		expect(replace).toHaveBeenCalledWith(
+			"/pisocamp/content?contentType=trivia_question&difficulty=hard"
+		)
+	})
+
+	it("sends the question filters to the query", () => {
+		searchParams = new URLSearchParams(
+			"contentType=trivia_question&category=security-features&difficulty=easy"
+		)
+		render(<ContentListView />)
+
+		expect(useContentList).toHaveBeenLastCalledWith({
+			page: 1,
+			limit: 20,
+			contentType: "trivia_question",
+			category: "security-features",
+			difficulty: "easy",
+		})
+	})
+
+	it("ignores question filters left over from another content type", () => {
+		// A stale category in the URL must not silently filter a banknote list
+		// by something banknotes do not have.
+		searchParams = new URLSearchParams(
+			"contentType=banknote&category=security-features&difficulty=easy"
+		)
+		render(<ContentListView />)
+
+		expect(useContentList).toHaveBeenLastCalledWith({
+			page: 1,
+			limit: 20,
+			contentType: "banknote",
+		})
+	})
+
+	it("ignores a difficulty that is not one of the three", () => {
+		searchParams = new URLSearchParams("contentType=trivia_question&difficulty=impossible")
+		render(<ContentListView />)
+
+		expect(useContentList).toHaveBeenLastCalledWith({
+			page: 1,
+			limit: 20,
+			contentType: "trivia_question",
+		})
+	})
+})

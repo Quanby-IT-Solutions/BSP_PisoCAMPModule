@@ -557,7 +557,7 @@ export const contentItems = createTable(
 		unique("content_item_id_type_unique").on(t.id, t.contentType),
 		check(
 			"content_item_type_check",
-			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link')`
+			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question')`
 		),
 		check(
 			"content_item_status_check",
@@ -646,7 +646,7 @@ export const contentVersions = createTable(
 		check("content_version_number_check", sql`${t.versionNo} > 0`),
 		check(
 			"content_version_type_check",
-			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link')`
+			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question')`
 		),
 		check(
 			"content_version_status_check",
@@ -660,6 +660,7 @@ export const contentVersions = createTable(
 				or (${t.contentType} = 'security_feature' and ${t.seriesCode} is not null and ${t.denominationCode} is not null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
 				or (${t.contentType} = 'advisory' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
 				or (${t.contentType} = 'link' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.primaryUrl} is not null)
+				or (${t.contentType} = 'trivia_question' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
 			)`
 		),
 		check(
@@ -895,6 +896,64 @@ export const contentBundles = createTable(
 		index("content_bundle_ready_version_idx")
 			.on(t.version.desc())
 			.where(sql`${t.state} = 'ready'`),
+	]
+)
+
+/**
+ * GM-1 trivia question, one row per content version.
+ *
+ * A question is content: it is created, submitted, approved and published
+ * through CM-3 like anything else, and this table carries only what a question
+ * has that other content does not. The question text is the version's title and
+ * the explanation is its body, so the workflow already versions and audits them.
+ */
+export const triviaQuestionDetails = createTable(
+	"trivia_question_detail",
+	t => ({
+		contentVersionId: t.uuid("content_version_id").primaryKey(),
+		contentItemId: t.uuid("content_item_id").notNull(),
+		category: t.text("category").notNull(),
+		difficulty: t.text("difficulty").notNull().$type<"easy" | "medium" | "hard">(),
+		/**
+		 * Ordered choices. JSONB rather than a second child table because a
+		 * question's choices are meaningless apart from it and are always read,
+		 * written and versioned together — and because "exactly one is correct"
+		 * is then one check on one row rather than a constraint across rows.
+		 */
+		choices: t.jsonb("choices").notNull().$type<{ label: string; correct: boolean }[]>(),
+		/** Excluded from selection even while published. */
+		active: t.boolean("active").notNull().default(true),
+	}),
+	t => [
+		foreignKey({
+			columns: [t.contentItemId, t.contentVersionId],
+			foreignColumns: [contentVersions.itemId, contentVersions.id],
+			name: "trivia_question_detail_version_fkey",
+		}).onDelete("cascade"),
+		check(
+			"trivia_question_detail_category_check",
+			sql`${t.category} = btrim(${t.category}) and char_length(${t.category}) between 1 and 64 and ${t.category} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`
+		),
+		check(
+			"trivia_question_detail_difficulty_check",
+			sql`${t.difficulty} in ('easy', 'medium', 'hard')`
+		),
+		check(
+			"trivia_question_detail_choices_shape_check",
+			sql`jsonb_typeof(${t.choices}) = 'array' and jsonb_array_length(${t.choices}) between 2 and 6`
+		),
+		check(
+			"trivia_question_detail_choices_correct_check",
+			sql`pisocamp_trivia_correct_count(${t.choices}) = 1`
+		),
+		check(
+			"trivia_question_detail_choices_labels_check",
+			sql`pisocamp_trivia_labels_valid(${t.choices})`
+		),
+		index("trivia_question_detail_item_idx").on(t.contentItemId),
+		index("trivia_question_detail_selection_idx")
+			.on(t.category, t.difficulty)
+			.where(sql`${t.active}`),
 	]
 )
 

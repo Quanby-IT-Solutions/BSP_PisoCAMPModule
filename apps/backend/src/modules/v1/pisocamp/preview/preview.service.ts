@@ -16,7 +16,11 @@ import { db } from "@/common/database/database.client"
 
 import { AssetObjectCorruptionError, PostgresAssetObjectStore } from "../assets/asset-object-store"
 import { selectVersionAssets } from "../assets/version-assets"
-import { fromContentVersion, selectContentLinks } from "../content/content-mapping"
+import {
+	fromContentVersion,
+	selectContentLinks,
+	withTriviaDetail,
+} from "../content/content-mapping"
 import {
 	PreviewTokenError,
 	signPreviewToken,
@@ -183,7 +187,7 @@ export class PreviewService {
 			versionNo: version.versionNo,
 			status: version.status as PisoCampPreviewableStatus,
 			contentType: version.contentType,
-			content: fromContentVersion(version),
+			content: fromContentVersion(await withTriviaDetail(db, version)),
 			relatedLinks,
 			assets: attachments.map(entry => ({
 				role: entry.role,

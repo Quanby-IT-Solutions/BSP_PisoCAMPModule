@@ -6,7 +6,13 @@ import type {
 	PisoCampContentDraft,
 	PisoCampRelatedLinkOutput,
 } from "@repo/contracts"
-import { contentItems, contentVersions, relatedLinks, users } from "@repo/db/schema"
+import {
+	contentItems,
+	contentVersions,
+	relatedLinks,
+	triviaQuestionDetails,
+	users,
+} from "@repo/db/schema"
 
 import type { DatabaseTransaction } from "@/common/database/database-transaction.context"
 import { type db } from "@/common/database/database.client"
@@ -15,6 +21,27 @@ export type ContentDatabase = typeof db | DatabaseTransaction
 
 const creator = alias(users, "content_detail_creator")
 const editor = alias(users, "content_detail_editor")
+
+/**
+ * The GM-1 child row for a version, or null when the content is not a question.
+ *
+ * Separate from [toContentVersionValues] because it writes a different table:
+ * the workflow copies both together, and neither may exist without the other.
+ */
+export function toTriviaDetailValues(
+	content: PisoCampContentDraft,
+	identity: { contentItemId: string; contentVersionId: string }
+) {
+	if (content.contentType !== "trivia_question") return null
+	return {
+		contentVersionId: identity.contentVersionId,
+		contentItemId: identity.contentItemId,
+		category: content.category,
+		difficulty: content.difficulty,
+		choices: content.choices,
+		active: content.active,
+	}
+}
 
 export function toContentVersionValues(content: PisoCampContentDraft) {
 	return {
@@ -31,7 +58,31 @@ export function toContentVersionValues(content: PisoCampContentDraft) {
 	}
 }
 
-export interface ContentVersionRow {
+export interface TriviaChoiceRow {
+	label: string
+	correct: boolean
+}
+
+/**
+ * GM-1 fields, joined from `trivia_question_detail`. All null for anything that
+ * is not a question, which is what the left join yields.
+ */
+export interface TriviaDetailRow {
+	triviaCategory: string | null
+	triviaDifficulty: "easy" | "medium" | "hard" | null
+	triviaChoices: TriviaChoiceRow[] | null
+	triviaActive: boolean | null
+}
+
+/** The trivia columns every version select joins, so one shape reads them all. */
+export const triviaDetailColumns = {
+	triviaCategory: triviaQuestionDetails.category,
+	triviaDifficulty: triviaQuestionDetails.difficulty,
+	triviaChoices: triviaQuestionDetails.choices,
+	triviaActive: triviaQuestionDetails.active,
+} as const
+
+export interface ContentVersionRow extends TriviaDetailRow {
 	contentType: PisoCampContentDraft["contentType"]
 	title: string
 	summary: string
@@ -57,6 +108,17 @@ export function fromContentVersion(row: ContentVersionRow): PisoCampContentDraft
 	if (row.contentType === "advisory") {
 		return { ...common, contentType: "advisory", body: row.body! }
 	}
+	if (row.contentType === "trivia_question") {
+		return {
+			...common,
+			contentType: "trivia_question",
+			body: row.body!,
+			category: row.triviaCategory!,
+			difficulty: row.triviaDifficulty!,
+			choices: row.triviaChoices ?? [],
+			active: row.triviaActive ?? true,
+		}
+	}
 	if (row.contentType === "security_feature") {
 		return {
 			...common,
@@ -78,6 +140,38 @@ export function fromContentVersion(row: ContentVersionRow): PisoCampContentDraft
 		seriesCode: row.seriesCode as never,
 		denominationCode: row.denominationCode!,
 	} as PisoCampContentDraft
+}
+
+/**
+ * Merges a version's GM-1 child row onto a whole-table select.
+ *
+ * The joined selects read the trivia columns directly; this is for the two
+ * callers that already hold a full `content_version` row and would otherwise
+ * render a question with no choices.
+ */
+export async function withTriviaDetail<
+	T extends { id: string; contentType: PisoCampContentDraft["contentType"] },
+>(database: ContentDatabase, version: T): Promise<T & TriviaDetailRow> {
+	if (version.contentType !== "trivia_question") {
+		return {
+			...version,
+			triviaCategory: null,
+			triviaDifficulty: null,
+			triviaChoices: null,
+			triviaActive: null,
+		}
+	}
+	const [detail] = await database
+		.select(triviaDetailColumns)
+		.from(triviaQuestionDetails)
+		.where(eq(triviaQuestionDetails.contentVersionId, version.id))
+	return {
+		...version,
+		triviaCategory: detail?.triviaCategory ?? null,
+		triviaDifficulty: detail?.triviaDifficulty ?? null,
+		triviaChoices: detail?.triviaChoices ?? null,
+		triviaActive: detail?.triviaActive ?? null,
+	}
 }
 
 export async function selectContentLinks(
@@ -140,11 +234,16 @@ export async function getContentDetail(
 			featureLevel: contentVersions.featureLevel,
 			hotspotXPermille: contentVersions.hotspotXPermille,
 			hotspotYPermille: contentVersions.hotspotYPermille,
+			...triviaDetailColumns,
 		})
 		.from(contentItems)
 		.innerJoin(contentVersions, eq(contentItems.currentWorkingVersionId, contentVersions.id))
 		.innerJoin(creator, eq(contentItems.createdBy, creator.id))
 		.innerJoin(editor, eq(contentItems.lastEditedBy, editor.id))
+		.leftJoin(
+			triviaQuestionDetails,
+			eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
+		)
 		.where(eq(contentItems.id, itemId))
 	if (!row) return null
 	return {

@@ -1,6 +1,13 @@
 import { z } from "zod"
 
-export const CONTENT_TYPES = ["banknote", "coin", "security_feature", "advisory", "link"] as const
+export const CONTENT_TYPES = [
+	"banknote",
+	"coin",
+	"security_feature",
+	"advisory",
+	"link",
+	"trivia_question",
+] as const
 export const PisoCampContentTypeSchema = z.enum(CONTENT_TYPES)
 
 export const CONTENT_STATUSES = [
@@ -139,6 +146,58 @@ const SecurityFeatureDraftSchema = z
 		{ message: "Only a first-level feature can carry a hotspot", path: ["hotspot"] }
 	)
 
+export const TRIVIA_DIFFICULTIES = ["easy", "medium", "hard"] as const
+export const PisoCampTriviaDifficultySchema = z.enum(TRIVIA_DIFFICULTIES)
+
+const TriviaChoiceSchema = z
+	.object({
+		label: z.string().trim().min(1).max(200).refine(value => !HTML_MARKUP_PATTERN.test(value), {
+			message: "A choice must be plain text",
+		}),
+		correct: z.boolean(),
+	})
+	.strict()
+
+/**
+ * GM-1 trivia question.
+ *
+ * The question text is the item's title and the explanation is its body, so the
+ * workflow already versions, diffs and audits both without knowing what a
+ * question is.
+ */
+const TriviaQuestionDraftSchema = z
+	.object({
+		contentType: z.literal("trivia_question"),
+		title: TitleSchema,
+		summary: SummarySchema,
+		body: BodySchema,
+		category: CatalogCodeSchema,
+		difficulty: PisoCampTriviaDifficultySchema,
+		choices: z.array(TriviaChoiceSchema).min(2).max(6),
+		// Required rather than defaulted: the input and output types then agree,
+		// and an editor toggling a question off is an explicit act.
+		active: z.boolean(),
+	})
+	.strict()
+	.superRefine((question, context) => {
+		const correct = question.choices.filter(choice => choice.correct)
+		if (correct.length !== 1) {
+			context.addIssue({
+				code: "custom",
+				message: "Exactly one choice must be correct",
+				path: ["choices"],
+			})
+		}
+		const labels = new Set(question.choices.map(choice => choice.label))
+		if (labels.size !== question.choices.length) {
+			context.addIssue({
+				code: "custom",
+				message: "Choices must be distinct",
+				path: ["choices"],
+			})
+		}
+	})
+
 const AdvisoryDraftSchema = z
 	.object({
 		contentType: z.literal("advisory"),
@@ -164,6 +223,7 @@ export const PisoCampContentDraftSchema = z.discriminatedUnion("contentType", [
 	SecurityFeatureDraftSchema,
 	AdvisoryDraftSchema,
 	LinkDraftSchema,
+	TriviaQuestionDraftSchema,
 ])
 
 const ExternalRelatedLinkInputSchema = z
@@ -302,6 +362,10 @@ export const ListPisoCampContentInputSchema = z
 		status: PisoCampContentStatusSchema.optional(),
 		seriesCode: PisoCampCurrencySeriesCodeSchema.optional(),
 		denominationCode: DenominationCodeSchema.optional(),
+		// GM-1: a question pool is browsed by what a question is about and how
+		// hard it is, not by series and denomination.
+		category: CatalogCodeSchema.optional(),
+		difficulty: PisoCampTriviaDifficultySchema.optional(),
 		search: PlainTextSchema(160).optional(),
 	})
 	.strict()
@@ -352,6 +416,15 @@ export const PisoCampContentSummarySchema = z.discriminatedUnion("contentType", 
 	...CurrencyContentSummarySchemas,
 	z.object({ ...SummaryCommonShape, contentType: z.literal("advisory") }).strict(),
 	z.object({ ...SummaryCommonShape, contentType: z.literal("link") }).strict(),
+	z
+		.object({
+			...SummaryCommonShape,
+			contentType: z.literal("trivia_question"),
+			category: CatalogCodeSchema,
+			difficulty: PisoCampTriviaDifficultySchema,
+			active: z.boolean(),
+		})
+		.strict(),
 ])
 
 const RelatedLinkOutputBaseShape = { id: z.uuid(), position: z.number().int().nonnegative() }

@@ -40,6 +40,16 @@ export function renderPublishedContentResources(
 					// say otherwise.
 					featureLevel: "featureLevel" in content ? content.featureLevel : null,
 					hotspot: "hotspot" in content ? (content.hotspot ?? null) : null,
+					// GM-1 fields, and only for a question: a currency document
+					// carrying them would fail the client's exact-key check, which
+					// is how the two shapes stay distinguishable.
+					...(content.contentType === "trivia_question"
+						? {
+								category: content.category,
+								difficulty: content.difficulty,
+								choices: content.choices,
+							}
+						: {}),
 					relatedLinks: candidate.relatedLinks,
 				}),
 				"utf8"
