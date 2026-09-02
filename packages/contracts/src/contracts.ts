@@ -295,6 +295,23 @@ export type {
 	PisoCampBundleManifestEntry,
 } from "./modules/v1/pisocamp/bundle.schema.js"
 
+// AN-3 adoption and feature usage
+export {
+	ADOPTION_FEATURES,
+	AdoptionFeatureSchema,
+	AdoptionRangeInputSchema,
+	AdoptionSummarySchema,
+	FeatureUsageSchema,
+	KEY_ACTION_EVENTS,
+	KeyActionEventSchema,
+} from "./modules/v1/pisocamp/adoption.schema.js"
+export type {
+	AdoptionFeature,
+	AdoptionSummary,
+	FeatureUsage,
+	KeyActionEvent,
+} from "./modules/v1/pisocamp/adoption.schema.js"
+
 // AN-2 engagement KPIs
 export {
 	ConcurrencyPeakSchema,

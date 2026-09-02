@@ -5,6 +5,7 @@ import {
 	IngestAnalyticsEventsOutputSchema,
 	ModuleEntryTodaySchema,
 } from "./analytics.schema.js"
+import { AdoptionRangeInputSchema, AdoptionSummarySchema } from "./adoption.schema.js"
 import {
 	EngagementRangeInputSchema,
 	EngagementSummarySchema,
@@ -41,5 +42,14 @@ export const pisoCampAnalyticsContract = {
 			})
 			.input(EngagementRangeInputSchema)
 			.output(EngagementSummarySchema),
+		adoption: oc
+			.route({
+				method: "GET",
+				path: "/admin/pisocamp/analytics/adoption",
+				summary: "Feature usage and onboarding KPIs for a range of days",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(AdoptionRangeInputSchema)
+			.output(AdoptionSummarySchema),
 	},
 }

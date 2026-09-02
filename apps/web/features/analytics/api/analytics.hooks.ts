@@ -2,7 +2,12 @@
 
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query"
 
-import type { EngagementRangeInput, EngagementSummary, ModuleEntryToday } from "@repo/contracts"
+import type {
+	AdoptionSummary,
+	EngagementRangeInput,
+	EngagementSummary,
+	ModuleEntryToday,
+} from "@repo/contracts"
 
 import { orpc } from "@/services/orpc/client"
 
@@ -29,5 +34,17 @@ export function useEngagementSummaryQuery(input: EngagementRangeInput) {
 
 	return useQuery<EngagementSummary, Error>(
 		options as unknown as UseQueryOptions<EngagementSummary, Error>
+	)
+}
+
+export function useAdoptionSummaryQuery(input: EngagementRangeInput) {
+	const options = orpc.pisocamp.analytics.adoption.queryOptions({
+		input,
+		networkMode: "online",
+		staleTime: 60_000,
+	})
+
+	return useQuery<AdoptionSummary, Error>(
+		options as unknown as UseQueryOptions<AdoptionSummary, Error>
 	)
 }

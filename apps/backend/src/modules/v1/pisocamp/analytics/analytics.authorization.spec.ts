@@ -44,6 +44,7 @@ jest.mock("@/config/api-versions.config", () => ({
 			analytics: {
 				moduleEntryToday: "moduleEntryToday",
 				engagement: "engagement",
+				adoption: "adoption",
 			},
 		},
 	},
@@ -234,6 +235,24 @@ describe("analytics summary authorization", () => {
 			targetId: "AnalyticsController.engagement",
 			newValue: { missingPermissions: ["reports.dashboards.view"] },
 		})
+	})
+
+	it("gates the adoption dashboard on the same permission, both ways", async () => {
+		const adoption = AnalyticsController.prototype.adoption
+
+		await expect(createGuard().canActivate(contextFor(permittedId, adoption))).resolves.toBe(
+			true
+		)
+		await expect(
+			createGuard().canActivate(contextFor(deniedId, adoption))
+		).rejects.toMatchObject({ status: 403 })
+
+		const rows = await db
+			.select()
+			.from(auditLog)
+			.where(and(eq(auditLog.actorId, deniedId), eq(auditLog.action, "permission_denied")))
+		expect(rows).toHaveLength(1)
+		expect(rows[0]).toMatchObject({ targetId: "AnalyticsController.adoption" })
 	})
 
 	it("rejects an unauthenticated request before any permission denial audit", async () => {

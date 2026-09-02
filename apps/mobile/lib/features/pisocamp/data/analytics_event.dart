@@ -256,6 +256,24 @@ const Set<String> kSurveyPurposes = {
 /// Where a refusal happened: at the prompt, or at the privacy notice.
 enum SurveyDeclineStage { prompt, notice }
 
+/// AN-3. Emitted once a registration has actually completed, so the account
+/// creation rate counts accounts rather than attempts.
+final class ProfileCreatedIntent extends AnalyticsIntent {
+  const ProfileCreatedIntent();
+
+  @override
+  String get eventName => 'profile_created';
+
+  @override
+  String get screen => 'pisocamp_registration';
+
+  @override
+  String get feature => 'account';
+
+  @override
+  Map<String, Object?> get properties => const <String, Object?>{};
+}
+
 final class AdvisoryShownIntent extends AnalyticsIntent {
   const AdvisoryShownIntent({required this.logicalId});
 
@@ -727,6 +745,14 @@ AnalyticsIntent _parseIntent({
         correct: _requiredBool(properties, 'correct'),
         openedTopic: _requiredBool(properties, 'openedTopic'),
       );
+    case 'profile_created':
+      _requireExactKeys(properties, const <String>{});
+      if (screen != 'pisocamp_registration' || feature != 'account') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return const ProfileCreatedIntent();
     case 'advisory_shown':
       _requireExactKeys(properties, const <String>{'logicalId'});
       if (screen != 'exit_advisory' || feature != 'advisory') {

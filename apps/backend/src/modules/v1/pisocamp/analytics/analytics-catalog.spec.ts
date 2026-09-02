@@ -80,6 +80,11 @@ const CATALOG: Record<string, { screen: string; feature: string; properties: obj
 		feature: "advisory",
 		properties: { logicalId: "content.one" },
 	},
+	profile_created: {
+		screen: "pisocamp_registration",
+		feature: "account",
+		properties: {},
+	},
 }
 
 /**

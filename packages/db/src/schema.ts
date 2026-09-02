@@ -353,7 +353,7 @@ export const analyticsEvents = createTable(
 			sql`${t.eventName} in ('module_entry', 'account_prompt_shown', 'account_prompt_guest',
 				'content_view', 'feature_use', 'link_open', 'trivia_prompt_shown',
 				'trivia_prompt_answered', 'trivia_prompt_skipped', 'survey_prompt_shown',
-				'survey_declined', 'survey_submitted', 'advisory_shown')`
+				'survey_declined', 'survey_submitted', 'advisory_shown', 'profile_created')`
 		),
 		check(
 			"analytics_event_subject_pseudo_id_check",
@@ -372,6 +372,7 @@ export const analyticsEvents = createTable(
 				or (${t.eventName} in ('trivia_prompt_shown', 'trivia_prompt_answered', 'trivia_prompt_skipped') and ${t.screen} = 'trivia_prompt' and ${t.feature} = 'trivia' and ${t.status} = 'completed')
 				or (${t.eventName} in ('survey_prompt_shown', 'survey_declined', 'survey_submitted') and ${t.screen} = 'survey_prompt' and ${t.feature} = 'survey' and ${t.status} = 'completed')
 				or (${t.eventName} = 'advisory_shown' and ${t.screen} = 'exit_advisory' and ${t.feature} = 'advisory' and ${t.status} = 'completed')
+				or (${t.eventName} = 'profile_created' and ${t.screen} = 'pisocamp_registration' and ${t.feature} = 'account' and ${t.status} = 'completed')
 			)`
 		),
 		check(

@@ -9,6 +9,7 @@ import { RequirePermissions } from "@/shared/decorators/require-permissions.deco
 import { StrictThrottle } from "@/shared/decorators/strict-throttle.decorator"
 
 import { AnalyticsService } from "./analytics.service"
+import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
 
 @Controller()
@@ -16,6 +17,7 @@ export class AnalyticsController {
 	constructor(
 		private readonly analyticsService: AnalyticsService,
 		private readonly engagementService: EngagementService,
+		private readonly adoptionService: AdoptionService,
 		private readonly logger: Logger
 	) {}
 
@@ -25,6 +27,14 @@ export class AnalyticsController {
 	ingest() {
 		return implement(v1.pisocamp.events.ingest).handler(({ input }) =>
 			this.runSafely("ingest", () => this.analyticsService.ingest(input))
+		)
+	}
+
+	@RequirePermissions("reports.dashboards.view")
+	@Implement(v1.pisocamp.analytics.adoption)
+	adoption() {
+		return implement(v1.pisocamp.analytics.adoption).handler(({ input }) =>
+			this.runSafely("adoption", () => this.adoptionService.summary(input))
 		)
 	}
 
@@ -45,7 +55,7 @@ export class AnalyticsController {
 	}
 
 	private async runSafely<T>(
-		operation: "ingest" | "moduleEntryToday" | "engagement",
+		operation: "ingest" | "moduleEntryToday" | "engagement" | "adoption",
 		work: () => Promise<T>
 	) {
 		try {

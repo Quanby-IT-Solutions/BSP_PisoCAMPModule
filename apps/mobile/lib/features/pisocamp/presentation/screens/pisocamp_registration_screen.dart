@@ -10,6 +10,8 @@ import 'package:mobile/features/pisocamp/data/consent_service.dart';
 import 'package:mobile/features/pisocamp/data/pisocamp_profile_repository.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/consent_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
+import 'package:mobile/features/pisocamp/data/analytics_event.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 
 class PisoCampRegistrationScreen extends ConsumerStatefulWidget {
   const PisoCampRegistrationScreen({super.key});
@@ -145,6 +147,13 @@ class _PisoCampRegistrationScreenState
       } else {
         _clearAccountFields();
         _age.clear();
+        // AN-3 counts accounts rather than attempts, so this is emitted only
+        // once the profile has actually been created.
+        emitAnalyticsFuture(
+          const ProfileCreatedIntent(),
+          () =>
+              ref.read(analyticsSdkProvider).emit(const ProfileCreatedIntent()),
+        );
         ref.invalidate(pisoCampProfileStatusProvider);
         setState(() {
           _gender = null;

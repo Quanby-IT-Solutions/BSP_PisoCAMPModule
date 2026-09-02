@@ -32,6 +32,7 @@ export const ANALYTICS_EVENT_NAMES = [
 	"survey_declined",
 	"survey_submitted",
 	"advisory_shown",
+	"profile_created",
 ] as const
 
 /**
@@ -190,6 +191,15 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 		feature: z.literal("advisory"),
 		status: z.literal("completed"),
 		properties: z.object({ logicalId: z.string().trim().min(1).max(128) }).strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("profile_created"),
+		screen: z.literal("pisocamp_registration"),
+		feature: z.literal("account"),
+		status: z.literal("completed"),
+		// Nothing about the person: AN-3 counts how many registered, and the
+		// account itself is not analytics' to carry.
+		properties: z.object({}).strict(),
 	}).strict(),
 	AnalyticsCommonSchema.extend({
 		eventName: z.literal("link_open"),

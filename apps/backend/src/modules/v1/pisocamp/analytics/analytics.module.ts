@@ -5,6 +5,7 @@ import { AuditModule } from "@/common/audit/audit.module"
 import { PisoCampAdminConfigService } from "../pisocamp-admin-config.service"
 import { AnalyticsController } from "./analytics.controller"
 import { analyticsDatabaseProvider, AnalyticsService } from "./analytics.service"
+import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
 import { SessionizerService } from "./sessionizer.service"
 
@@ -14,6 +15,7 @@ import { SessionizerService } from "./sessionizer.service"
 	providers: [
 		AnalyticsService,
 		analyticsDatabaseProvider,
+		AdoptionService,
 		EngagementService,
 		SessionizerService,
 		PisoCampAdminConfigService,

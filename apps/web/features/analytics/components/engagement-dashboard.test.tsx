@@ -8,6 +8,7 @@ const useEngagement = vi.fn()
 
 vi.mock("@/features/analytics/api/analytics.hooks", () => ({
 	useEngagementSummaryQuery: (input: unknown) => useEngagement(input),
+	useAdoptionSummaryQuery: () => ({ isPending: true, isError: false }),
 }))
 
 const summary = {

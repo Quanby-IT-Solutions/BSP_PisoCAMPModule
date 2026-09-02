@@ -76,6 +76,26 @@ test.describe("AN-2 engagement dashboard", () => {
 		expectClean(observed)
 	})
 
+	test("shows the AN-3 adoption figures beside the engagement ones", async ({ page }) => {
+		const observed = observe(page)
+		await signOutCompletely(page)
+		await signInAs(page, "contentAdmin")
+
+		await page.goto("/pisocamp/engagement")
+		await page.waitForLoadState("networkidle")
+
+		await expect(page.getByRole("heading", { name: "Adoption" })).toBeVisible({
+			timeout: 20_000,
+		})
+		await expect(page.getByText("Account creation rate")).toBeVisible()
+		await expect(page.getByText("First-day activation")).toBeVisible()
+		// Every AN-013 feature is listed, including the ones nothing emits yet.
+		await expect(page.getByRole("cell", { name: "Leaderboard" })).toBeVisible()
+		await expect(page.getByRole("cell", { name: "Recognition" })).toBeVisible()
+
+		expectClean(observed)
+	})
+
 	test("refuses a range that ends before it starts", async ({ page }) => {
 		const observed = observe(page)
 		await signOutCompletely(page)

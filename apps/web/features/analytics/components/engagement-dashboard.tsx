@@ -18,6 +18,7 @@ import { Input } from "@/core/components/ui/input"
 import { Label } from "@/core/components/ui/label"
 import { Skeleton } from "@/core/components/ui/skeleton"
 import { useEngagementSummaryQuery } from "@/features/analytics/api/analytics.hooks"
+import { AdoptionDashboard } from "@/features/analytics/components/adoption-dashboard"
 
 const number = new Intl.NumberFormat("en-US")
 const decimal = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 })
@@ -130,6 +131,9 @@ export function EngagementDashboard() {
 			) : summary.data ? (
 				<EngagementFigures summary={summary.data} />
 			) : null}
+
+			<h2 className="text-xl font-semibold">Adoption</h2>
+			<AdoptionDashboard from={range.from} to={range.to} />
 		</div>
 	)
 }
