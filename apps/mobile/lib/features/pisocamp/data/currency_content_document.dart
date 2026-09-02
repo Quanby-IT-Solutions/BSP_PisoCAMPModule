@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' show Rect;
 
 import 'bundle_protocol.dart';
 
@@ -46,6 +47,40 @@ final class CurrencyRelatedLink {
   final String? targetContentItemId;
 }
 
+/// One touchable region of a banknote illustration, in permille of the image's
+/// width and height so it survives any rendered size.
+final class CurrencyTactileRegion {
+  const CurrencyTactileRegion({
+    required this.id,
+    required this.label,
+    required this.pattern,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final String id;
+  final String label;
+  final String pattern;
+  final int x;
+  final int y;
+  final int width;
+  final int height;
+
+  /// The region as fractions of the image, ready to place in a layout.
+  Rect get fraction =>
+      Rect.fromLTWH(x / 1000, y / 1000, width / 1000, height / 1000);
+
+  bool containsFraction(double fractionX, double fractionY) {
+    final bounds = fraction;
+    return fractionX >= bounds.left &&
+        fractionX <= bounds.right &&
+        fractionY >= bounds.top &&
+        fractionY <= bounds.bottom;
+  }
+}
+
 final class CurrencyContentDocument {
   CurrencyContentDocument._({
     required this.logicalId,
@@ -64,13 +99,15 @@ final class CurrencyContentDocument {
     required this.modelSha256,
     required this.modelAlt,
     required this.hotspot,
+    required List<CurrencyTactileRegion> tactileRegions,
     required List<CurrencyRelatedLink> relatedLinks,
     required this.catalogVersion,
     required this.sourceUrl,
     required this.contentItemId,
     required this.contentVersionId,
     required this.versionNo,
-  }) : relatedLinks = List.unmodifiable(relatedLinks);
+  }) : relatedLinks = List.unmodifiable(relatedLinks),
+       tactileRegions = List.unmodifiable(tactileRegions);
 
   final String logicalId;
   final CurrencyContentKind kind;
@@ -96,6 +133,10 @@ final class CurrencyContentDocument {
   /// BR-012 keeps second-level features out of the bundle, so a document that
   /// claims one is rejected rather than merely hidden.
   final CurrencyFeatureHotspot? hotspot;
+
+  /// CE-4 approved tactile simulation map. Banknotes only, and empty until a
+  /// map is approved for the denomination.
+  final List<CurrencyTactileRegion> tactileRegions;
   final List<CurrencyRelatedLink> relatedLinks;
   final String catalogVersion;
   final Uri sourceUrl;
@@ -104,6 +145,7 @@ final class CurrencyContentDocument {
   final int? versionNo;
 
   bool get hasModel => modelSha256 != null && modelAlt != null;
+  bool get hasTactileMap => tactileRegions.isNotEmpty;
 
   static CurrencyContentDocument parseSeed(Uint8List bytes) {
     final json = decodeStrictJsonObject(
@@ -135,6 +177,7 @@ final class CurrencyContentDocument {
         'imageAlt',
         'modelSha256',
         'modelAlt',
+        'tactileRegions',
       },
       context: 'currency seed document',
     );
@@ -172,6 +215,8 @@ final class CurrencyContentDocument {
       );
     }
 
+    final tactileRegions = _seedTactileRegions(json['tactileRegions'], kind);
+
     final sourceUrl = _bspUrl(json, 'sourceUrl');
     final relatedLinks = _seedRelatedLinks(json['relatedLinks']);
     if (!relatedLinks.any((link) => link.url == sourceUrl)) {
@@ -197,6 +242,7 @@ final class CurrencyContentDocument {
       modelSha256: modelSha256,
       modelAlt: modelAlt,
       hotspot: null,
+      tactileRegions: tactileRegions,
       relatedLinks: relatedLinks,
       catalogVersion: _plainText(json, 'catalogVersion', maximum: 64),
       sourceUrl: sourceUrl,
@@ -297,6 +343,11 @@ final class CurrencyContentDocument {
           ? null
           : catalogEntry.modelAlt,
       hotspot: hotspot,
+      // Presentation media is the frozen catalog's: an editor cannot move a
+      // note's tactile regions by publishing a new version.
+      tactileRegions: kind == CurrencyContentKind.securityFeature
+          ? const []
+          : catalogEntry.tactileRegions,
       relatedLinks: relatedLinks,
       catalogVersion: catalogEntry.catalogVersion,
       sourceUrl: catalogEntry.sourceUrl,
@@ -635,6 +686,83 @@ CurrencyFeatureHotspot? _publishedHotspot(
     );
   }
   return CurrencyFeatureHotspot(x: x, y: y);
+}
+
+/// The approved tactile map for a denomination.
+///
+/// Only banknotes may carry one: CE-4 simulates what a note feels like, and a
+/// map on anything else would be a claim the catalog never made. Every region
+/// is bounded to the image it is anchored to, so a malformed map is refused
+/// rather than drawn off the edge.
+List<CurrencyTactileRegion> _seedTactileRegions(
+  Object? value,
+  CurrencyContentKind kind,
+) {
+  if (value == null) return const [];
+  if (kind != CurrencyContentKind.banknote) {
+    throw const BundleValidationException(
+      'Only a banknote may carry a tactile map.',
+    );
+  }
+  if (value is! List<Object?> || value.isEmpty || value.length > 12) {
+    throw const BundleValidationException('Currency tactile map is invalid.');
+  }
+
+  final regions = <CurrencyTactileRegion>[];
+  final ids = <String>{};
+  for (final item in value) {
+    if (item is! Map<String, Object?>) {
+      throw const BundleValidationException(
+        'Currency tactile region is invalid.',
+      );
+    }
+    requireExactJsonKeys(item, const {
+      'id',
+      'label',
+      'pattern',
+      'x',
+      'y',
+      'width',
+      'height',
+    }, context: 'currency tactile region');
+
+    final id = _code(item, 'id');
+    if (!ids.add(id)) {
+      throw const BundleValidationException(
+        'Currency tactile map contains a duplicate region.',
+      );
+    }
+    final x = _permille(item, 'x', minimum: 0);
+    final y = _permille(item, 'y', minimum: 0);
+    final width = _permille(item, 'width', minimum: 1);
+    final height = _permille(item, 'height', minimum: 1);
+    if (x + width > 1000 || y + height > 1000) {
+      throw const BundleValidationException(
+        'Currency tactile region extends past the edge of the image.',
+      );
+    }
+
+    regions.add(
+      CurrencyTactileRegion(
+        id: id,
+        label: _plainText(item, 'label', maximum: 100),
+        pattern: _code(item, 'pattern'),
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+      ),
+    );
+  }
+  return List.unmodifiable(regions);
+}
+
+int _permille(Map<String, Object?> json, String key, {required int minimum}) {
+  final value = json[key];
+  if (value is! int || value < minimum || value > 1000) {
+    throw BundleValidationException('Currency tactile region $key is invalid.');
+  }
+  return value;
 }
 
 List<CurrencyRelatedLink> _seedRelatedLinks(Object? value) {

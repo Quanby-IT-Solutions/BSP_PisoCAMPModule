@@ -62,7 +62,8 @@ enum ModuleEntryPoint {
 /// hosts it, so a mislabelled event is rejected rather than counted against the
 /// wrong surface.
 enum AnalyticsFeature {
-  coin3d('3d_coin', 'coin_3d_viewer');
+  coin3d('3d_coin', 'coin_3d_viewer'),
+  haptic('haptic', 'tactile_viewer');
 
   const AnalyticsFeature(this.wireValue, this.screen);
   final String wireValue;

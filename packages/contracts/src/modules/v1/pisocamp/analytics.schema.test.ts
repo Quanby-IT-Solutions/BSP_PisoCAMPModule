@@ -88,7 +88,10 @@ describe("AN-1 analytics event catalog", () => {
 	it("binds a feature_use to the one screen that hosts its feature", () => {
 		const featureUse = vectors.find(vector => vector.eventName === "feature_use")
 		expect(featureUse).toBeDefined()
-		expect(ANALYTICS_FEATURE_USE_SCREENS).toEqual({ "3d_coin": "coin_3d_viewer" })
+		expect(ANALYTICS_FEATURE_USE_SCREENS).toEqual({
+			"3d_coin": "coin_3d_viewer",
+			haptic: "tactile_viewer",
+		})
 
 		expect(
 			AnalyticsEventSchema.safeParse({ ...featureUse, screen: "currency_detail" }).success
@@ -96,6 +99,17 @@ describe("AN-1 analytics event catalog", () => {
 		expect(AnalyticsEventSchema.safeParse({ ...featureUse, feature: "ar_coin" }).success).toBe(
 			false
 		)
+		// A known feature reported from another feature's screen is still wrong.
+		expect(
+			AnalyticsEventSchema.safeParse({ ...featureUse, feature: "haptic" }).success
+		).toBe(false)
+		expect(
+			AnalyticsEventSchema.safeParse({
+				...featureUse,
+				feature: "haptic",
+				screen: "tactile_viewer",
+			}).success
+		).toBe(true)
 		expect(
 			AnalyticsEventSchema.safeParse({
 				...featureUse,

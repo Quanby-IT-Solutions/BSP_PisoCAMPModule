@@ -8,16 +8,18 @@ import {
 	PisoCampBundleEnvelopeSchema,
 	PisoCampBundleManifestSchema,
 	type PisoCampBundleManifest,
+	type PisoCampTactileMap,
 } from "@repo/contracts"
 
 import { buildNeutralCoinModel } from "./pisocamp-coin-model.js"
+import { tactileMapFor } from "./pisocamp-tactile-catalog.js"
 import {
 	PISOCAMP_CURRENCY_CATALOG,
 	PISOCAMP_CURRENCY_CATALOG_VERSION,
 } from "./pisocamp-currency-catalog.js"
 
 const GENERATED_AT = "2026-08-27T00:00:00Z"
-const SEED_KEY_ID = "ce2-seed-v2"
+const SEED_KEY_ID = "ce4-seed-v3"
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
 const CHECKED_IN_SEED_ROOT = join(
 	REPOSITORY_ROOT,
@@ -40,10 +42,10 @@ const MAX_TOTAL_CORE_BYTES = 52_428_800
 // Raw 32-byte Ed25519 public key and signature only. Signing authority is not
 // retained: the seed is re-signed with a fresh throwaway key whenever its
 // contents legitimately change, and both constants move with it in one diff.
-// Superseded ce1-seed-v1 when CE-2 added the coin model to the packaged seed.
-export const FROZEN_SEED_PUBLIC_KEY_BASE64URL = "WDi-4JGTZj6kqYjLxaGLoxzja6aiTdb_LfuFOJtrYoo"
+// ce4-seed-v3 supersedes ce2-seed-v2, which superseded ce1-seed-v1.
+export const FROZEN_SEED_PUBLIC_KEY_BASE64URL = "UJNLxePUUX7ePS9WWKjB3M9V5JXeDAGCHR4zKDsqdQE"
 export const FROZEN_SEED_SIGNATURE_BASE64URL =
-	"6PScS1YkZ_DBfV7Jljk1Z6V_bJJecwJqi0BM2ujiAM7FMWA-42nzimlmnuokOMJsKjwc1MIyliujzNdqqZsOAQ"
+	"ZWDP7rFw4WlNFqTHjTsSoQLh1Ez2bmmKtDaxcEwFWv7j7BNYuni8X1UfK1JxgDMyrBJe2jxNxA0cInCyDPqmDA"
 
 export interface SeedSourceImages {
 	banknote: Buffer
@@ -69,6 +71,7 @@ export interface SeedCurrencyDocument {
 	imageAlt: string
 	modelSha256?: string
 	modelAlt?: string
+	tactileRegions?: PisoCampTactileMap
 	relatedLinks: { label: string; url: string }[]
 }
 
@@ -188,6 +191,7 @@ export function buildUnsignedSeedBundle(images: SeedSourceImages): UnsignedSeedB
 	]
 
 	PISOCAMP_CURRENCY_CATALOG.forEach((currencySeries, seriesOrder) => {
+		const tactileMap = tactileMapFor(currencySeries.mediaKind)
 		currencySeries.denominations.forEach(currencyDenomination => {
 			const logicalId = `catalog.${currencySeries.code}.${currencyDenomination.code}`
 			const chosenImage = currencySeries.mediaKind === "banknote" ? banknote : coin
@@ -218,6 +222,9 @@ export function buildUnsignedSeedBundle(images: SeedSourceImages): UnsignedSeedB
 								"A neutral fictional coin model with an abstract face pattern and a reeded edge, not a reproduction.",
 						}
 					: {}),
+				// Mirror image: only banknotes carry a tactile map, because CE-4
+				// simulates what a note feels like.
+				...(tactileMap === null ? {} : { tactileRegions: tactileMap }),
 				relatedLinks: [
 					{
 						label: "Bangko Sentral ng Pilipinas source",

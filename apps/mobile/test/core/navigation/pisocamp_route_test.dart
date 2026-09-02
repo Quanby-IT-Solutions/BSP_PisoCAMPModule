@@ -33,6 +33,8 @@ void main() {
       '/pisocamp/currency/banknotes/content%3Averified',
       // CE-2's 3D view is guest content like the detail it opens from.
       '/pisocamp/currency/coins/catalog.ngc-coins.php-1/3d',
+      // CE-4's tactile simulation likewise.
+      '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tactile',
     ];
     const protected = <String>[
       '/pisocamp/currency',
@@ -43,6 +45,8 @@ void main() {
       '/pisocamp/currency/coins/bad%2Fid',
       '/pisocamp/currency/coins/catalog..bad',
       '/pisocamp/currency/coins/catalog.ngc-coins.php-1/4d',
+      '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tactile/more',
+      '/pisocamp/currency/banknotes/UPPER/tactile',
       '/pisocamp/currency/coins/catalog.ngc-coins.php-1/3d/more',
       '/pisocamp/currency/coins/UPPER/3d',
       '/pisocamp/currency-banknotes',
@@ -99,6 +103,17 @@ void main() {
     );
     expect(
       () => AppRoutes.currencyModel(kind: 'coins', logicalId: '../private'),
+      throwsArgumentError,
+    );
+    expect(
+      AppRoutes.currencyTactile(
+        kind: 'banknotes',
+        logicalId: 'catalog.ngc-banknotes.php-20',
+      ),
+      '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tactile',
+    );
+    expect(
+      () => AppRoutes.currencyTactile(kind: 'notes', logicalId: 'catalog.valid'),
       throwsArgumentError,
     );
   });

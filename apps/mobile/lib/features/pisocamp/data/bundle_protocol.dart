@@ -108,8 +108,8 @@ final class BundleKeyRing {
 
   factory BundleKeyRing.packagedSeed() {
     return BundleKeyRing._({
-      'ce2-seed-v2': _decodeHex(
-        '5838bee09193663ea4a988cbc5a18ba31ce36ba6a24dd6ff2dfb85389b6b628a',
+      'ce4-seed-v3': _decodeHex(
+        '50934bc5e3d4517ede3d2f5658a8c1dccf55e495de0c01821d1e33283b2a7501',
       ),
     });
   }

@@ -3,6 +3,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
+import { TACTILE_PATTERN_IDS } from "@repo/contracts"
+
 import {
 	buildUnsignedSeedBundle,
 	generateCheckedInSeed,
@@ -108,6 +110,30 @@ describe("CE-1 packaged currency seed", () => {
 		)) {
 			expect(banknote.modelSha256, banknote.logicalId).toBeUndefined()
 			expect(banknote.modelAlt, banknote.logicalId).toBeUndefined()
+		}
+	})
+
+
+	it("gives every mandatory banknote a tactile map and no coin one", async () => {
+		const bundle = buildUnsignedSeedBundle(await readSeedSourceImages())
+		const banknotes = bundle.documents.filter(
+			document => document.contentType === "banknote"
+		)
+		const coins = bundle.documents.filter(document => document.contentType === "coin")
+
+		expect(banknotes).toHaveLength(15)
+		for (const banknote of banknotes) {
+			expect(banknote.tactileRegions, banknote.logicalId).toBeDefined()
+			expect(banknote.tactileRegions!.length, banknote.logicalId).toBeGreaterThan(0)
+			for (const region of banknote.tactileRegions!) {
+				// Anchored inside the illustration it is drawn on.
+				expect(region.x + region.width, region.id).toBeLessThanOrEqual(1000)
+				expect(region.y + region.height, region.id).toBeLessThanOrEqual(1000)
+				expect(TACTILE_PATTERN_IDS, region.id).toContain(region.pattern)
+			}
+		}
+		for (const coin of coins) {
+			expect(coin.tactileRegions, coin.logicalId).toBeUndefined()
 		}
 	})
 

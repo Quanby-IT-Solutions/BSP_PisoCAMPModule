@@ -15,6 +15,7 @@ import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_registrat
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/coin_viewer_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/currency_detail_screen.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/tactile_viewer_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/currency_list_screen.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -61,6 +62,15 @@ class AppRoutes {
   }) {
     return '${currencyDetail(kind: kind, logicalId: logicalId)}/3d';
   }
+
+  /// The tactile simulation for one denomination. Banknotes only carry a map;
+  /// the screen itself explains anything that does not.
+  static String currencyTactile({
+    required String kind,
+    required String logicalId,
+  }) {
+    return '${currencyDetail(kind: kind, logicalId: logicalId)}/tactile';
+  }
 }
 
 bool isGuestCurrencyRoute(String matchedLocation) {
@@ -69,7 +79,7 @@ bool isGuestCurrencyRoute(String matchedLocation) {
     return true;
   }
   final match = RegExp(
-    r'^/pisocamp/currency/(banknotes|coins)/([^/]+)(?:/3d)?$',
+    r'^/pisocamp/currency/(banknotes|coins)/([^/]+)(?:/3d|/tactile)?$',
   ).firstMatch(matchedLocation);
   if (match == null) return false;
   final segment = match.group(2)!;
@@ -190,6 +200,25 @@ GoRouter appRouter(Ref ref) {
           return kind == null
               ? const _SafeNotFoundScreen()
               : CurrencyListScreen(kind: kind);
+        },
+      ),
+      GoRoute(
+        path: '/pisocamp/currency/:kind/:logicalId/tactile',
+        builder: (context, state) {
+          final kind = CurrencyRouteKind.fromPathSegment(
+            state.pathParameters['kind'] ?? '',
+          );
+          final logicalId = state.pathParameters['logicalId'] ?? '';
+          if (kind == null || !isValidCurrencyLogicalId(logicalId)) {
+            return const _SafeNotFoundScreen();
+          }
+          return TactileViewerScreen(
+            kind: kind,
+            logicalId: logicalId,
+            initialCatalog: state.extra is CurrencyCatalogView
+                ? state.extra! as CurrencyCatalogView
+                : null,
+          );
         },
       ),
       GoRoute(

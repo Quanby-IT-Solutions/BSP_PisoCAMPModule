@@ -172,6 +172,28 @@ abstract interface class CoinViewerAnalytics {
   Future<void> recordUse(String logicalId);
 }
 
+final tactileAnalyticsProvider = Provider<TactileAnalytics>(
+  (ref) => _SdkTactileAnalytics(ref.watch(analyticsSdkProvider)),
+);
+
+abstract interface class TactileAnalytics {
+  Future<void> recordUse(String logicalId);
+}
+
+final class _SdkTactileAnalytics implements TactileAnalytics {
+  const _SdkTactileAnalytics(this._sdk);
+
+  final AnalyticsSdk _sdk;
+
+  @override
+  Future<void> recordUse(String logicalId) => _sdk.emit(
+    FeatureUseIntent(
+      usedFeature: AnalyticsFeature.haptic,
+      logicalId: logicalId,
+    ),
+  );
+}
+
 final class _SdkCoinViewerAnalytics implements CoinViewerAnalytics {
   const _SdkCoinViewerAnalytics(this._sdk);
 

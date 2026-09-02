@@ -284,6 +284,19 @@ export type {
 	PisoCampBundleManifest,
 	PisoCampBundleManifestEntry,
 } from "./modules/v1/pisocamp/bundle.schema.js"
+
+// CE-4 approved tactile simulation vocabulary
+export {
+	PisoCampTactileMapSchema,
+	PisoCampTactilePatternIdSchema,
+	PisoCampTactileRegionSchema,
+	TACTILE_PATTERN_IDS,
+} from "./modules/v1/pisocamp/tactile.schema.js"
+export type {
+	PisoCampTactileMap,
+	PisoCampTactilePatternId,
+	PisoCampTactileRegion,
+} from "./modules/v1/pisocamp/tactile.schema.js"
 export type {
 	ApprovePisoCampContentInput,
 	CreatePisoCampContentInput,

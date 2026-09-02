@@ -31,6 +31,7 @@ export const ANALYTICS_EVENT_NAMES = [
  */
 export const ANALYTICS_FEATURE_USE_SCREENS = {
 	"3d_coin": "coin_3d_viewer",
+	haptic: "tactile_viewer",
 } as const
 
 export type AnalyticsFeatureUseFeature = keyof typeof ANALYTICS_FEATURE_USE_SCREENS

@@ -171,7 +171,13 @@ class _DetailBody extends StatelessWidget {
                 const SizedBox(height: 16),
                 _ViewInThreeDimensions(
                   document: document,
-
+                  catalog: detail.catalog,
+                ),
+              ],
+              if (document.hasTactileMap) ...[
+                const SizedBox(height: 16),
+                _FeelTactileFeatures(
+                  document: document,
                   catalog: detail.catalog,
                 ),
               ],
@@ -248,6 +254,33 @@ class _ViewInThreeDimensions extends StatelessWidget {
         ),
         icon: const Icon(Icons.threed_rotation),
         label: const Text('View in 3D'),
+      ),
+    );
+  }
+}
+
+/// CE-4 entry point. Offered only when the frozen catalog carries an approved
+/// tactile map for this denomination.
+class _FeelTactileFeatures extends StatelessWidget {
+  const _FeelTactileFeatures({required this.document, required this.catalog});
+
+  final CurrencyContentDocument document;
+  final CurrencyCatalogView catalog;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: OutlinedButton.icon(
+        onPressed: () => context.push(
+          AppRoutes.currencyTactile(
+            kind: CurrencyRouteKind.banknotes.pathSegment,
+            logicalId: document.logicalId,
+          ),
+          extra: catalog,
+        ),
+        icon: const Icon(Icons.vibration),
+        label: const Text('Feel The Tactile Features'),
       ),
     );
   }
