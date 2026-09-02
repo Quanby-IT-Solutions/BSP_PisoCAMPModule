@@ -7,6 +7,7 @@ import { STRICT_THROTTLE_KEY } from "@/shared/decorators/strict-throttle.decorat
 
 import { AnalyticsController } from "./analytics.controller"
 import { AnalyticsService } from "./analytics.service"
+import { EngagementService } from "./engagement.service"
 
 const ingestInput = {
 	events: [
@@ -86,6 +87,9 @@ describe("AnalyticsController", () => {
 			controllers: [AnalyticsController],
 			providers: [
 				{ provide: AnalyticsService, useValue: service },
+				// AN-2's dashboard is its own service; this suite is about the
+				// controller's decorators and error translation.
+				{ provide: EngagementService, useValue: { summary: async () => null } },
 				{
 					provide: Logger,
 					useValue: { error: (...args: unknown[]) => logCalls.push(args) },
@@ -102,6 +106,9 @@ describe("AnalyticsController", () => {
 		)
 		expect(
 			Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, AnalyticsController.prototype.moduleEntryToday)
+		).toEqual(["reports.dashboards.view"])
+		expect(
+			Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, AnalyticsController.prototype.engagement)
 		).toEqual(["reports.dashboards.view"])
 		expect(
 			Reflect.getMetadata("PUBLIC", AnalyticsController.prototype.moduleEntryToday)

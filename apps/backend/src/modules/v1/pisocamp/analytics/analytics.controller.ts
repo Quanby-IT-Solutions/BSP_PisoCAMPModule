@@ -9,11 +9,13 @@ import { RequirePermissions } from "@/shared/decorators/require-permissions.deco
 import { StrictThrottle } from "@/shared/decorators/strict-throttle.decorator"
 
 import { AnalyticsService } from "./analytics.service"
+import { EngagementService } from "./engagement.service"
 
 @Controller()
 export class AnalyticsController {
 	constructor(
 		private readonly analyticsService: AnalyticsService,
+		private readonly engagementService: EngagementService,
 		private readonly logger: Logger
 	) {}
 
@@ -27,6 +29,14 @@ export class AnalyticsController {
 	}
 
 	@RequirePermissions("reports.dashboards.view")
+	@Implement(v1.pisocamp.analytics.engagement)
+	engagement() {
+		return implement(v1.pisocamp.analytics.engagement).handler(({ input }) =>
+			this.runSafely("engagement", () => this.engagementService.summary(input))
+		)
+	}
+
+	@RequirePermissions("reports.dashboards.view")
 	@Implement(v1.pisocamp.analytics.moduleEntryToday)
 	moduleEntryToday() {
 		return implement(v1.pisocamp.analytics.moduleEntryToday).handler(() =>
@@ -34,7 +44,10 @@ export class AnalyticsController {
 		)
 	}
 
-	private async runSafely<T>(operation: "ingest" | "moduleEntryToday", work: () => Promise<T>) {
+	private async runSafely<T>(
+		operation: "ingest" | "moduleEntryToday" | "engagement",
+		work: () => Promise<T>
+	) {
 		try {
 			return await work()
 		} catch (error) {

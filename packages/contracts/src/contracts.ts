@@ -295,6 +295,21 @@ export type {
 	PisoCampBundleManifestEntry,
 } from "./modules/v1/pisocamp/bundle.schema.js"
 
+// AN-2 engagement KPIs
+export {
+	ConcurrencyPeakSchema,
+	DailyActiveSchema,
+	EngagementRangeInputSchema,
+	EngagementSummarySchema,
+	HourlyActivitySchema,
+} from "./modules/v1/pisocamp/engagement.schema.js"
+export type {
+	DailyActive,
+	EngagementRangeInput,
+	EngagementSummary,
+	HourlyActivity,
+} from "./modules/v1/pisocamp/engagement.schema.js"
+
 // EV-3 survey trigger rules
 export {
 	DeletePisoCampSurveyTriggerInputSchema,

@@ -11,7 +11,7 @@
  * offline; CI provides Postgres (HY-1 wires the compose service).
  */
 
-import { and, eq, sql } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 
 import { auditLog, roles, userRoles, users } from "@repo/db/schema"
 
@@ -125,7 +125,13 @@ function makeAdminService() {
 }
 
 async function entriesFor(targetId: string) {
-	return db.select().from(auditLog).where(eq(auditLog.targetId, targetId))
+	// By id, not by created_at: two entries written in the same transaction
+	// share a timestamp, and an unordered read of them made this suite flake.
+	return db
+		.select()
+		.from(auditLog)
+		.where(eq(auditLog.targetId, targetId))
+		.orderBy(asc(auditLog.id))
 }
 
 describe("audit trail is written in the same transaction as the mutation", () => {

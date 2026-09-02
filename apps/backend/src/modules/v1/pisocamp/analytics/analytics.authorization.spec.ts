@@ -41,7 +41,10 @@ jest.mock("@/config/api-versions.config", () => ({
 	v1: {
 		pisocamp: {
 			events: { ingest: "analyticsIngest" },
-			analytics: { moduleEntryToday: "moduleEntryToday" },
+			analytics: {
+				moduleEntryToday: "moduleEntryToday",
+				engagement: "engagement",
+			},
 		},
 	},
 }))
@@ -61,13 +64,13 @@ const permittedId = "an1-task3-reports-user"
 const deniedId = "an1-task3-registered-user"
 const deactivatedId = "an1-task3-deactivated-reports-user"
 
-function contextFor(userId?: string) {
+function contextFor(userId?: string, handler: () => unknown = AnalyticsController.prototype.moduleEntryToday) {
 	const request = {
 		headers: {},
 		...(userId ? { session: { user: { id: userId } }, user: { id: userId } } : {}),
 	}
 	return {
-		getHandler: () => AnalyticsController.prototype.moduleEntryToday,
+		getHandler: () => handler,
 		getClass: () => AnalyticsController,
 		switchToHttp: () => ({ getRequest: () => request }),
 	} as never
@@ -207,6 +210,29 @@ describe("analytics summary authorization", () => {
 				requiredPermissions: ["reports.dashboards.view"],
 				missingPermissions: ["reports.dashboards.view"],
 			},
+		})
+	})
+
+	it("gates the engagement dashboard on the same permission, both ways", async () => {
+		const engagement = AnalyticsController.prototype.engagement
+
+		await expect(createGuard().canActivate(contextFor(permittedId, engagement))).resolves.toBe(
+			true
+		)
+		await expect(
+			createGuard().canActivate(contextFor(deniedId, engagement))
+		).rejects.toMatchObject({ status: 403 })
+
+		const rows = await db
+			.select()
+			.from(auditLog)
+			.where(and(eq(auditLog.actorId, deniedId), eq(auditLog.action, "permission_denied")))
+		expect(rows).toHaveLength(1)
+		// The denial names the handler that was refused, not the controller: an
+		// audit that could not tell the two dashboards apart would be no use.
+		expect(rows[0]).toMatchObject({
+			targetId: "AnalyticsController.engagement",
+			newValue: { missingPermissions: ["reports.dashboards.view"] },
 		})
 	})
 

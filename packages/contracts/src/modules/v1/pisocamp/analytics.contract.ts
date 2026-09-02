@@ -5,6 +5,10 @@ import {
 	IngestAnalyticsEventsOutputSchema,
 	ModuleEntryTodaySchema,
 } from "./analytics.schema.js"
+import {
+	EngagementRangeInputSchema,
+	EngagementSummarySchema,
+} from "./engagement.schema.js"
 
 export const pisoCampAnalyticsContract = {
 	events: {
@@ -28,5 +32,14 @@ export const pisoCampAnalyticsContract = {
 				tags: ["Piso CAMP Analytics"],
 			})
 			.output(ModuleEntryTodaySchema),
+		engagement: oc
+			.route({
+				method: "GET",
+				path: "/admin/pisocamp/analytics/engagement",
+				summary: "Engagement KPIs for a range of Asia/Manila days",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(EngagementRangeInputSchema)
+			.output(EngagementSummarySchema),
 	},
 }

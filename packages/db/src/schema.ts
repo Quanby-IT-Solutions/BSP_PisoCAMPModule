@@ -399,6 +399,54 @@ export const analyticsEvents = createTable(
 	]
 )
 
+/**
+ * AN-2 analytics session.
+ *
+ * Derived server-side by grouping a subject's events with gaps shorter than
+ * the configured inactivity, and **not** taken from the client's `session_id`:
+ * a device controls that value, and an engagement number a device can move is
+ * not a number anybody should report.
+ *
+ * A row is a closed interval of one subject's activity. Recomputing a window
+ * replaces its rows, so the job can be run again after a late upload without
+ * counting anybody twice.
+ */
+export const analyticsSessions = createTable(
+	"analytics_session",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		subjectPseudoId: t.text("subject_pseudo_id").notNull(),
+		startedAt: t.timestamp("started_at", { withTimezone: true }).notNull(),
+		endedAt: t.timestamp("ended_at", { withTimezone: true }).notNull(),
+		/** The Asia/Manila calendar day the session started on. */
+		localDate: t.date("local_date").notNull(),
+		durationSeconds: t.integer("duration_seconds").notNull(),
+		eventCount: t.integer("event_count").notNull(),
+		/**
+		 * Screen views: the first screen plus every change of screen within the
+		 * session. A run of events on one screen is one view of it.
+		 */
+		screenViewCount: t.integer("screen_view_count").notNull(),
+		computedAt: t.timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("analytics_session_subject_start_unique").on(t.subjectPseudoId, t.startedAt),
+		check(
+			"analytics_session_subject_pseudo_id_check",
+			sql`${t.subjectPseudoId} ~ '^[A-Za-z0-9_-]{22}$'`
+		),
+		check("analytics_session_interval_check", sql`${t.endedAt} >= ${t.startedAt}`),
+		check("analytics_session_duration_check", sql`${t.durationSeconds} >= 0`),
+		check(
+			"analytics_session_counts_check",
+			sql`${t.eventCount} > 0 and ${t.screenViewCount} > 0 and ${t.screenViewCount} <= ${t.eventCount}`
+		),
+		index("analytics_session_local_date_idx").on(t.localDate),
+		index("analytics_session_started_at_idx").on(t.startedAt),
+		index("analytics_session_subject_started_idx").on(t.subjectPseudoId, t.startedAt),
+	]
+)
+
 // ============================================================================
 // PISO CAMP PROFILE AND FROZEN PSGC CATALOG
 // ============================================================================

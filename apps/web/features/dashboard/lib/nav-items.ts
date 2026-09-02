@@ -55,6 +55,13 @@ export const navItems: readonly DashboardNavItem[] = [
 		requiredPermission: "admin.config.manage",
 	},
 	{
+		label: "Engagement",
+		href: "/pisocamp/engagement",
+		icon: AccountSetting01Icon,
+		section: "Administration",
+		requiredPermission: "reports.dashboards.view",
+	},
+	{
 		label: "Survey Triggers",
 		href: "/pisocamp/survey-triggers",
 		icon: AccountSetting01Icon,
