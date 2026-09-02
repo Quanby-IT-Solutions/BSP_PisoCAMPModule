@@ -199,6 +199,30 @@ export type {
 	UploadPisoCampAssetOutput,
 } from "./modules/v1/pisocamp/asset.schema.js"
 
+// CM-5 pre-publication content preview protocol
+export {
+	pisoCampContentPreviewContract,
+	pisoCampPreviewContract,
+} from "./modules/v1/pisocamp/preview.contract.js"
+export {
+	GetPisoCampContentPreviewInputSchema,
+	PISO_CAMP_PREVIEWABLE_STATUSES,
+	PisoCampContentPreviewAssetSchema,
+	PisoCampContentPreviewGrantSchema,
+	PisoCampContentPreviewSchema,
+	PisoCampContentPreviewTokenSchema,
+	PisoCampPreviewableStatusSchema,
+	RedeemPisoCampContentPreviewInputSchema,
+} from "./modules/v1/pisocamp/preview.schema.js"
+export type {
+	GetPisoCampContentPreviewInput,
+	PisoCampContentPreview,
+	PisoCampContentPreviewAsset,
+	PisoCampContentPreviewGrant,
+	PisoCampPreviewableStatus,
+	RedeemPisoCampContentPreviewInput,
+} from "./modules/v1/pisocamp/preview.schema.js"
+
 // CE-1 signed offline bundle protocol
 export { pisoCampBundleContract } from "./modules/v1/pisocamp/bundle.contract.js"
 export {

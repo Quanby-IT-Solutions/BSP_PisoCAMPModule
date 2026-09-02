@@ -62,13 +62,20 @@ export default defineConfig({
 							storageState: AUTH_FILE,
 						},
 						testMatch: /authenticated\.spec\.ts/,
-						testIgnore: /cm2-assets\.authenticated\.spec\.ts/,
+						testIgnore: /(cm2-assets|cm5-preview(-shots)?)\.authenticated\.spec\.ts/,
 						dependencies: ["setup"],
 					},
 					{
 						name: "cm2-assets-authenticated",
 						use: { ...devices["Desktop Chrome"] },
 						testMatch: /cm2-assets\.authenticated\.spec\.ts/,
+					},
+					{
+						// CM-5 signs in for itself against a dedicated acceptance
+						// database, so it needs no shared storage state.
+						name: "cm5-preview-authenticated",
+						use: { ...devices["Desktop Chrome"] },
+						testMatch: /cm5-preview(-shots)?\.authenticated\.spec\.ts/,
 					},
 				]
 			: []),

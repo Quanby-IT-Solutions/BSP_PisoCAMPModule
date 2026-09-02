@@ -16,14 +16,17 @@ import {
 	UpdatePisoCampAdminConfigSchema,
 	UpsertPisoCampProfileInputSchema,
 } from "./pisocamp.schema.js"
+import { pisoCampContentPreviewContract, pisoCampPreviewContract } from "./preview.contract.js"
 
 export const pisoCampContract = {
 	events: pisoCampAnalyticsContract.events,
 	analytics: pisoCampAnalyticsContract.analytics,
 	bundle: pisoCampBundleContract,
+	preview: pisoCampPreviewContract,
 	admin: {
 		assets: pisoCampAssetContract,
 		content: pisoCampContentContract,
+		preview: pisoCampContentPreviewContract,
 		config: {
 			get: oc
 				.route({

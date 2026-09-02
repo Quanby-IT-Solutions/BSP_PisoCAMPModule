@@ -88,4 +88,10 @@ class ApiConstants {
   static String get pisoCampConsent => '$versionedUrl/pisocamp/consent';
 
   static String get pisoCampEvents => '$versionedUrl/pisocamp/events';
+
+  // CM-5 pre-publication preview. Reached only from a preview build and only
+  // with a signed, short-lived grant; the responses are never cached.
+  static String get pisoCampPreview => '$versionedUrl/pisocamp/preview';
+  static String pisoCampPreviewResource(String assetId) =>
+      '$versionedUrl/pisocamp/preview/resources/${Uri.encodeComponent(assetId)}';
 }

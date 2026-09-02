@@ -25,9 +25,10 @@ import {
 } from "./pisocamp-profile.service"
 import { PisoCampController } from "./pisocamp.controller"
 import { PisoCampService } from "./pisocamp.service"
+import { PreviewModule } from "./preview/preview.module"
 
 @Module({
-	imports: [RbacModule, AnalyticsModule, AssetsModule, ContentModule, BundleModule],
+	imports: [RbacModule, AnalyticsModule, AssetsModule, ContentModule, PreviewModule, BundleModule],
 	controllers: [PisoCampController, PisoCampProfileController],
 	providers: [
 		PisoCampAdminConfigService,

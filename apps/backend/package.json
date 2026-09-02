@@ -129,6 +129,7 @@
 		"testEnvironment": "node",
 		"moduleNameMapper": {
 			"^@repo/contracts/pisocamp-assets$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/asset.schema.ts",
+			"^@repo/contracts/pisocamp-preview$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/preview.schema.ts",
 			"^@repo/db/(.*)$": "<rootDir>/../../../packages/db/src/$1",
 			"^@repo/auth/(.*)$": "<rootDir>/../../../packages/auth/src/$1",
 			"^@repo/contracts$": "<rootDir>/../../../packages/contracts/src",

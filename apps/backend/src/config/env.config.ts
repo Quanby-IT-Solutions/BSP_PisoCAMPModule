@@ -99,6 +99,16 @@ export const env = createEnv({
 		PISOCAMP_BUNDLE_LEASE_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
 		PISOCAMP_BUNDLE_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(50),
 
+		// CM-5 pre-publication preview grants. Optional: when unset the signing
+		// key is HKDF-derived from BETTER_AUTH_SECRET with a preview-specific
+		// label, so preview works in every existing environment without a new
+		// mandatory secret while staying cryptographically separate from
+		// sessions. Supply it to rotate preview grants independently.
+		PISOCAMP_PREVIEW_TOKEN_SECRET: z.string().min(32).optional(),
+		// Short by design: a grant is a bearer credential for unpublished BSP
+		// content, and it only has to outlive one page render.
+		PISOCAMP_PREVIEW_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
+
 		// Redis (AB-2). Shared state for the throttler and the RBAC permission
 		// cache. Optional so a single-instance local run still boots, but see
 		// the degradation notes in redis.provider.ts: without it, rate limits

@@ -312,4 +312,31 @@ describe("ContentReviewView", () => {
 		expect(status).toHaveTextContent(/content approved/i)
 		expect(toastSuccess).toHaveBeenCalledWith("Content approved.")
 	})
+
+	it("offers a preview link for the current version only to a preview-permission holder", () => {
+		const { rerender } = render(
+			<ContentReviewView itemId={detail.id} canApprove canPreview canPublish={false} />
+		)
+
+		expect(screen.getByRole("link", { name: "Preview Version 4" })).toHaveAttribute(
+			"href",
+			`/pisocamp/content/${detail.id}/versions/4/preview`
+		)
+
+		rerender(<ContentReviewView itemId={detail.id} canApprove canPublish={false} />)
+		expect(screen.queryByRole("link", { name: /Preview Version/ })).not.toBeInTheDocument()
+	})
+
+	it("hides the preview link once the version is published", () => {
+		useReview.mockReturnValue({
+			isPending: false,
+			isError: false,
+			data: { ...detail, status: "published" },
+			refetch: vi.fn(),
+		})
+
+		render(<ContentReviewView itemId={detail.id} canApprove canPreview canPublish />)
+
+		expect(screen.queryByRole("link", { name: /Preview Version/ })).not.toBeInTheDocument()
+	})
 })

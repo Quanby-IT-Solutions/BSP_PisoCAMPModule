@@ -18,11 +18,19 @@ export default async function PisoCampContentReviewDetailPage({
 	const profile = { roles: access.roles, permissions: access.permissions }
 	const canApprove = canAccess(profile, { requiredPermission: "content.items.approve" })
 	const canPublish = canAccess(profile, { requiredPermission: "content.items.publish" })
+	const canPreview = canAccess(profile, { requiredPermission: "content.items.preview" })
 
 	if (access.status !== "loaded" || !canApprove) {
 		redirect("/dashboard")
 	}
 
 	const { itemId } = await params
-	return <ContentReviewView itemId={itemId} canApprove={canApprove} canPublish={canPublish} />
+	return (
+		<ContentReviewView
+			itemId={itemId}
+			canApprove={canApprove}
+			canPreview={canPreview}
+			canPublish={canPublish}
+		/>
+	)
 }

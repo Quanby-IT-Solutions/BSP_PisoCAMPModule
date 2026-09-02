@@ -27,6 +27,10 @@ export default async function EditPisoCampContentPage({
 		{ roles: access.roles, permissions: access.permissions },
 		{ requiredPermission: "content.assets.upload" }
 	)
+	const canPreview = canAccess(
+		{ roles: access.roles, permissions: access.permissions },
+		{ requiredPermission: "content.items.preview" }
+	)
 
 	if (access.status !== "loaded" || !permitted) {
 		redirect("/dashboard")
@@ -39,6 +43,7 @@ export default async function EditPisoCampContentPage({
 			itemId={itemId}
 			canSubmit={canSubmit}
 			canManageAssets={canManageAssets}
+			canPreview={canPreview}
 		/>
 	)
 }

@@ -8,7 +8,9 @@ import 'package:mobile/features/auth/presentation/screens/register_screen.dart';
 import 'package:mobile/features/home/presentation/screens/home_screen.dart';
 import 'package:mobile/features/onboarding/presentation/providers/onboarding_provider.dart';
 import 'package:mobile/features/onboarding/presentation/screens/onboarding_screen.dart';
+import 'package:mobile/features/pisocamp/data/preview_build.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_home_screen.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_preview_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_registration_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/currency_detail_screen.dart';
@@ -29,6 +31,9 @@ class AppRoutes {
   static const pisoCampRegistration = '/pisocamp/register';
   static const pisoCampBanknotes = '/pisocamp/currency/banknotes';
   static const pisoCampCoins = '/pisocamp/currency/coins';
+
+  /// Present only in a BSP-approved preview build (see [kPisoCampPreviewBuild]).
+  static const pisoCampPreview = '/pisocamp/preview';
 
   static String currencyDetail({
     required String kind,
@@ -86,6 +91,10 @@ String? resolveAppRedirect({
     return auth ||
             matchedLocation == AppRoutes.pisoCamp ||
             matchedLocation == AppRoutes.pisoCampRegistration ||
+            // Preview builds are internal by construction; the grant, not a
+            // session, is what authorises the render.
+            (kPisoCampPreviewBuild &&
+                matchedLocation == AppRoutes.pisoCampPreview) ||
             isGuestCurrencyRoute(matchedLocation)
         ? null
         : AppRoutes.login;
@@ -155,6 +164,13 @@ GoRouter appRouter(Ref ref) {
         path: AppRoutes.pisoCampRegistration,
         builder: (context, state) => const PisoCampRegistrationScreen(),
       ),
+      if (kPisoCampPreviewBuild)
+        GoRoute(
+          path: AppRoutes.pisoCampPreview,
+          builder: (context, state) => PisoCampPreviewScreen(
+            initialCode: state.uri.queryParameters['token'],
+          ),
+        ),
       GoRoute(
         path: '/pisocamp/currency/:kind',
         builder: (context, state) {

@@ -16,16 +16,18 @@ vi.mock("@/features/dashboard/server/get-access", () => ({ getAccess }))
 vi.mock("@/features/pisocamp-content-admin/components/content-form-view", () => ({
 	ContentFormView: ({
 		canManageAssets,
+		canPreview,
 		canSubmit,
 		itemId,
 		mode,
 	}: {
 		canManageAssets: boolean
+		canPreview: boolean
 		canSubmit: boolean
 		itemId: string
 		mode: string
 	}) => {
-		contentFormView({ canManageAssets, canSubmit, itemId, mode })
+		contentFormView({ canManageAssets, canPreview, canSubmit, itemId, mode })
 		return (
 			<div>
 				Content form: {mode} {itemId}
@@ -44,11 +46,16 @@ describe("EditPisoCampContentPage", () => {
 		expect(metadata).toEqual(expect.objectContaining({ title: "Edit Content" }))
 	})
 
-	it("independently maps submit and asset-management capabilities to the edit view", async () => {
+	it("independently maps submit, asset and preview capabilities to the edit view", async () => {
 		getAccess.mockResolvedValue({
 			status: "loaded",
 			roles: [],
-			permissions: ["content.items.edit", "content.items.submit", "content.assets.upload"],
+			permissions: [
+				"content.items.edit",
+				"content.items.submit",
+				"content.assets.upload",
+				"content.items.preview",
+			],
 		})
 
 		render(await EditPisoCampContentPage(route))
@@ -57,10 +64,25 @@ describe("EditPisoCampContentPage", () => {
 		expect(screen.getByText(`Content form: edit ${itemId}`)).toBeInTheDocument()
 		expect(contentFormView).toHaveBeenCalledWith({
 			canManageAssets: true,
+			canPreview: true,
 			canSubmit: true,
 			itemId,
 			mode: "edit",
 		})
+	})
+
+	it("withholds preview capability from an editor who lacks content.items.preview", async () => {
+		getAccess.mockResolvedValue({
+			status: "loaded",
+			roles: [],
+			permissions: ["content.items.edit", "content.assets.upload"],
+		})
+
+		render(await EditPisoCampContentPage(route))
+
+		expect(contentFormView).toHaveBeenCalledWith(
+			expect.objectContaining({ canPreview: false, canManageAssets: true })
+		)
 	})
 
 	it("keeps editing available while withholding submit capability without its exact permission", async () => {
@@ -74,6 +96,7 @@ describe("EditPisoCampContentPage", () => {
 
 		expect(contentFormView).toHaveBeenCalledWith({
 			canManageAssets: false,
+			canPreview: false,
 			canSubmit: false,
 			itemId,
 			mode: "edit",

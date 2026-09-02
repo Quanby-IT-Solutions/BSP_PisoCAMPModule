@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import type { Route } from "next"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -50,14 +51,27 @@ import {
 } from "@/features/pisocamp-content-admin/lib/content-form"
 
 type ContentFormViewProps =
-	| { mode: "create"; itemId?: never; canSubmit?: never; canManageAssets?: never }
-	| { mode: "edit"; itemId: string; canSubmit?: boolean; canManageAssets?: boolean }
+	| {
+			mode: "create"
+			itemId?: never
+			canSubmit?: never
+			canManageAssets?: never
+			canPreview?: never
+	  }
+	| {
+			mode: "edit"
+			itemId: string
+			canSubmit?: boolean
+			canManageAssets?: boolean
+			canPreview?: boolean
+	  }
 type ContentFormEditorProps =
 	| {
 			mode: "create"
 			itemId?: never
 			canSubmit?: never
 			canManageAssets?: never
+			canPreview?: never
 			initialDetail?: never
 			reloadDetail?: never
 	  }
@@ -66,6 +80,7 @@ type ContentFormEditorProps =
 			itemId: string
 			canSubmit: boolean
 			canManageAssets: boolean
+			canPreview: boolean
 			initialDetail: PisoCampContentDetail
 			reloadDetail: () => Promise<PisoCampContentDetail | undefined>
 	  }
@@ -125,8 +140,41 @@ function titleCase(value: string) {
 	return `${label.charAt(0).toUpperCase()}${label.slice(1)}`
 }
 
+/**
+ * Entry point to the CM-5 renderer.
+ *
+ * Rendered only for a pre-publication version and only for a holder of
+ * `content.items.preview`: a published version is already the live experience,
+ * and the endpoint refuses it, so offering the link would be a dead end.
+ */
+function PreviewLink({
+	canPreview,
+	itemId,
+	status,
+	versionNo,
+}: {
+	canPreview: boolean
+	itemId: string
+	status: PisoCampContentDetail["status"]
+	versionNo: number
+}) {
+	const previewable =
+		status === "draft" || status === "submitted_for_review" || status === "approved"
+	if (!canPreview || !previewable) return null
+	return (
+		<Button
+			variant="outline"
+			className="h-auto min-h-11 w-full touch-manipulation whitespace-normal transition-colors sm:w-auto"
+			render={<Link href={`/pisocamp/content/${itemId}/versions/${versionNo}/preview` as Route} />}
+		>
+			Preview Version {versionNo}
+		</Button>
+	)
+}
+
 export function ContentFormView({
 	canManageAssets = false,
+	canPreview = false,
 	canSubmit = false,
 	itemId,
 	mode,
@@ -178,6 +226,12 @@ export function ContentFormView({
 							Current status: <Badge variant="secondary">{titleCase(detail.data.status)}</Badge>
 						</AlertDescription>
 					</Alert>
+					<PreviewLink
+						canPreview={canPreview}
+						itemId={itemId}
+						status={detail.data.status}
+						versionNo={detail.data.currentVersion.versionNo}
+					/>
 				</div>
 			)
 		}
@@ -186,6 +240,7 @@ export function ContentFormView({
 				mode="edit"
 				itemId={itemId}
 				canManageAssets={canManageAssets}
+				canPreview={canPreview}
 				canSubmit={canSubmit}
 				initialDetail={detail.data}
 				reloadDetail={async () => {
@@ -201,6 +256,7 @@ export function ContentFormView({
 
 function ContentFormEditor({
 	canManageAssets = false,
+	canPreview = false,
 	canSubmit = false,
 	itemId,
 	mode,
@@ -639,6 +695,14 @@ function ContentFormEditor({
 							>
 								Cancel
 							</Button>
+							{mode === "edit" ? (
+								<PreviewLink
+									canPreview={canPreview}
+									itemId={itemId}
+									status="draft"
+									versionNo={versionNo}
+								/>
+							) : null}
 							{mode === "edit" && canSubmit ? (
 								<AlertDialog
 									open={submitOpen}

@@ -176,7 +176,9 @@ describe("Piso CAMP asset hooks", () => {
 			await expect(result.current.mutateAsync(attachInput)).rejects.toBe(conflict)
 		})
 
-		expect(result.current.isError).toBe(true)
+		// The rejected promise settles before React Query has committed the
+		// error state, so read it through waitFor rather than on the next line.
+		await waitFor(() => expect(result.current.isError).toBe(true))
 		expect(result.current.error).toBe(conflict)
 	})
 })

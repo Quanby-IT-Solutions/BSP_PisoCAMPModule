@@ -82,7 +82,13 @@ const config: NextConfig = {
 			`script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
 			// Tailwind and next-themes both set inline styles at runtime.
 			"style-src 'self' 'unsafe-inline'",
-			"img-src 'self' data: blob:",
+			// The API origin is listed for media as well as data/blob: CM-5
+			// preview renders unpublished images and narration straight from the
+			// API's token-authorised, `no-store` resource route, which cannot be
+			// proxied through the image optimiser without caching content that
+			// must never be cached.
+			`img-src 'self' data: blob: ${apiOrigin}`.trim(),
+			`media-src 'self' data: blob: ${apiOrigin}`.trim(),
 			"font-src 'self' data:",
 			// The API ORIGIN, not the base URL. A CSP source with a path is
 			// matched as a path prefix, so `http://host:3000/api` permits only

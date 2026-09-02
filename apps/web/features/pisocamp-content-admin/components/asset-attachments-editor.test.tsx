@@ -124,7 +124,9 @@ describe("AssetAttachmentsEditor", () => {
 		expect(role).toHaveClass("min-h-11", "w-full", "min-w-0", "whitespace-normal")
 		expect(file).toHaveClass("min-h-11", "w-full", "min-w-0")
 		await user.click(role)
-		expect(screen.getAllByRole("option").map(option => option.textContent)).toEqual([
+		// The listbox is portalled and opens on a later frame; a synchronous read
+		// races that and fails intermittently.
+		expect((await screen.findAllByRole("option")).map(option => option.textContent)).toEqual([
 			"Obverse",
 			"Reverse",
 			"Edge",

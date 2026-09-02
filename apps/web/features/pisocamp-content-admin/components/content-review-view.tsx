@@ -74,10 +74,12 @@ type Feedback = {
 
 export function ContentReviewView({
 	canApprove,
+	canPreview = false,
 	canPublish,
 	itemId,
 }: {
 	canApprove: boolean
+	canPreview?: boolean
 	canPublish: boolean
 	itemId: string
 }) {
@@ -305,6 +307,20 @@ export function ContentReviewView({
 					<WorkflowMetadata detail={detail} />
 				</CardContent>
 			</Card>
+
+			{canPreview && detail.status !== "published" ? (
+				<Button
+					variant="outline"
+					className="min-h-11 touch-manipulation transition-colors"
+					render={
+						<Link
+							href={`/pisocamp/content/${detail.id}/versions/${detail.currentVersion.versionNo}/preview`}
+						/>
+					}
+				>
+					Preview Version {detail.currentVersion.versionNo}
+				</Button>
+			) : null}
 
 			{detail.status === "submitted_for_review" && canApprove ? (
 				<Card className="min-w-0 overflow-visible">
