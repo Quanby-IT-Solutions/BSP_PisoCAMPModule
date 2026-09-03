@@ -365,6 +365,81 @@ void main() {
     });
   });
 
+  group('DR-2 a note it cannot read', () {
+    test('gives up after the dwell time and claims nothing', () async {
+      final camera = StreamController<RecognitionFrame>();
+      final engine = _ScriptedEngine(<RecognitionInference?>[])
+        // Every frame below the threshold, for as long as it takes.
+        ..script.addAll(<RecognitionInference?>[]);
+      final scanner = RecognitionScanner(
+        modelSource: _FixedModelSource(model),
+        engine: engine,
+        camera: _ScriptedCamera(camera),
+        confidenceThreshold: 0.8,
+        dwell: const Duration(milliseconds: 40),
+      );
+      final states = <RecognitionScanState>[];
+      scanner.states.listen(states.add);
+      await scanner.start();
+      camera
+        ..add(_frame())
+        ..add(_frame());
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(states.whereType<RecognitionRecognized>(), isEmpty);
+      expect(states.last, isA<RecognitionUnrecognized>());
+      // The camera and the runtime are released with the answer, not left
+      // running behind a screen that has stopped looking.
+      expect(engine.disposals, 1);
+    });
+
+    test('gives up when the camera stops delivering frames at all', () async {
+      final camera = StreamController<RecognitionFrame>();
+      final scanner = RecognitionScanner(
+        modelSource: _FixedModelSource(model),
+        engine: _ScriptedEngine(<RecognitionInference?>[]),
+        camera: _ScriptedCamera(camera),
+        confidenceThreshold: 0.8,
+        dwell: const Duration(milliseconds: 30),
+      );
+      final states = <RecognitionScanState>[];
+      scanner.states.listen(states.add);
+      await scanner.start();
+      // Nothing is fed. A silent camera must end the same way as an unreadable
+      // note: somebody is not left holding a note at a screen that will never
+      // answer.
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(states.last, isA<RecognitionUnrecognized>());
+    });
+
+    test('a confident reading before the dwell expires wins', () async {
+      final camera = StreamController<RecognitionFrame>();
+      final scanner = RecognitionScanner(
+        modelSource: _FixedModelSource(model),
+        engine: _ScriptedEngine(<RecognitionInference?>[
+          const RecognitionInference(classId: 0, confidence: 0.3),
+          const RecognitionInference(classId: 1, confidence: 0.95),
+        ]),
+        camera: _ScriptedCamera(camera),
+        confidenceThreshold: 0.8,
+        dwell: const Duration(milliseconds: 200),
+      );
+      final states = <RecognitionScanState>[];
+      scanner.states.listen(states.add);
+      await scanner.start();
+      camera
+        ..add(_frame())
+        ..add(_frame());
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+
+      // And the dwell timer does not then fire on top of it: one scan, one
+      // answer.
+      expect(states.whereType<RecognitionUnrecognized>(), isEmpty);
+      expect(states.last, isA<RecognitionRecognized>());
+    });
+  });
+
   group('DR-1 when it cannot run', () {
     test('says the model is missing rather than guessing', () async {
       final scanner = RecognitionScanner(

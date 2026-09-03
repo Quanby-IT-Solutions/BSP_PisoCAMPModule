@@ -25,6 +25,9 @@ enum RecognitionStage {
   /// A denomination was read confidently.
   result,
 
+  /// The scan ran and could not read the note (DR-006).
+  unrecognized,
+
   /// It could not run, and the screen says why.
   unavailable,
 }
@@ -43,6 +46,7 @@ class RecognitionScannerScreen extends ConsumerStatefulWidget {
     required this.camera,
     this.announcer,
     this.confidenceThreshold,
+    this.dwell = kRecognitionDwell,
     this.clock,
   });
 
@@ -55,6 +59,10 @@ class RecognitionScannerScreen extends ConsumerStatefulWidget {
 
   /// Overridden in tests; read from public configuration otherwise.
   final double? confidenceThreshold;
+
+  /// How long to keep trying before saying the note cannot be read (DR-006).
+  final Duration dwell;
+
   final DateTime Function()? clock;
 
   @override
@@ -107,6 +115,7 @@ class _RecognitionScannerScreenState
       engine: widget.engine,
       camera: widget.camera,
       confidenceThreshold: _threshold,
+      dwell: widget.dwell,
       clock: widget.clock,
     );
     _scanner = scanner;
@@ -128,6 +137,9 @@ class _RecognitionScannerScreenState
         });
         _report(RecognitionOutcome.recognized, state.elapsedMs);
         unawaited(_announce(state));
+      case RecognitionUnrecognized():
+        setState(() => _stage = RecognitionStage.unrecognized);
+        _report(RecognitionOutcome.unrecognized, state.elapsedMs);
       case RecognitionUnavailable():
         setState(() {
           _stage = RecognitionStage.unavailable;
@@ -244,6 +256,10 @@ class _RecognitionScannerScreenState
               audioOn: _audioOn,
               onReplay: _replay,
               onScanAgain: _scanAgain,
+              onExit: _exit,
+            ),
+            RecognitionStage.unrecognized => _Unrecognized(
+              onRetry: _scanAgain,
               onExit: _exit,
             ),
             RecognitionStage.unavailable => _Unavailable(
@@ -383,6 +399,79 @@ class _Result extends StatelessWidget {
             onPressed: onScanAgain,
             child: const Text('Scan another note'),
           ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 48,
+          child: OutlinedButton(onPressed: onExit, child: const Text('Exit')),
+        ),
+      ],
+    );
+  }
+}
+
+/// DR-006. What to try, rather than only that it did not work.
+///
+/// No denomination, no guess and nothing spoken: the module has nothing to say
+/// about this note, and the four tips are the four things that actually change
+/// the outcome of the next attempt.
+class _Unrecognized extends StatelessWidget {
+  const _Unrecognized({required this.onRetry, required this.onExit});
+
+  final VoidCallback onRetry;
+  final VoidCallback onExit;
+
+  static const _tips = <(IconData, String)>[
+    (
+      Icons.light_mode_outlined,
+      'Move somewhere brighter, and keep glare and shadows off the note.',
+    ),
+    (
+      Icons.straighten_outlined,
+      'Hold the phone about a hand-span away, close enough to fill the frame.',
+    ),
+    (
+      Icons.screen_rotation_outlined,
+      'Turn the note so it sits straight, the long way across the screen.',
+    ),
+    (
+      Icons.crop_free_outlined,
+      'Lay it flat and unfolded, with nothing covering any part of it.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      children: <Widget>[
+        Text(
+          'The note could not be read',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Nothing was recognised confidently, so no denomination is being '
+          'shown. These usually help:',
+        ),
+        const SizedBox(height: 12),
+        for (final (icon, tip) in _tips)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                // Decorative: the sentence beside it carries the whole meaning,
+                // so a screen reader should not read the icon as well.
+                ExcludeSemantics(child: Icon(icon, size: 24)),
+                const SizedBox(width: 12),
+                Expanded(child: Text(tip)),
+              ],
+            ),
+          ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 48,
+          child: FilledButton(onPressed: onRetry, child: const Text('Retry')),
         ),
         const SizedBox(height: 12),
         SizedBox(

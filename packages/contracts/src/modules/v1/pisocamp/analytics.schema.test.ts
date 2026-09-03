@@ -119,6 +119,23 @@ describe("AN-1 analytics event catalog", () => {
 		).toBe(false)
 	})
 
+	it("keeps a scan that found nothing on the completed side", () => {
+		const unrecognized = vectors.find(
+			vector =>
+				vector.eventName === "recognition_result" &&
+				(vector.properties as { outcome?: string }).outcome === "unrecognized"
+		)
+		expect(unrecognized).toBeDefined()
+		expect(unrecognized!.status).toBe("completed")
+
+		// DR-006: a scan that ran and could not read the note is not a failure of
+		// the feature, and reporting it as one would hide the model's real
+		// failure rate behind broken installs.
+		expect(
+			AnalyticsEventSchema.safeParse({ ...unrecognized, status: "failed" }).success
+		).toBe(false)
+	})
+
 	it("refuses a scan that carries the image it scanned", () => {
 		const recognized = vectors.find(vector => vector.eventName === "recognition_result")!
 		// DR-003: frames stay on the device. The catalog is the last place that

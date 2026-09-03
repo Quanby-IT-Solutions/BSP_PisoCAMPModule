@@ -49,6 +49,18 @@ final class RecognitionRecognized extends RecognitionScanState {
   final int elapsedMs;
 }
 
+/// DR-006. The scan ran and could not read the note confidently.
+///
+/// Deliberately not a denomination and deliberately not a failure of the
+/// feature: the camera worked, the model ran, and it was not sure. Saying so is
+/// the only honest answer, and the tips that come with it are what turns a
+/// second attempt into a better one.
+final class RecognitionUnrecognized extends RecognitionScanState {
+  const RecognitionUnrecognized({required this.elapsedMs});
+
+  final int elapsedMs;
+}
+
 final class RecognitionUnavailable extends RecognitionScanState {
   const RecognitionUnavailable({required this.reason, required this.elapsedMs});
 
@@ -63,6 +75,14 @@ final class RecognitionUnavailable extends RecognitionScanState {
 /// enough", and the module would be naming notes on a coin flip.
 const double kDefaultRecognitionConfidenceThreshold = 0.8;
 
+/// How long the module keeps trying before it says it cannot read the note.
+///
+/// Long enough to move the phone and let the light change, short enough that
+/// somebody is not left holding a note at a blank screen wondering whether it
+/// is working. DR-4 owns the approved value along with the threshold; this is
+/// the value used until it is configured.
+const Duration kRecognitionDwell = Duration(seconds: 8);
+
 /// DR-1's scan loop: frames in, at most one denomination out.
 ///
 /// Everything the criteria are strict about lives here rather than in the
@@ -75,21 +95,25 @@ final class RecognitionScanner {
     required RecognitionEngine engine,
     required CameraFrameSource camera,
     required double confidenceThreshold,
+    Duration dwell = kRecognitionDwell,
     DateTime Function()? clock,
   }) : _modelSource = modelSource,
        _engine = engine,
        _camera = camera,
        _confidenceThreshold = confidenceThreshold,
+       _dwell = dwell,
        _clock = clock ?? DateTime.now;
 
   final RecognitionModelSource _modelSource;
   final RecognitionEngine _engine;
   final CameraFrameSource _camera;
   final double _confidenceThreshold;
+  final Duration _dwell;
   final DateTime Function() _clock;
 
   final _states = StreamController<RecognitionScanState>();
   StreamSubscription<RecognitionFrame>? _frames;
+  Timer? _dwellTimer;
   DateTime? _startedAt;
   var _busy = false;
   var _finished = false;
@@ -149,6 +173,10 @@ final class RecognitionScanner {
     }
 
     _emit(const RecognitionScanning());
+    // A timer rather than a frame count, so a camera that stops delivering
+    // frames ends the same way as one that delivers unreadable ones: somebody
+    // is not left holding a note at a screen that will never answer.
+    _dwellTimer = Timer(_dwell, _giveUp);
     _frames = _camera.frames().listen(
       (frame) => _onFrame(frame, model),
       onError: _onCameraError,
@@ -180,8 +208,8 @@ final class RecognitionScanner {
       final inference = await _engine.classify(frame);
       if (_finished) return;
       if (inference.confidence < _confidenceThreshold) {
-        // Below the threshold nothing is said and nothing is shown. DR-2 owns
-        // what happens when that goes on for a while.
+        // Below the threshold nothing is said and nothing is shown. The dwell
+        // timer decides when a run of these becomes "cannot read this note".
         return;
       }
       final match = model.classFor(inference.classId);
@@ -206,6 +234,10 @@ final class RecognitionScanner {
       frame.release();
       _busy = false;
     }
+  }
+
+  void _giveUp() {
+    _finish(RecognitionUnrecognized(elapsedMs: _elapsedMs));
   }
 
   void _onCameraError(Object error) {
@@ -240,6 +272,8 @@ final class RecognitionScanner {
   /// Releases the camera and the runtime. Safe to call more than once.
   Future<void> dispose() async {
     _finished = true;
+    _dwellTimer?.cancel();
+    _dwellTimer = null;
     final frames = _frames;
     _frames = null;
     await frames?.cancel();

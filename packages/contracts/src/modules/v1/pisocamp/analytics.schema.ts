@@ -45,17 +45,23 @@ export const ANALYTICS_EVENT_NAMES = [
  * What a denomination scan concluded (DR-002, DR-007).
  *
  * `recognized` is the only outcome that carries a denomination claim, and it
- * is only reached above the configured confidence threshold. `unavailable`
- * says the feature could not run at all — a missing or corrupt recognition
- * model — and `permission_denied` that the camera was refused. Both are
- * different things from a scan that ran and found nothing, and all three have
- * to stay distinguishable: a module nobody can use and a module nobody wants
- * are not the same problem.
+ * is only reached above the configured confidence threshold. `unrecognized` is
+ * a scan that ran and could not read the note confidently — DR-006 — which is
+ * a different thing from `unavailable` (a missing or corrupt recognition
+ * model) and from `permission_denied` (the camera was refused). All four have
+ * to stay distinguishable: a module nobody can use, a module nobody wants and
+ * a module that keeps failing on the notes people actually hold are three
+ * different problems with three different fixes.
  *
  * DR-2 and DR-3 add the outcomes they own; each is a claim this module is not
  * yet entitled to make, so none of them is listed in advance.
  */
-export const RECOGNITION_OUTCOMES = ["recognized", "unavailable", "permission_denied"] as const
+export const RECOGNITION_OUTCOMES = [
+	"recognized",
+	"unrecognized",
+	"unavailable",
+	"permission_denied",
+] as const
 
 export type RecognitionOutcome = (typeof RECOGNITION_OUTCOMES)[number]
 

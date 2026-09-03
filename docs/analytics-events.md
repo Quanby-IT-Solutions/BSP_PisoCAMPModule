@@ -29,13 +29,15 @@ devices could not run the experience at all than when people chose not to.
 
 `recognition_result` carries an `outcome` of `recognized` — the only outcome
 that makes a denomination claim, and only above the configured confidence
-threshold — or `unavailable` (the recognition model was missing or corrupt) or
+threshold — `unrecognized` (the scan ran and could not read the note
+confidently), `unavailable` (the recognition model was missing or corrupt) or
 `permission_denied` (the camera was refused). The last two are the outcomes
 where no scan ran, and they are the ones reported with `status: failed`; the
 contract refuses any other pairing of the two fields. Counting a feature that
-could not run as a completed scan would hide a broken model deployment, and
-merging a refused camera into it would hide the difference between a module
-nobody can use and one nobody wants.
+could not run as a completed scan would hide a broken model deployment, merging
+a refused camera into it would hide the difference between a module nobody can
+use and one nobody wants, and reporting `unrecognized` as a failure would hide
+the model's real failure rate behind broken installs.
 
 It carries no denomination, no confidence and nothing derived from the frame.
 What somebody is holding is not this module's business, and DR-003 requires

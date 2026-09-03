@@ -142,11 +142,24 @@ void main() {
     required RecognitionEngine engine,
     required CameraFrameSource camera,
     double threshold = 0.8,
+    Duration dwell = const Duration(seconds: 8),
     SpeechAnnouncer? speech,
+    bool pushed = false,
   }) async {
     final router = GoRouter(
-      initialLocation: '/scan',
+      initialLocation: pushed ? '/home' : '/scan',
       routes: [
+        GoRoute(
+          path: '/home',
+          builder: (context, state) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => context.push('/scan'),
+                child: const Text('Where I came from'),
+              ),
+            ),
+          ),
+        ),
         GoRoute(
           path: '/scan',
           builder: (context, state) => RecognitionScannerScreen(
@@ -155,6 +168,7 @@ void main() {
             camera: camera,
             announcer: speech ?? announcer,
             confidenceThreshold: threshold,
+            dwell: dwell,
           ),
         ),
       ],
@@ -185,6 +199,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    if (pushed) {
+      await tester.tap(find.text('Where I came from'));
+      await tester.pumpAndSettle();
+    }
   }
 
   List<Map<String, Object?>> events() =>
@@ -385,6 +403,115 @@ void main() {
     expect(find.text('One thousand pesos'), findsNothing);
     expect(announcer.spoken, isEmpty);
     expect(find.text('Point the camera at the banknote'), findsOneWidget);
+  });
+
+  group('DR-2 a note it could not read', () {
+    testWidgets('says so and shows what to try, naming no note', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        modelSource: _FixedModelSource(_model()),
+        engine: _ConfidentEngine(confidence: 0.4),
+        camera: _SteadyCamera(),
+        dwell: const Duration(milliseconds: 40),
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The note could not be read'), findsOneWidget);
+      // The four things that actually change the next attempt.
+      expect(find.textContaining('brighter'), findsOneWidget);
+      expect(find.textContaining('hand-span away'), findsOneWidget);
+      expect(find.textContaining('sits straight'), findsOneWidget);
+      expect(find.textContaining('flat and unfolded'), findsOneWidget);
+
+      // DR-009: no denomination is shown or spoken, not even a hedged one.
+      expect(find.text('One thousand pesos'), findsNothing);
+      expect(announcer.spoken, isEmpty);
+
+      final event = events().single;
+      final properties = event['properties']! as Map<String, Object?>;
+      expect(properties['outcome'], 'unrecognized');
+      // A scan that ran and found nothing is a completed scan: the model
+      // answered, and counting it as a failure would hide its real failure
+      // rate behind broken installs.
+      expect(event['status'], 'completed');
+    });
+
+    testWidgets('Retry starts scanning again', (tester) async {
+      final source = _FixedModelSource(_model());
+      await pumpScreen(
+        tester,
+        modelSource: source,
+        engine: _ConfidentEngine(confidence: 0.4),
+        camera: _SteadyCamera(),
+        dwell: const Duration(milliseconds: 40),
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Retry'));
+      // Pumped short of the dwell, because the point is that scanning resumed —
+      // settling would run the second attempt out to its own conclusion.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 5));
+
+      expect(source.loads, 2);
+      expect(find.text('Point the camera at the banknote'), findsOneWidget);
+      expect(find.text('The note could not be read'), findsNothing);
+    });
+
+    testWidgets('Exit returns to where I came from', (tester) async {
+      await pumpScreen(
+        tester,
+        modelSource: _FixedModelSource(_model()),
+        engine: _ConfidentEngine(confidence: 0.4),
+        camera: _SteadyCamera(),
+        dwell: const Duration(milliseconds: 40),
+        pushed: true,
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Exit'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Where I came from'), findsOneWidget);
+    });
+
+    testWidgets('every control is 48dp on a narrow screen', (tester) async {
+      tester.view.physicalSize = const Size(320, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await pumpScreen(
+        tester,
+        modelSource: _FixedModelSource(_model()),
+        engine: _ConfidentEngine(confidence: 0.4),
+        camera: _SteadyCamera(),
+        dwell: const Duration(milliseconds: 40),
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.pumpAndSettle();
+
+      // The guidance is long, so the controls sit below the fold on a small
+      // phone; what matters is that they are reachable and full-size there.
+      for (final label in <String>['Retry', 'Exit']) {
+        final control = find.widgetWithText(SizedBox, label);
+        await tester.scrollUntilVisible(control, 80);
+        expect(
+          tester.getSize(control.first).height,
+          greaterThanOrEqualTo(48),
+          reason: label,
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets('every control is reachable and 48dp on a narrow screen', (

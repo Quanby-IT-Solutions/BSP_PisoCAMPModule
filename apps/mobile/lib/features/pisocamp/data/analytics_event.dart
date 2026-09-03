@@ -131,13 +131,21 @@ enum ArStartOutcome {
 /// module nobody wants are not the same problem.
 enum RecognitionOutcome {
   recognized('recognized'),
+  unrecognized('unrecognized'),
   unavailable('unavailable'),
   permissionDenied('permission_denied');
 
   const RecognitionOutcome(this.wireValue);
   final String wireValue;
 
-  bool get ranNothing => this != RecognitionOutcome.recognized;
+  /// Whether no scan ran at all, which is what the failed status means.
+  ///
+  /// A scan that ran and could not read the note is a completed scan: it is the
+  /// model's answer, not a broken install, and counting the two together would
+  /// hide the model's real failure rate.
+  bool get ranNothing =>
+      this == RecognitionOutcome.unavailable ||
+      this == RecognitionOutcome.permissionDenied;
 }
 
 enum AnalyticsAccountType {

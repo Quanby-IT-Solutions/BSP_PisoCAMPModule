@@ -21,6 +21,8 @@ type Shape = {
 	screen: string
 	feature: string
 	properties: Record<string, unknown>
+	/** Only the events that exist because something did not work declare one. */
+	status?: "completed" | "failed"
 }
 
 const SHAPES: Record<string, Shape> = {
@@ -110,7 +112,7 @@ function event(subjectPseudoId: string, occurredAt: Date, shape: keyof typeof SH
 		osVersion: "15",
 		deviceCategory: "phone" as const,
 		networkState: "online" as const,
-		status: ("status" in kind ? kind.status : "completed") as never,
+		status: (kind.status ?? "completed") as never,
 		properties: kind.properties as never,
 	}
 }
