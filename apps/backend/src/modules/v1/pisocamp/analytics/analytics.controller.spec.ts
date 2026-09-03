@@ -11,6 +11,7 @@ import { AdoptionService } from "./adoption.service"
 import { GamificationService } from "./gamification.service"
 import { SurveyMetricsService } from "./survey-metrics.service"
 import { TechnicalMetricsService } from "./technical-metrics.service"
+import { DemographicsService } from "./demographics.service"
 import { RetentionService } from "./retention.service"
 import { EngagementService } from "./engagement.service"
 
@@ -62,6 +63,7 @@ jest.mock("@/config/api-versions.config", () => ({
 }))
 jest.mock("@thallesp/nestjs-better-auth", () => ({
 	AllowAnonymous: () => SetMetadata("PUBLIC", true),
+	Session: () => () => undefined,
 }))
 
 describe("AnalyticsController", () => {
@@ -100,6 +102,7 @@ describe("AnalyticsController", () => {
 				{ provide: GamificationService, useValue: { summary: async () => null } },
 				{ provide: SurveyMetricsService, useValue: { summary: async () => null } },
 				{ provide: TechnicalMetricsService, useValue: { summary: async () => null } },
+				{ provide: DemographicsService, useValue: { summary: async () => null } },
 				{
 					provide: Logger,
 					useValue: { error: (...args: unknown[]) => logCalls.push(args) },

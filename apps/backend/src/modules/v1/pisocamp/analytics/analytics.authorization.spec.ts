@@ -53,6 +53,7 @@ jest.mock("@/config/api-versions.config", () => ({
 }))
 jest.mock("@thallesp/nestjs-better-auth", () => ({
 	AllowAnonymous: () => () => undefined,
+	Session: () => () => undefined,
 }))
 jest.mock("better-auth/node", () => ({ fromNodeHeaders: () => ({}) }))
 jest.mock("@repo/auth", () => ({
@@ -60,14 +61,18 @@ jest.mock("@repo/auth", () => ({
 }))
 jest.mock("@repo/contracts", () => ({
 	ADMIN_ROLE: "Admin",
-	PERMISSION_NAMES: ["reports.dashboards.view"],
+	PERMISSION_NAMES: ["reports.dashboards.view", "reports.pii.view"],
 }))
 
 const permittedId = "an1-task3-reports-user"
 const deniedId = "an1-task3-registered-user"
 const deactivatedId = "an1-task3-deactivated-reports-user"
+const piiReaderId = "an1-task3-pii-reader"
 
-function contextFor(userId?: string, handler: () => unknown = AnalyticsController.prototype.moduleEntryToday) {
+function contextFor(
+	userId?: string,
+	handler: (...args: never[]) => unknown = AnalyticsController.prototype.moduleEntryToday
+) {
 	const request = {
 		headers: {},
 		...(userId ? { session: { user: { id: userId } }, user: { id: userId } } : {}),
@@ -107,7 +112,7 @@ describe("analytics summary authorization", () => {
 		`)
 		const now = new Date("2026-08-31T01:00:00.000Z")
 		await db.insert(users).values(
-			[permittedId, deniedId, deactivatedId].map(id => ({
+			[permittedId, deniedId, deactivatedId, piiReaderId].map(id => ({
 				id,
 				name: "Task 3 fixture",
 				email: `${id}@test.local`,
@@ -125,9 +130,22 @@ describe("analytics summary authorization", () => {
 			.values({ name: "Reports & Analytics", description: "Task 3 reports role" })
 			.returning()
 		await db.insert(rolePermissions).values({ roleId: role!.id, permissionId: permission!.id })
+		const [pii] = await db
+			.insert(permissions)
+			.values({ name: "reports.pii.view", description: "Task 3 row-level access" })
+			.returning()
+		const [piiRole] = await db
+			.insert(roles)
+			.values({ name: "Manager", description: "Task 3 PII role" })
+			.returning()
+		await db.insert(rolePermissions).values([
+			{ roleId: piiRole!.id, permissionId: permission!.id },
+			{ roleId: piiRole!.id, permissionId: pii!.id },
+		])
 		await db.insert(userRoles).values([
 			{ userId: permittedId, roleId: role!.id },
 			{ userId: deactivatedId, roleId: role!.id },
+			{ userId: piiReaderId, roleId: piiRole!.id },
 		])
 		await db.insert(pisoCampAccountState).values({
 			accountId: deactivatedId,
@@ -291,6 +309,56 @@ describe("analytics summary authorization", () => {
 			.where(and(eq(auditLog.actorId, deniedId), eq(auditLog.action, "permission_denied")))
 		expect(rows).toHaveLength(1)
 		expect(rows[0]).toMatchObject({ targetId: "AnalyticsController.technical" })
+	})
+
+	it("gates the demographic cuts on the dashboard permission, both ways", async () => {
+		const demographics = AnalyticsController.prototype.demographics
+
+		await expect(
+			createGuard().canActivate(contextFor(permittedId, demographics))
+		).resolves.toBe(true)
+		await expect(
+			createGuard().canActivate(contextFor(deniedId, demographics))
+		).rejects.toMatchObject({ status: 403 })
+
+		const rows = await db
+			.select()
+			.from(auditLog)
+			.where(and(eq(auditLog.actorId, deniedId), eq(auditLog.action, "permission_denied")))
+		expect(rows).toHaveLength(1)
+		expect(rows[0]).toMatchObject({ targetId: "AnalyticsController.demographics" })
+	})
+
+	it("refuses the PII drill-down to a dashboard reader without reports.pii.view", async () => {
+		const drilldown = AnalyticsController.prototype.demographicDrilldown
+
+		// The holder of the dashboard permission alone may read the cuts and
+		// not the people inside them: §4.2-M is an explicit authorisation, not
+		// a consequence of being allowed to read a report.
+		await expect(
+			createGuard().canActivate(contextFor(permittedId, drilldown))
+		).rejects.toMatchObject({ status: 403 })
+
+		const rows = await db
+			.select()
+			.from(auditLog)
+			.where(and(eq(auditLog.actorId, permittedId), eq(auditLog.action, "permission_denied")))
+		expect(rows).toHaveLength(1)
+		expect(rows[0]).toMatchObject({
+			targetId: "AnalyticsController.demographicDrilldown",
+			newValue: {
+				requiredPermissions: ["reports.dashboards.view", "reports.pii.view"],
+				missingPermissions: ["reports.pii.view"],
+			},
+		})
+	})
+
+	it("allows the drill-down to somebody holding reports.pii.view", async () => {
+		await expect(
+			createGuard().canActivate(
+				contextFor(piiReaderId, AnalyticsController.prototype.demographicDrilldown)
+			)
+		).resolves.toBe(true)
 	})
 
 	it("gates the retention dashboard on the same permission, both ways", async () => {

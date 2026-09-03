@@ -373,6 +373,28 @@ export type {
 	TechnicalMetricsSummary,
 } from "./modules/v1/pisocamp/technical.schema.js"
 
+// AN-10 demographic and cohort reports
+export {
+	DEMOGRAPHIC_DIMENSIONS,
+	DemographicBucketSchema,
+	DemographicDimensionSchema,
+	DemographicDistributionSchema,
+	DemographicDrilldownInputSchema,
+	DemographicDrilldownSchema,
+	DemographicMeasureSchema,
+	DemographicsRangeInputSchema,
+	DemographicsSummarySchema,
+} from "./modules/v1/pisocamp/demographics.schema.js"
+export type {
+	DemographicBucket,
+	DemographicDimension,
+	DemographicDistribution,
+	DemographicDrilldown,
+	DemographicDrilldownInput,
+	DemographicMeasure,
+	DemographicsSummary,
+} from "./modules/v1/pisocamp/demographics.schema.js"
+
 // GM-5 progress
 export { PisoCampProgressSchema } from "./modules/v1/pisocamp/progress.schema.js"
 export type { PisoCampProgress } from "./modules/v1/pisocamp/progress.schema.js"

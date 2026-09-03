@@ -20,6 +20,12 @@ import {
 	SurveyMetricsSummarySchema,
 } from "./survey-metrics.schema.js"
 import {
+	DemographicDrilldownInputSchema,
+	DemographicDrilldownSchema,
+	DemographicsRangeInputSchema,
+	DemographicsSummarySchema,
+} from "./demographics.schema.js"
+import {
 	ImportMonitoringMetricsInputSchema,
 	ImportMonitoringMetricsOutputSchema,
 	PerformanceTestResultSchema,
@@ -104,6 +110,24 @@ export const pisoCampAnalyticsContract = {
 			})
 			.input(TechnicalMetricsRangeInputSchema)
 			.output(TechnicalMetricsSummarySchema),
+		demographics: oc
+			.route({
+				method: "GET",
+				path: "/admin/pisocamp/analytics/demographics",
+				summary: "Consent-scoped demographic cuts with small-group suppression",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(DemographicsRangeInputSchema)
+			.output(DemographicsSummarySchema),
+		demographicDrilldown: oc
+			.route({
+				method: "GET",
+				path: "/admin/pisocamp/analytics/demographics/drilldown",
+				summary: "Row-level data behind one demographic bucket",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(DemographicDrilldownInputSchema)
+			.output(DemographicDrilldownSchema),
 	},
 	monitoring: {
 		import: oc

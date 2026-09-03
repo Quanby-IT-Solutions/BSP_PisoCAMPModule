@@ -1,7 +1,7 @@
 import { Controller } from "@nestjs/common"
 import { Implement } from "@orpc/nest"
 import { implement, ORPCError } from "@orpc/server"
-import { AllowAnonymous } from "@thallesp/nestjs-better-auth"
+import { AllowAnonymous, Session, type UserSession } from "@thallesp/nestjs-better-auth"
 import { Logger } from "nestjs-pino"
 
 import { v1 } from "@/config/api-versions.config"
@@ -11,6 +11,7 @@ import { StrictThrottle } from "@/shared/decorators/strict-throttle.decorator"
 import { AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
+import { DemographicsService } from "./demographics.service"
 import { GamificationService } from "./gamification.service"
 import { SurveyMetricsService } from "./survey-metrics.service"
 import { TechnicalMetricsService } from "./technical-metrics.service"
@@ -26,6 +27,7 @@ export class AnalyticsController {
 		private readonly gamificationService: GamificationService,
 		private readonly surveyMetricsService: SurveyMetricsService,
 		private readonly technicalMetricsService: TechnicalMetricsService,
+		private readonly demographicsService: DemographicsService,
 		private readonly logger: Logger
 	) {}
 
@@ -87,6 +89,30 @@ export class AnalyticsController {
 	}
 
 	@RequirePermissions("reports.dashboards.view")
+	@Implement(v1.pisocamp.analytics.demographics)
+	demographics() {
+		return implement(v1.pisocamp.analytics.demographics).handler(({ input }) =>
+			this.runSafely("demographics", () => this.demographicsService.summary(input))
+		)
+	}
+
+	/**
+	 * §4.2-M's drill-down.
+	 *
+	 * Two permissions, not one: reading a cut is a reporting act, and reading
+	 * who is inside it is a different one that has to be authorised explicitly.
+	 */
+	@RequirePermissions("reports.dashboards.view", "reports.pii.view")
+	@Implement(v1.pisocamp.analytics.demographicDrilldown)
+	demographicDrilldown(@Session() session: UserSession) {
+		return implement(v1.pisocamp.analytics.demographicDrilldown).handler(({ input }) =>
+			this.runSafely("demographicDrilldown", () =>
+				this.demographicsService.drilldown(input, session.user.id)
+			)
+		)
+	}
+
+	@RequirePermissions("reports.dashboards.view")
 	@Implement(v1.pisocamp.analytics.moduleEntryToday)
 	moduleEntryToday() {
 		return implement(v1.pisocamp.analytics.moduleEntryToday).handler(() =>
@@ -103,7 +129,9 @@ export class AnalyticsController {
 			| "retention"
 			| "gamification"
 			| "surveys"
-			| "technical",
+			| "technical"
+			| "demographics"
+			| "demographicDrilldown",
 		work: () => Promise<T>
 	) {
 		try {

@@ -18,6 +18,9 @@ import type {
 	PerformanceTestResultView,
 	RecordPerformanceTestInput,
 	TechnicalMetricsSummary,
+	DemographicDrilldown,
+	DemographicDrilldownInput,
+	DemographicsSummary,
 } from "@repo/contracts"
 
 import { orpc } from "@/services/orpc/client"
@@ -113,6 +116,37 @@ export function useRecordPerformanceTestMutation() {
 		onSuccess: () =>
 			queryClient.invalidateQueries({ queryKey: orpc.pisocamp.analytics.technical.key() }),
 	})
+}
+
+export function useDemographicsSummaryQuery(input: EngagementRangeInput) {
+	const options = orpc.pisocamp.analytics.demographics.queryOptions({
+		input,
+		networkMode: "online",
+		staleTime: 60_000,
+	})
+
+	return useQuery<DemographicsSummary, Error>(
+		options as unknown as UseQueryOptions<DemographicsSummary, Error>
+	)
+}
+
+/**
+ * §4.2-M's drill-down.
+ *
+ * Never prefetched and never part of the summary: row-level data is fetched
+ * only when somebody with `reports.pii.view` asks for a particular group, and
+ * the server audits each request.
+ */
+export function useDemographicDrilldownQuery(input: DemographicDrilldownInput) {
+	const options = orpc.pisocamp.analytics.demographicDrilldown.queryOptions({
+		input,
+		networkMode: "online",
+		staleTime: 0,
+	})
+
+	return useQuery<DemographicDrilldown, Error>(
+		options as unknown as UseQueryOptions<DemographicDrilldown, Error>
+	)
 }
 
 export function useAdoptionSummaryQuery(input: EngagementRangeInput) {
