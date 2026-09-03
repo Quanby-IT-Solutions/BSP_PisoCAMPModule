@@ -1907,6 +1907,148 @@ export const storeMetricImports = createTable(
 )
 
 // ============================================================================
+// SA-5 PUSH NOTIFICATIONS
+// ============================================================================
+
+/**
+ * A registered account's opt-in to push (§3.2).
+ *
+ * Opting out **deletes** the row rather than flagging it: a subscription that
+ * is kept "just disabled" is a token the module could still send to, and the
+ * point of opting out is that it cannot.
+ *
+ * The token is unique across accounts, because a shared device that two people
+ * sign into must not deliver one person's notification to the other.
+ */
+export const pushSubscriptions = createTable(
+	"push_subscription",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		accountId: t
+			.text("account_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		deviceToken: t.text("device_token").notNull(),
+		platform: t.text("platform").notNull().$type<"android" | "ios" | "web">(),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: t.timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("push_subscription_device_token_unique").on(t.deviceToken),
+		check(
+			"push_subscription_platform_check",
+			sql`${t.platform} in ('android', 'ios', 'web')`
+		),
+		check(
+			"push_subscription_token_check",
+			sql`char_length(${t.deviceToken}) between 16 and 512
+				and ${t.deviceToken} = btrim(${t.deviceToken})`
+		),
+		index("push_subscription_account_idx").on(t.accountId),
+	]
+)
+
+/**
+ * One BSP-approved notification, as sent.
+ *
+ * The approval reference is required: §3.2 allows the module to send approved
+ * text, and a record of what was sent without a record of who approved it
+ * cannot show that rule was kept.
+ */
+export const pushNotifications = createTable(
+	"push_notification",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		title: t.text("title").notNull(),
+		body: t.text("body").notNull(),
+		/** Where tapping it goes, as an internal deep link. Null for none. */
+		deepLink: t.text("deep_link"),
+		approvalReference: t.text("approval_reference").notNull(),
+		sentBy: t
+			.text("sent_by")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		sentAt: t.timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+		recipients: t.integer("recipients").notNull(),
+	}),
+	t => [
+		check(
+			"push_notification_title_check",
+			sql`${t.title} = btrim(${t.title}) and char_length(${t.title}) between 1 and 120`
+		),
+		check(
+			"push_notification_body_check",
+			sql`${t.body} = btrim(${t.body}) and char_length(${t.body}) between 1 and 500`
+		),
+		check(
+			"push_notification_approval_check",
+			sql`${t.approvalReference} = btrim(${t.approvalReference})
+				and char_length(${t.approvalReference}) between 1 and 120`
+		),
+		// An internal destination only: a push that could open any URL is a
+		// phishing surface with BSP's name on it.
+		check(
+			"push_notification_deep_link_check",
+			sql`${t.deepLink} is null or ${t.deepLink} ~ '^/[A-Za-z0-9/_.:-]{0,200}$'`
+		),
+		check("push_notification_recipients_check", sql`${t.recipients} >= 0`),
+		index("push_notification_sent_at_idx").on(t.sentAt.desc()),
+	]
+)
+
+/**
+ * What happened to one notification for one account (AN-014).
+ *
+ * Delivery, opening and clicking are three different facts with three
+ * different timestamps, because a rate computed from a single boolean could
+ * not tell "delivered and ignored" from "never arrived".
+ */
+export const pushDeliveries = createTable(
+	"push_delivery",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		notificationId: t
+			.uuid("notification_id")
+			.notNull()
+			.references(() => pushNotifications.id, { onDelete: "cascade" }),
+		accountId: t
+			.text("account_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		status: t.text("status").notNull().$type<"queued" | "delivered" | "failed">(),
+		failureReason: t.text("failure_reason"),
+		deliveredAt: t.timestamp("delivered_at", { withTimezone: true }),
+		openedAt: t.timestamp("opened_at", { withTimezone: true }),
+		clickedAt: t.timestamp("clicked_at", { withTimezone: true }),
+		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("push_delivery_notification_account_unique").on(t.notificationId, t.accountId),
+		check(
+			"push_delivery_status_check",
+			sql`${t.status} in ('queued', 'delivered', 'failed')`
+		),
+		// A failure has a reason and no delivery; a delivery has a time and no
+		// reason. Either shape without the other is a record nobody can read.
+		check(
+			"push_delivery_shape_check",
+			sql`(${t.status} = 'queued' and ${t.failureReason} is null and ${t.deliveredAt} is null)
+				or (${t.status} = 'delivered' and ${t.failureReason} is null and ${t.deliveredAt} is not null)
+				or (${t.status} = 'failed' and ${t.failureReason} is not null and ${t.deliveredAt} is null)`
+		),
+		// Nothing can be opened before it arrives, or clicked before it is
+		// opened: an out-of-order pair would make every rate meaningless.
+		check(
+			"push_delivery_order_check",
+			sql`(${t.openedAt} is null or ${t.deliveredAt} is not null)
+				and (${t.clickedAt} is null or ${t.openedAt} is not null)`
+		),
+		index("push_delivery_notification_idx").on(t.notificationId),
+		index("push_delivery_opened_idx").on(t.openedAt),
+	]
+)
+
+// ============================================================================
 // AUDIT LOG
 // ============================================================================
 
@@ -2307,6 +2449,9 @@ export const schema = Object.assign(
 		apiEndpointMetrics,
 		performanceTestResults,
 		storeMetricImports,
+		pushSubscriptions,
+		pushNotifications,
+		pushDeliveries,
 	},
 	relations
 )

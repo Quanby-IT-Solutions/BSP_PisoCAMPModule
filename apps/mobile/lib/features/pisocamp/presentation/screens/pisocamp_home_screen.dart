@@ -28,6 +28,7 @@ import 'package:mobile/features/pisocamp/presentation/providers/analytics_provid
 import 'package:mobile/features/pisocamp/presentation/widgets/account_prompt.dart';
 import 'package:mobile/features/pisocamp/data/leaderboard_repository.dart';
 import 'package:mobile/features/pisocamp/data/progress_repository.dart';
+import 'package:mobile/features/pisocamp/data/push_repository.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/progress_screen.dart';
 import 'package:mobile/services/api/api_client.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/leaderboard_screen.dart';
@@ -446,6 +447,11 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
           consentService: ref.read(consentServiceProvider),
           notice: notice,
           online: ref.read(connectivityStatusProvider).asData?.value ?? false,
+          // SA-5. Only for a signed-in person: a subscription belongs to an
+          // account, and offering it to a guest would open onto an apology.
+          push: ref.read(currentUserProvider) == null
+              ? null
+              : PushRepository(ref.read(dioProvider)),
         ),
       ),
     );

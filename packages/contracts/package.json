@@ -61,6 +61,10 @@
 			"types": "./dist/modules/v1/pisocamp/acquisition.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/acquisition.schema.js"
 		},
+		"./pisocamp-push": {
+			"types": "./dist/modules/v1/pisocamp/push.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/push.schema.js"
+		},
 		"./pisocamp-progress": {
 			"types": "./dist/modules/v1/pisocamp/progress.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/progress.schema.js"

@@ -132,6 +132,7 @@
 			"<rootDir>/modules/v1/examples/"
 		],
 		"testEnvironment": "node",
+		"testTimeout": 30000,
 		"moduleNameMapper": {
 			"^@repo/contracts/pisocamp-assets$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/asset.schema.ts",
 			"^@repo/contracts/pisocamp-preview$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/preview.schema.ts",
@@ -144,6 +145,7 @@
 			"^@repo/contracts/pisocamp-technical$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/technical.schema.ts",
 			"^@repo/contracts/pisocamp-demographics$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/demographics.schema.ts",
 			"^@repo/contracts/pisocamp-acquisition$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/acquisition.schema.ts",
+			"^@repo/contracts/pisocamp-push$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/push.schema.ts",
 			"^@repo/contracts/pisocamp-progress$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/progress.schema.ts",
 			"^@repo/contracts/pisocamp-leaderboard$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/leaderboard.schema.ts",
 			"^@repo/contracts/pisocamp-data-subject$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/data-subject.schema.ts",

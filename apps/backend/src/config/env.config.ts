@@ -116,6 +116,11 @@ export const env = createEnv({
 		// mandatory secret while staying cryptographically separate from
 		// sessions. Supply it to rotate preview grants independently.
 		PISOCAMP_PREVIEW_TOKEN_SECRET: z.string().min(32).optional(),
+
+		// SA-5. The existing push service (§12). Unset means no service: the
+		// module then records deliveries as queued rather than inventing them.
+		PISOCAMP_PUSH_SERVICE_URL: z.url().optional(),
+		PISOCAMP_PUSH_SERVICE_TOKEN: z.string().min(16).optional(),
 		// Short by design: a grant is a bearer credential for unpublished BSP
 		// content, and it only has to outlive one page render.
 		PISOCAMP_PREVIEW_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),

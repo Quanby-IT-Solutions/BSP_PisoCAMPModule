@@ -7,6 +7,10 @@ import { pisoCampAuditContract } from "./audit.contract.js"
 import { pisoCampLeaderboardContract } from "./leaderboard.contract.js"
 import { pisoCampProgressContract } from "./progress.contract.js"
 import {
+	pisoCampNotificationContract,
+	pisoCampPushContract,
+} from "./push.contract.js"
+import {
 	pisoCampAdminDataSubjectContract,
 	pisoCampDataSubjectContract,
 } from "./data-subject.contract.js"
@@ -35,6 +39,7 @@ export const pisoCampContract = {
 	events: pisoCampAnalyticsContract.events,
 	analytics: pisoCampAnalyticsContract.analytics,
 	monitoring: pisoCampAnalyticsContract.monitoring,
+	push: pisoCampPushContract,
 	trivia: pisoCampTriviaContract.responses,
 	surveys: pisoCampSurveyContract.responses,
 	bundle: pisoCampBundleContract,
@@ -48,6 +53,7 @@ export const pisoCampContract = {
 		accounts: pisoCampAccountContract,
 		roles: pisoCampRoleContract,
 		audit: pisoCampAuditContract,
+		notifications: pisoCampNotificationContract,
 		dataSubject: pisoCampAdminDataSubjectContract,
 		config: {
 			get: oc
