@@ -312,6 +312,10 @@ export type {
 	KeyActionEvent,
 } from "./modules/v1/pisocamp/adoption.schema.js"
 
+// GM-5 progress
+export { PisoCampProgressSchema } from "./modules/v1/pisocamp/progress.schema.js"
+export type { PisoCampProgress } from "./modules/v1/pisocamp/progress.schema.js"
+
 // GM-4 leaderboard
 export {
 	LEADERBOARD_PERIODS,

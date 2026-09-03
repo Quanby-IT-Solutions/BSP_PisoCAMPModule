@@ -11,6 +11,7 @@ import { AnalyticsModule } from "./analytics/analytics.module"
 import { PisoCampAuditViewerModule } from "./audit/audit-viewer.module"
 import { PisoCampDataSubjectModule } from "./data-subject/data-subject.module"
 import { PisoCampLeaderboardModule } from "./leaderboard/leaderboard.module"
+import { PisoCampProgressModule } from "./progress/progress.module"
 import { AssetsModule } from "./assets/assets.module"
 import { BundleModule } from "./bundle/bundle.module"
 import { ContentModule } from "./content/content.module"
@@ -49,6 +50,7 @@ import { TriviaModule } from "./trivia/trivia.module"
 		PisoCampAuditViewerModule,
 		PisoCampDataSubjectModule,
 		PisoCampLeaderboardModule,
+		PisoCampProgressModule,
 	],
 	controllers: [PisoCampController, PisoCampProfileController],
 	providers: [

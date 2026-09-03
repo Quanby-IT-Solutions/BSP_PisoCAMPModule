@@ -27,6 +27,8 @@ import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registr
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/account_prompt.dart';
 import 'package:mobile/features/pisocamp/data/leaderboard_repository.dart';
+import 'package:mobile/features/pisocamp/data/progress_repository.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/progress_screen.dart';
 import 'package:mobile/services/api/api_client.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/leaderboard_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/privacy_settings_screen.dart';
@@ -304,6 +306,16 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     }
   }
 
+  Future<void> _openProgress(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProgressScreen(
+          repository: ProgressRepository(ref.read(dioProvider)),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openLeaderboard(BuildContext context) async {
     final authenticated = ref.read(isAuthenticatedProvider);
     await Navigator.of(context).push(
@@ -359,6 +371,13 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
       appBar: AppBar(
         title: const Text('Piso CAMP'),
         actions: <Widget>[
+          IconButton(
+            icon: const Icon(Icons.insights_outlined),
+            // GM-5: your own progress, so it only exists once you have an
+            // account for it to be about.
+            tooltip: 'Progress',
+            onPressed: authenticated ? () => _openProgress(context) : null,
+          ),
           IconButton(
             icon: const Icon(Icons.leaderboard_outlined),
             // GM-4: hidden entirely when the flag is off, so a switched-off

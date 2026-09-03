@@ -5,6 +5,7 @@ import { pisoCampSurveyContract } from "./survey-response.contract.js"
 import { pisoCampAccountContract } from "./account.contract.js"
 import { pisoCampAuditContract } from "./audit.contract.js"
 import { pisoCampLeaderboardContract } from "./leaderboard.contract.js"
+import { pisoCampProgressContract } from "./progress.contract.js"
 import {
 	pisoCampAdminDataSubjectContract,
 	pisoCampDataSubjectContract,
@@ -69,6 +70,7 @@ export const pisoCampContract = {
 	},
 	me: pisoCampDataSubjectContract,
 	leaderboard: pisoCampLeaderboardContract,
+	progress: pisoCampProgressContract,
 	config: {
 		get: oc
 			.route({
