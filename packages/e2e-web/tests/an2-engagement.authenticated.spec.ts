@@ -156,6 +156,33 @@ test.describe("AN-2 engagement dashboard", () => {
 		expectClean(observed)
 	})
 
+	test("shows the AN-5 gamification figures beside the engagement ones", async ({
+		page,
+	}) => {
+		const observed = observe(page)
+		await signOutCompletely(page)
+		await signInAs(page, "contentAdmin")
+
+		await page.goto("/pisocamp/engagement")
+		await page.waitForLoadState("networkidle")
+
+		await expect(page.getByRole("heading", { name: "Gamification" })).toBeVisible({
+			timeout: 20_000,
+		})
+		await expect(page.getByText("Leaderboard participation")).toBeVisible()
+		await expect(page.getByText("Top-performer retention")).toBeVisible()
+		await expect(page.getByText("Trivia completion")).toBeVisible()
+		await expect(page.getByText("Learning re-engagement")).toBeVisible()
+		// Each rate names the pool it came from, so a zero can be read.
+		await expect(page.getByText(/of \d+ registered/)).toBeVisible()
+		await expect(page.getByText(/in the top \d+%/)).toBeVisible()
+		await expect(page.getByRole("cell", { name: "New entrants" })).toBeVisible()
+		// The board is off by default, and a zero then means nobody could play.
+		await expect(page.getByText("The leaderboard is switched off")).toBeVisible()
+
+		expectClean(observed)
+	})
+
 	test("stays readable and operable by keyboard at 320 px", async ({ page }) => {
 		const observed = observe(page)
 		await page.setViewportSize({ width: 320, height: 720 })

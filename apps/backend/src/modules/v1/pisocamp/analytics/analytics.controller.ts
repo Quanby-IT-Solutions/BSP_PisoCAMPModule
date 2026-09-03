@@ -11,6 +11,7 @@ import { StrictThrottle } from "@/shared/decorators/strict-throttle.decorator"
 import { AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
+import { GamificationService } from "./gamification.service"
 import { RetentionService } from "./retention.service"
 
 @Controller()
@@ -20,6 +21,7 @@ export class AnalyticsController {
 		private readonly engagementService: EngagementService,
 		private readonly adoptionService: AdoptionService,
 		private readonly retentionService: RetentionService,
+		private readonly gamificationService: GamificationService,
 		private readonly logger: Logger
 	) {}
 
@@ -57,6 +59,14 @@ export class AnalyticsController {
 	}
 
 	@RequirePermissions("reports.dashboards.view")
+	@Implement(v1.pisocamp.analytics.gamification)
+	gamification() {
+		return implement(v1.pisocamp.analytics.gamification).handler(({ input }) =>
+			this.runSafely("gamification", () => this.gamificationService.summary(input))
+		)
+	}
+
+	@RequirePermissions("reports.dashboards.view")
 	@Implement(v1.pisocamp.analytics.moduleEntryToday)
 	moduleEntryToday() {
 		return implement(v1.pisocamp.analytics.moduleEntryToday).handler(() =>
@@ -65,7 +75,7 @@ export class AnalyticsController {
 	}
 
 	private async runSafely<T>(
-		operation: "ingest" | "moduleEntryToday" | "engagement" | "adoption" | "retention",
+		operation: "ingest" | "moduleEntryToday" | "engagement" | "adoption" | "retention" | "gamification",
 		work: () => Promise<T>
 	) {
 		try {

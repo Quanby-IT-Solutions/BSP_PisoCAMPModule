@@ -101,6 +101,7 @@ describe("PisoCampController", () => {
 			churn_inactivity_days: 30,
 			trivia_repeat_days: 30,
 			leaderboard_enabled: false,
+			leaderboard_top_group_percent: 10,
 			key_action_events: ["content_view"],
 			age_group_buckets: [{ minAge: 0, maxAge: null }],
 			suppression_minimum: 10,

@@ -46,6 +46,7 @@ jest.mock("@/config/api-versions.config", () => ({
 				engagement: "engagement",
 				adoption: "adoption",
 				retention: "retention",
+				gamification: "gamification",
 			},
 		},
 	},
@@ -236,6 +237,24 @@ describe("analytics summary authorization", () => {
 			targetId: "AnalyticsController.engagement",
 			newValue: { missingPermissions: ["reports.dashboards.view"] },
 		})
+	})
+
+	it("gates the gamification dashboard on the same permission, both ways", async () => {
+		const gamification = AnalyticsController.prototype.gamification
+
+		await expect(
+			createGuard().canActivate(contextFor(permittedId, gamification))
+		).resolves.toBe(true)
+		await expect(
+			createGuard().canActivate(contextFor(deniedId, gamification))
+		).rejects.toMatchObject({ status: 403 })
+
+		const rows = await db
+			.select()
+			.from(auditLog)
+			.where(and(eq(auditLog.actorId, deniedId), eq(auditLog.action, "permission_denied")))
+		expect(rows).toHaveLength(1)
+		expect(rows[0]).toMatchObject({ targetId: "AnalyticsController.gamification" })
 	})
 
 	it("gates the retention dashboard on the same permission, both ways", async () => {

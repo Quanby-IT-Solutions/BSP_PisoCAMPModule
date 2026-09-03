@@ -77,6 +77,15 @@ const SuppressionMinimumSchema = z.number().int().min(2).max(1000)
 const LeaderboardEnabledSchema = z.boolean()
 
 /**
+ * AN-029. How large "the top" is, as a percentage of the board.
+ *
+ * Configurable because "top performers" is a judgement BSP makes, not a
+ * constant: a board of thirty and a board of thirty thousand do not have the
+ * same shape of top.
+ */
+const LeaderboardTopGroupPercentSchema = z.number().int().min(1).max(50)
+
+/**
  * How sure the on-device model must be before it names a denomination.
  *
  * A recognition the model is not confident about is a wrong answer waiting to
@@ -127,6 +136,7 @@ export const PisoCampAdminConfigSchema = z
 		churn_inactivity_days: ChurnInactivityDaysSchema.default(30),
 		trivia_repeat_days: TriviaRepeatDaysSchema.default(30),
 		leaderboard_enabled: LeaderboardEnabledSchema.default(false),
+		leaderboard_top_group_percent: LeaderboardTopGroupPercentSchema.default(10),
 		key_action_events: KeyActionEventsSchema.default([...KEY_ACTION_EVENTS]),
 		age_group_buckets: AgeGroupBucketsSchema.default([
 			{ minAge: 0, maxAge: 17 },
@@ -150,6 +160,7 @@ export const UpdatePisoCampAdminConfigSchema = z
 		churn_inactivity_days: ChurnInactivityDaysSchema,
 		trivia_repeat_days: TriviaRepeatDaysSchema,
 		leaderboard_enabled: LeaderboardEnabledSchema,
+		leaderboard_top_group_percent: LeaderboardTopGroupPercentSchema,
 		key_action_events: KeyActionEventsSchema,
 		age_group_buckets: AgeGroupBucketsSchema,
 		suppression_minimum: SuppressionMinimumSchema,

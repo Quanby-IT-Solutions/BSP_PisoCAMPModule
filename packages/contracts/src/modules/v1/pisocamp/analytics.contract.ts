@@ -11,6 +11,10 @@ import {
 	EngagementSummarySchema,
 } from "./engagement.schema.js"
 import { RetentionRangeInputSchema, RetentionSummarySchema } from "./retention.schema.js"
+import {
+	GamificationRangeInputSchema,
+	GamificationSummarySchema,
+} from "./gamification.schema.js"
 
 export const pisoCampAnalyticsContract = {
 	events: {
@@ -61,5 +65,14 @@ export const pisoCampAnalyticsContract = {
 			})
 			.input(RetentionRangeInputSchema)
 			.output(RetentionSummarySchema),
+		gamification: oc
+			.route({
+				method: "GET",
+				path: "/admin/pisocamp/analytics/gamification",
+				summary: "Leaderboard, trivia and learning re-engagement KPIs",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(GamificationRangeInputSchema)
+			.output(GamificationSummarySchema),
 	},
 }

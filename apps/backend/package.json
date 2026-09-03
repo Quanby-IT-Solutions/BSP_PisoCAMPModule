@@ -139,6 +139,7 @@
 			"^@repo/contracts/pisocamp-content-audit$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/content-audit.schema.ts",
 			"^@repo/contracts/pisocamp-content$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/content.schema.ts",
 			"^@repo/contracts/pisocamp-adoption$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/adoption.schema.ts",
+			"^@repo/contracts/pisocamp-gamification$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/gamification.schema.ts",
 			"^@repo/contracts/pisocamp-progress$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/progress.schema.ts",
 			"^@repo/contracts/pisocamp-leaderboard$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/leaderboard.schema.ts",
 			"^@repo/contracts/pisocamp-data-subject$": "<rootDir>/../../../packages/contracts/src/modules/v1/pisocamp/data-subject.schema.ts",

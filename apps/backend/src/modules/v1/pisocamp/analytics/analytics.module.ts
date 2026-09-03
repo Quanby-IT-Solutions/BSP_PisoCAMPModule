@@ -7,6 +7,7 @@ import { AnalyticsController } from "./analytics.controller"
 import { analyticsDatabaseProvider, AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
+import { GamificationService } from "./gamification.service"
 import { RetentionService } from "./retention.service"
 import { SessionizerService } from "./sessionizer.service"
 
@@ -18,6 +19,7 @@ import { SessionizerService } from "./sessionizer.service"
 		analyticsDatabaseProvider,
 		AdoptionService,
 		EngagementService,
+		GamificationService,
 		RetentionService,
 		SessionizerService,
 		PisoCampAdminConfigService,

@@ -8,6 +8,7 @@ import { STRICT_THROTTLE_KEY } from "@/shared/decorators/strict-throttle.decorat
 import { AnalyticsController } from "./analytics.controller"
 import { AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
+import { GamificationService } from "./gamification.service"
 import { RetentionService } from "./retention.service"
 import { EngagementService } from "./engagement.service"
 
@@ -94,6 +95,7 @@ describe("AnalyticsController", () => {
 				{ provide: EngagementService, useValue: { summary: async () => null } },
 				{ provide: AdoptionService, useValue: { summary: async () => null } },
 				{ provide: RetentionService, useValue: { summary: async () => null } },
+				{ provide: GamificationService, useValue: { summary: async () => null } },
 				{
 					provide: Logger,
 					useValue: { error: (...args: unknown[]) => logCalls.push(args) },

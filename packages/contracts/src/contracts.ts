@@ -312,6 +312,23 @@ export type {
 	KeyActionEvent,
 } from "./modules/v1/pisocamp/adoption.schema.js"
 
+// AN-5 gamification and trivia metrics
+export {
+	GamificationRangeInputSchema,
+	GamificationSummarySchema,
+	LeaderboardParticipationSchema,
+	LearningReengagementSchema,
+	TopPerformerRetentionSchema,
+	TriviaParticipationSchema,
+} from "./modules/v1/pisocamp/gamification.schema.js"
+export type {
+	GamificationSummary,
+	LeaderboardParticipation,
+	LearningReengagement,
+	TopPerformerRetention,
+	TriviaParticipation,
+} from "./modules/v1/pisocamp/gamification.schema.js"
+
 // GM-5 progress
 export { PisoCampProgressSchema } from "./modules/v1/pisocamp/progress.schema.js"
 export type { PisoCampProgress } from "./modules/v1/pisocamp/progress.schema.js"

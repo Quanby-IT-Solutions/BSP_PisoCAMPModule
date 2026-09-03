@@ -10,6 +10,7 @@ vi.mock("@/features/analytics/api/analytics.hooks", () => ({
 	useEngagementSummaryQuery: (input: unknown) => useEngagement(input),
 	useAdoptionSummaryQuery: () => ({ isPending: true, isError: false }),
 	useRetentionSummaryQuery: () => ({ isPending: true, isError: false }),
+	useGamificationSummaryQuery: () => ({ isPending: true, isError: false }),
 }))
 
 const summary = {

@@ -4,6 +4,7 @@ import { useQuery, type UseQueryOptions } from "@tanstack/react-query"
 
 import type {
 	AdoptionSummary,
+	GamificationSummary,
 	EngagementRangeInput,
 	EngagementSummary,
 	ModuleEntryToday,
@@ -47,6 +48,18 @@ export function useRetentionSummaryQuery(input: EngagementRangeInput) {
 
 	return useQuery<RetentionSummary, Error>(
 		options as unknown as UseQueryOptions<RetentionSummary, Error>
+	)
+}
+
+export function useGamificationSummaryQuery(input: EngagementRangeInput) {
+	const options = orpc.pisocamp.analytics.gamification.queryOptions({
+		input,
+		networkMode: "online",
+		staleTime: 60_000,
+	})
+
+	return useQuery<GamificationSummary, Error>(
+		options as unknown as UseQueryOptions<GamificationSummary, Error>
 	)
 }
 
