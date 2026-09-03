@@ -33,6 +33,10 @@ void main() {
       '/pisocamp/currency/banknotes/content%3Averified',
       // CE-2's 3D view is guest content like the detail it opens from.
       '/pisocamp/currency/coins/catalog.ngc-coins.php-1/3d',
+      // AR-1's augmented-reality view likewise: it is offered to a guest from
+      // the detail screen, so guarding it would send that guest to a login it
+      // does not need.
+      '/pisocamp/currency/coins/catalog.ngc-coins.php-1/ar',
       // CE-4's tactile simulation likewise.
       '/pisocamp/currency/banknotes/catalog.ngc-banknotes.php-20/tactile',
       // CE-5's tilt simulation likewise.
@@ -52,6 +56,8 @@ void main() {
       '/pisocamp/currency/banknotes/UPPER/tactile',
       '/pisocamp/currency/coins/catalog.ngc-coins.php-1/3d/more',
       '/pisocamp/currency/coins/UPPER/3d',
+      '/pisocamp/currency/coins/catalog.ngc-coins.php-1/ar/more',
+      '/pisocamp/currency/coins/UPPER/ar',
       '/pisocamp/currency-banknotes',
       '/pisocamp/register/currency/coins',
       '/profile',

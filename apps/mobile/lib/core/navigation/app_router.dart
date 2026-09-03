@@ -97,7 +97,7 @@ bool isGuestCurrencyRoute(String matchedLocation) {
     return true;
   }
   final match = RegExp(
-    r'^/pisocamp/currency/(banknotes|coins)/([^/]+)(?:/3d|/tactile|/tilt)?$',
+    r'^/pisocamp/currency/(banknotes|coins)/([^/]+)(?:/3d|/ar|/tactile|/tilt)?$',
   ).firstMatch(matchedLocation);
   if (match == null) return false;
   final segment = match.group(2)!;
