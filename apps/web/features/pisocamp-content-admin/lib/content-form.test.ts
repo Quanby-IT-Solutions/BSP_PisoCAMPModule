@@ -205,3 +205,80 @@ describe("Piso CAMP content form model", () => {
 		expect(generate).toHaveBeenCalledTimes(1)
 	})
 })
+
+describe("AR-2 AR experience form", () => {
+	const arExperience = (overrides: Partial<ContentFormValues> = {}): ContentFormValues => ({
+		...createEmptyContentForm("ar_experience"),
+		title: "20-piso coin in augmented reality",
+		summary: "Place the NGC 20-piso coin on any surface and turn it.",
+		body: "Point the camera at a flat surface, then tap to place the coin.",
+		seriesCode: "ngc-coins",
+		denominationCode: "php-20",
+		minimumAndroidSdk: "26",
+		minimumIosVersion: "13.0",
+		animationDurationMs: "12000",
+		...overrides,
+	})
+
+	it("builds a request with the denomination and both platforms", () => {
+		const result = buildCreateContentRequest(arExperience(), requestId)
+
+		expect(result.success).toBe(true)
+		if (!result.success) return
+		expect(result.data.content).toMatchObject({
+			contentType: "ar_experience",
+			seriesCode: "ngc-coins",
+			denominationCode: "php-20",
+			deviceRequirement: { minimumAndroidSdk: 26, minimumIosVersion: "13.0" },
+			animationDurationMs: 12000,
+		})
+	})
+
+	it("reads a blank platform as unsupported rather than as zero", () => {
+		const result = buildCreateContentRequest(
+			arExperience({ minimumIosVersion: "" }),
+			requestId
+		)
+
+		expect(result.success).toBe(true)
+		if (!result.success) return
+		expect(result.data.content).toMatchObject({
+			deviceRequirement: { minimumAndroidSdk: 26, minimumIosVersion: null },
+		})
+	})
+
+	it("refuses an experience that names no platform at all", () => {
+		const result = buildCreateContentRequest(
+			arExperience({ minimumAndroidSdk: "", minimumIosVersion: "" }),
+			requestId
+		)
+
+		// An experience nobody can run is not an experience.
+		expect(result.success).toBe(false)
+	})
+
+	it("refuses an iOS version that is not one", () => {
+		const result = buildCreateContentRequest(
+			arExperience({ minimumIosVersion: "thirteen" }),
+			requestId
+		)
+
+		expect(result.success).toBe(false)
+	})
+
+	it("refuses an animation length outside the allowed range", () => {
+		expect(buildCreateContentRequest(arExperience({ animationDurationMs: "" }), requestId).success).toBe(
+			false
+		)
+		expect(
+			buildCreateContentRequest(arExperience({ animationDurationMs: "999" }), requestId).success
+		).toBe(false)
+	})
+
+	it("offers every currency series, because AR covers coins and banknotes", () => {
+		const series = getSeriesOptions("ar_experience")
+
+		expect(series.map(option => option.code)).toContain("ngc-coins")
+		expect(series.map(option => option.code)).toContain("ngc-banknotes")
+	})
+})

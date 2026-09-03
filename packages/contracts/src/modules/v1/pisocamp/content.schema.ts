@@ -8,6 +8,7 @@ export const CONTENT_TYPES = [
 	"link",
 	"trivia_question",
 	"survey",
+	"ar_experience",
 ] as const
 export const PisoCampContentTypeSchema = z.enum(CONTENT_TYPES)
 
@@ -329,6 +330,66 @@ const SurveyDraftSchema = z
 		}
 	})
 
+/**
+ * The assets an AR experience cannot be reviewed without (AR-004).
+ *
+ * Checked when it is submitted rather than when it is drafted: an editor has to
+ * be able to save work in progress, and a reviewer asked to approve an
+ * experience with no model, no animation or no narration is being asked to
+ * approve nothing.
+ */
+export const AR_EXPERIENCE_REQUIRED_ASSET_ROLES = ["ar_model", "animation", "audio"] as const
+
+/**
+ * AR-2 device requirement (AR-004).
+ *
+ * The two things a device actually has to satisfy — an Android SDK level for
+ * ARCore, an iOS version for ARKit — rather than one "minimum capability" word
+ * that would mean something different on each platform. At least one must be
+ * given: an experience that names neither platform is one nobody can run.
+ */
+export const PisoCampArDeviceRequirementSchema = z
+	.object({
+		minimumAndroidSdk: z.number().int().min(24).max(40).nullish(),
+		minimumIosVersion: z
+			.string()
+			.trim()
+			.regex(/^[0-9]{1,2}([.][0-9]{1,2}){0,2}$/u, "Use a version like 13.0")
+			.nullish(),
+	})
+	.strict()
+	.refine(
+		requirement =>
+			(requirement.minimumAndroidSdk ?? null) !== null ||
+			(requirement.minimumIosVersion ?? null) !== null,
+		{
+			message: "Name at least one platform this experience can run on",
+			path: ["minimumAndroidSdk"],
+		}
+	)
+
+/**
+ * AR-2. An AR experience of one denomination.
+ *
+ * The assets — the 3D model, its animation and its narration — are attached
+ * through CM-2 like every other content type's are, and their presence is
+ * checked when the experience is submitted for review rather than when it is
+ * drafted: an editor has to be able to save work in progress.
+ */
+const ArExperienceDraftSchema = z
+	.object({
+		contentType: z.literal("ar_experience"),
+		title: TitleSchema,
+		summary: SummarySchema,
+		body: BodySchema,
+		seriesCode: PisoCampCurrencySeriesCodeSchema,
+		denominationCode: DenominationCodeSchema,
+		deviceRequirement: PisoCampArDeviceRequirementSchema,
+		/** How long the animation runs, so AR-3 can check the audio against it. */
+		animationDurationMs: z.number().int().min(1000).max(300_000),
+	})
+	.strict()
+
 const AdvisoryDraftSchema = z
 	.object({
 		contentType: z.literal("advisory"),
@@ -356,6 +417,7 @@ export const PisoCampContentDraftSchema = z.discriminatedUnion("contentType", [
 	LinkDraftSchema,
 	TriviaQuestionDraftSchema,
 	SurveyDraftSchema,
+	ArExperienceDraftSchema,
 ])
 
 const ExternalRelatedLinkInputSchema = z
@@ -565,6 +627,18 @@ export const PisoCampContentSummarySchema = z.discriminatedUnion("contentType", 
 			contentType: z.literal("survey"),
 			purpose: PisoCampSurveyPurposeSchema,
 			questionCount: z.number().int().min(1).max(MAX_SURVEY_QUESTIONS),
+		})
+		.strict(),
+	z
+		.object({
+			...SummaryCommonShape,
+			contentType: z.literal("ar_experience"),
+			seriesCode: PisoCampCurrencySeriesCodeSchema,
+			denominationCode: DenominationCodeSchema,
+			// Listed so a reviewer can see what a device needs without opening
+			// the item.
+			minimumAndroidSdk: z.number().int().nullable(),
+			minimumIosVersion: z.string().nullable(),
 		})
 		.strict(),
 ])

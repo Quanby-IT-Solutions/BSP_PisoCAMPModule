@@ -55,6 +55,10 @@ export interface ContentFormValues {
 	/** The topic or feature the survey evaluates, as typed. Optional. */
 	subjectContentItemId: string
 	questions: SurveyQuestionFormValue[]
+	/** AR experiences only, as typed. Blank means the platform is unsupported. */
+	minimumAndroidSdk: string
+	minimumIosVersion: string
+	animationDurationMs: string
 	relatedLinks: RelatedLinkFormValue[]
 }
 
@@ -225,6 +229,9 @@ export function createEmptyContentForm(contentType: PisoCampContentType): Conten
 		// One blank question, because a survey needs at least one and an empty
 		// list makes the editor guess where to start.
 		questions: [emptySurveyQuestion()],
+		minimumAndroidSdk: "",
+		minimumIosVersion: "",
+		animationDurationMs: "",
 		relatedLinks: [],
 	}
 }
@@ -236,7 +243,10 @@ export function getSeriesOptions(contentType: PisoCampContentType): readonly Ser
 	if (contentType === "coin") {
 		return CURRENCY_SERIES_OPTIONS.filter(option => option.mediaKind === "coin")
 	}
-	if (contentType === "security_feature") return CURRENCY_SERIES_OPTIONS
+	// An AR experience is of a denomination, coin or banknote alike.
+	if (contentType === "security_feature" || contentType === "ar_experience") {
+		return CURRENCY_SERIES_OPTIONS
+	}
 	return []
 }
 
@@ -340,6 +350,25 @@ function rawContent(values: ContentFormValues) {
 							highLabel: question.highLabel,
 						}
 			),
+		}
+	}
+	if (values.contentType === "ar_experience") {
+		return {
+			...common,
+			contentType: values.contentType,
+			seriesCode: values.seriesCode,
+			denominationCode: values.denominationCode,
+			deviceRequirement: {
+				// A blank platform box means the experience does not run there,
+				// which is a different statement from a zero.
+				minimumAndroidSdk: values.minimumAndroidSdk.trim()
+					? Number(values.minimumAndroidSdk)
+					: null,
+				minimumIosVersion: values.minimumIosVersion.trim() || null,
+			},
+			animationDurationMs: values.animationDurationMs.trim()
+				? Number(values.animationDurationMs)
+				: Number.NaN,
 		}
 	}
 	if (values.contentType === "link") {

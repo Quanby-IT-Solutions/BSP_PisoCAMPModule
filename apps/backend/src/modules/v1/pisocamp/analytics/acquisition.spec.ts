@@ -8,7 +8,6 @@ import {
 	surveyAnswers,
 	surveyQuestions,
 	surveyResponses,
-	users,
 } from "@repo/db/schema"
 
 import { AuditService } from "@/common/audit/audit.service"

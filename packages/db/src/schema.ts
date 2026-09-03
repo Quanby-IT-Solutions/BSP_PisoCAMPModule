@@ -629,7 +629,7 @@ export const contentItems = createTable(
 		unique("content_item_id_type_unique").on(t.id, t.contentType),
 		check(
 			"content_item_type_check",
-			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question', 'survey')`
+			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question', 'survey', 'ar_experience')`
 		),
 		check(
 			"content_item_status_check",
@@ -718,7 +718,7 @@ export const contentVersions = createTable(
 		check("content_version_number_check", sql`${t.versionNo} > 0`),
 		check(
 			"content_version_type_check",
-			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question', 'survey')`
+			sql`${t.contentType} in ('banknote', 'coin', 'security_feature', 'advisory', 'link', 'trivia_question', 'survey', 'ar_experience')`
 		),
 		check(
 			"content_version_status_check",
@@ -734,6 +734,7 @@ export const contentVersions = createTable(
 				or (${t.contentType} = 'link' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.primaryUrl} is not null)
 				or (${t.contentType} = 'trivia_question' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
 				or (${t.contentType} = 'survey' and ${t.seriesCode} is null and ${t.denominationCode} is null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
+				or (${t.contentType} = 'ar_experience' and ${t.seriesCode} is not null and ${t.denominationCode} is not null and ${t.body} is not null and char_length(${t.body}) between 1 and 10000 and ${t.primaryUrl} is null)
 			)`
 		),
 		check(
@@ -901,10 +902,74 @@ export const versionAssets = createTable(
 		}).onDelete("restrict"),
 		check(
 			"version_asset_role_check",
-			sql`${t.role} in ('obverse', 'reverse', 'edge', 'texture', 'audio', 'animation')`
+			sql`${t.role} in ('obverse', 'reverse', 'edge', 'texture', 'audio', 'animation', 'ar_model')`
 		),
 		index("version_asset_asset_idx").on(t.assetId),
 		index("version_asset_content_item_version_idx").on(t.contentItemId, t.contentVersionId),
+	]
+)
+
+/**
+ * AR-2 experience detail (AR-004).
+ *
+ * A child row rather than columns on the version, for the same reason EV-1's
+ * survey is one: the fields belong to this content type and to no other, and a
+ * version table that carried every type's fields would be mostly nulls.
+ *
+ * The device requirement is stored as the two things a device actually has to
+ * satisfy — an Android SDK level for ARCore and an iOS version for ARKit —
+ * rather than as a single "minimum capability" word that means different things
+ * on each platform.
+ */
+export const arExperienceDetails = createTable(
+	"ar_experience_detail",
+	t => ({
+		contentVersionId: t.uuid("content_version_id").primaryKey(),
+		contentItemId: t.uuid("content_item_id").notNull(),
+		/** The denomination this experience is of. */
+		seriesCode: t.text("series_code").notNull(),
+		denominationCode: t.text("denomination_code").notNull(),
+		/** Minimum Android SDK level for ARCore; null when Android is unsupported. */
+		minimumAndroidSdk: t.integer("minimum_android_sdk"),
+		/** Minimum iOS version for ARKit, e.g. "13.0"; null when unsupported. */
+		minimumIosVersion: t.text("minimum_ios_version"),
+		/** How long the animation runs, so AR-3 can check the audio against it. */
+		animationDurationMs: t.integer("animation_duration_ms").notNull(),
+	}),
+	t => [
+		foreignKey({
+			columns: [t.contentItemId, t.contentVersionId],
+			foreignColumns: [contentVersions.itemId, contentVersions.id],
+			name: "ar_experience_detail_version_fkey",
+		}).onDelete("cascade"),
+		foreignKey({
+			columns: [t.denominationCode, t.seriesCode],
+			foreignColumns: [
+				pisoCampCurrencyDenominations.code,
+				pisoCampCurrencyDenominations.seriesCode,
+			],
+			name: "ar_experience_detail_denomination_fkey",
+		}).onDelete("restrict"),
+		// A device requirement naming neither platform would describe an
+		// experience nobody can run.
+		check(
+			"ar_experience_detail_device_check",
+			sql`${t.minimumAndroidSdk} is not null or ${t.minimumIosVersion} is not null`
+		),
+		check(
+			"ar_experience_detail_android_check",
+			sql`${t.minimumAndroidSdk} is null or ${t.minimumAndroidSdk} between 24 and 40`
+		),
+		check(
+			"ar_experience_detail_ios_check",
+			sql`${t.minimumIosVersion} is null or ${t.minimumIosVersion} ~ '^[0-9]{1,2}([.][0-9]{1,2}){0,2}$'`
+		),
+		check(
+			"ar_experience_detail_duration_check",
+			sql`${t.animationDurationMs} between 1000 and 300000`
+		),
+		index("ar_experience_detail_item_idx").on(t.contentItemId),
+		index("ar_experience_detail_denomination_idx").on(t.seriesCode, t.denominationCode),
 	]
 )
 
@@ -2452,6 +2517,7 @@ export const schema = Object.assign(
 		pushSubscriptions,
 		pushNotifications,
 		pushDeliveries,
+		arExperienceDetails,
 	},
 	relations
 )

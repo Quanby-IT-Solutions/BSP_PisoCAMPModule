@@ -39,6 +39,7 @@ describe("CM-2 asset schemas", () => {
 			"texture",
 			"audio",
 			"animation",
+			"ar_model",
 		])
 		expect(PISO_CAMP_ASSET_MEDIA_TYPES).toEqual([
 			"image/png",

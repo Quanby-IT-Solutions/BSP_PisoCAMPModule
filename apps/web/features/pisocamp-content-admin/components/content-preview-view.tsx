@@ -32,7 +32,10 @@ const ROLE_LABELS: Record<PisoCampContentPreviewAsset["role"], string> = {
 	edge: "Edge",
 	texture: "Texture",
 	audio: "Narration",
-	animation: "3D or AR model",
+	animation: "Animation",
+	// AR-2. The model an AR experience places, distinct from the animation
+	// that moves it.
+	ar_model: "AR model",
 }
 
 function titleCase(value: string) {

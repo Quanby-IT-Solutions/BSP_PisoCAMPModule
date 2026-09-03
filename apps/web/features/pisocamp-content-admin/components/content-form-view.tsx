@@ -116,13 +116,15 @@ function formValuesFromDetail(detail: PisoCampContentDetail): ContentFormValues 
 		seriesCode:
 			content.contentType === "banknote" ||
 			content.contentType === "coin" ||
-			content.contentType === "security_feature"
+			content.contentType === "security_feature" ||
+			content.contentType === "ar_experience"
 				? content.seriesCode
 				: "",
 		denominationCode:
 			content.contentType === "banknote" ||
 			content.contentType === "coin" ||
-			content.contentType === "security_feature"
+			content.contentType === "security_feature" ||
+			content.contentType === "ar_experience"
 				? content.denominationCode
 				: "",
 		primaryUrl: content.contentType === "link" ? content.primaryUrl : "",
@@ -160,6 +162,17 @@ function formValuesFromDetail(detail: PisoCampContentDetail): ContentFormValues 
 					}))
 				: [emptyTriviaChoice(), emptyTriviaChoice()],
 		active: content.contentType === "trivia_question" ? content.active : true,
+		minimumAndroidSdk:
+			content.contentType === "ar_experience" &&
+			content.deviceRequirement.minimumAndroidSdk !== null
+				? String(content.deviceRequirement.minimumAndroidSdk)
+				: "",
+		minimumIosVersion:
+			content.contentType === "ar_experience"
+				? (content.deviceRequirement.minimumIosVersion ?? "")
+				: "",
+		animationDurationMs:
+			content.contentType === "ar_experience" ? String(content.animationDurationMs) : "",
 		relatedLinks,
 	}
 }

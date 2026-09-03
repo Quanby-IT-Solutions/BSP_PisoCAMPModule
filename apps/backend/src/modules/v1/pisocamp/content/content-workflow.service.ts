@@ -26,12 +26,14 @@ import type {
 	SubmitPisoCampContentInput,
 	UnpublishPisoCampContentInput,
 } from "@repo/contracts"
+import { AR_EXPERIENCE_REQUIRED_ASSET_ROLES } from "@repo/contracts/pisocamp-content"
 import {
 	PISO_CAMP_CONTENT_DIFF_FIELDS,
 	PISO_CAMP_RESTORABLE_STATUSES,
 	PISO_CAMP_RESTORE_SOURCE_ITEM_STATUSES,
 } from "@repo/contracts/pisocamp-version-history"
 import {
+	arExperienceDetails,
 	contentBundleRebuildRequests,
 	contentItems,
 	contentVersions,
@@ -40,6 +42,7 @@ import {
 	surveyQuestions,
 	triviaQuestionDetails,
 	users,
+	versionAssets,
 } from "@repo/db/schema"
 
 import { AuditService } from "@/common/audit/audit.service"
@@ -167,6 +170,17 @@ async function copyChildDetails(
 	if (trivia) {
 		await tx.insert(triviaQuestionDetails).values({
 			...trivia,
+			contentVersionId: input.targetVersionId,
+			contentItemId: input.contentItemId,
+		})
+	}
+	const [arExperience] = await tx
+		.select()
+		.from(arExperienceDetails)
+		.where(eq(arExperienceDetails.contentVersionId, input.sourceVersionId))
+	if (arExperience) {
+		await tx.insert(arExperienceDetails).values({
+			...arExperience,
 			contentVersionId: input.targetVersionId,
 			contentItemId: input.contentItemId,
 		})
@@ -310,6 +324,27 @@ export class ContentWorkflowService {
 				item.status !== current.status
 			) {
 				throw new ORPCError("CONFLICT", { message: "Content workflow transition is not allowed" })
+			}
+
+			// AR-2. An AR experience cannot go for review without the three
+			// assets it plays: a reviewer asked to approve an experience with no
+			// model, no animation or no narration is being asked to approve
+			// nothing. Checked here rather than at draft time, because an editor
+			// has to be able to save work in progress.
+			if (action === "submit" && current.contentType === "ar_experience") {
+				const attached = await tx
+					.select({ role: versionAssets.role })
+					.from(versionAssets)
+					.where(eq(versionAssets.contentVersionId, current.id))
+				const present = new Set(attached.map(row => row.role))
+				const missing = AR_EXPERIENCE_REQUIRED_ASSET_ROLES.filter(
+					role => !present.has(role)
+				)
+				if (missing.length > 0) {
+					throw new ORPCError("BAD_REQUEST", {
+						message: `An AR experience needs its ${missing.join(", ")} asset before review`,
+					})
+				}
 			}
 
 			const now = new Date()
@@ -790,6 +825,10 @@ export class ContentWorkflowService {
 				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 			)
 			.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
+			.leftJoin(
+				arExperienceDetails,
+				eq(arExperienceDetails.contentVersionId, contentVersions.id)
+			)
 			.where(eq(contentVersions.itemId, item.id))
 			.orderBy(desc(contentVersions.versionNo))
 			.limit(limit)
@@ -990,6 +1029,10 @@ export class ContentWorkflowService {
 				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 			)
 			.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
+			.leftJoin(
+				arExperienceDetails,
+				eq(arExperienceDetails.contentVersionId, contentVersions.id)
+			)
 			.where(eq(contentItems.id, itemId))
 		if (!row) throw new ORPCError("NOT_FOUND", { message: "Content item not found" })
 		if (!row.transitionAction) {
@@ -1072,6 +1115,10 @@ export class ContentWorkflowService {
 				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 			)
 			.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
+			.leftJoin(
+				arExperienceDetails,
+				eq(arExperienceDetails.contentVersionId, contentVersions.id)
+			)
 			.where(and(eq(contentItems.status, "published"), eq(contentVersions.status, "published")))
 			.orderBy(asc(contentItems.id))
 		// GM-1: an inactive question is withheld from the bundle exactly as a

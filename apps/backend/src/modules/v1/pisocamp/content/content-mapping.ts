@@ -12,6 +12,7 @@ import type {
 	PisoCampSurveyQuestionOutput,
 } from "@repo/contracts"
 import {
+	arExperienceDetails,
 	contentItems,
 	contentVersions,
 	relatedLinks,
@@ -111,6 +112,26 @@ export function stripQuestionId(
 			}
 }
 
+/**
+ * The AR-2 child row for a version, or null when the content is not an AR
+ * experience.
+ */
+export function toArExperienceDetailValues(
+	content: PisoCampContentDraft,
+	identity: { contentItemId: string; contentVersionId: string }
+) {
+	if (content.contentType !== "ar_experience") return null
+	return {
+		contentVersionId: identity.contentVersionId,
+		contentItemId: identity.contentItemId,
+		seriesCode: content.seriesCode,
+		denominationCode: content.denominationCode,
+		minimumAndroidSdk: content.deviceRequirement.minimumAndroidSdk ?? null,
+		minimumIosVersion: content.deviceRequirement.minimumIosVersion ?? null,
+		animationDurationMs: content.animationDurationMs,
+	}
+}
+
 export function toContentVersionValues(content: PisoCampContentDraft) {
 	return {
 		contentType: content.contentType,
@@ -166,8 +187,25 @@ export const surveyDetailColumns = {
 	surveySubjectContentItemId: surveyDetails.subjectContentItemId,
 } as const
 
+export interface ArExperienceDetailRow {
+	arMinimumAndroidSdk: number | null
+	arMinimumIosVersion: string | null
+	arAnimationDurationMs: number | null
+}
+
+/** The AR-2 columns every version select joins. */
+export const arExperienceDetailColumns = {
+	arMinimumAndroidSdk: arExperienceDetails.minimumAndroidSdk,
+	arMinimumIosVersion: arExperienceDetails.minimumIosVersion,
+	arAnimationDurationMs: arExperienceDetails.animationDurationMs,
+} as const
+
 /** Every child-table column a version select needs, in one spread. */
-export const childDetailColumns = { ...triviaDetailColumns, ...surveyDetailColumns } as const
+export const childDetailColumns = {
+	...triviaDetailColumns,
+	...surveyDetailColumns,
+	...arExperienceDetailColumns,
+} as const
 
 /**
  * A survey's questions by version, ordered.
@@ -214,7 +252,10 @@ export async function withSurveyQuestionsFor<T extends { contentType: string }>(
 	return { ...row, surveyQuestions: grouped.get(versionId) ?? [] }
 }
 
-export interface ContentVersionRow extends TriviaDetailRow, SurveyDetailRow {
+export interface ContentVersionRow
+	extends TriviaDetailRow,
+		SurveyDetailRow,
+		ArExperienceDetailRow {
 	contentType: PisoCampContentDraft["contentType"]
 	title: string
 	summary: string
@@ -265,6 +306,20 @@ export function fromContentVersion(row: ContentVersionRow): PisoCampContentDraft
 			),
 		}
 	}
+	if (row.contentType === "ar_experience") {
+		return {
+			...common,
+			contentType: "ar_experience",
+			body: row.body!,
+			seriesCode: row.seriesCode as never,
+			denominationCode: row.denominationCode!,
+			deviceRequirement: {
+				minimumAndroidSdk: row.arMinimumAndroidSdk,
+				minimumIosVersion: row.arMinimumIosVersion,
+			},
+			animationDurationMs: row.arAnimationDurationMs!,
+		}
+	}
 	if (row.contentType === "security_feature") {
 		return {
 			...common,
@@ -297,7 +352,10 @@ export function fromContentVersion(row: ContentVersionRow): PisoCampContentDraft
  */
 export async function withChildDetails<
 	T extends { id: string; contentType: PisoCampContentDraft["contentType"] },
->(database: ContentDatabase, version: T): Promise<T & TriviaDetailRow & SurveyDetailRow> {
+>(
+	database: ContentDatabase,
+	version: T
+): Promise<T & TriviaDetailRow & SurveyDetailRow & ArExperienceDetailRow> {
 	const empty = {
 		triviaCategory: null,
 		triviaDifficulty: null,
@@ -306,6 +364,9 @@ export async function withChildDetails<
 		surveyPurpose: null,
 		surveySubjectContentItemId: null,
 		surveyQuestions: null,
+		arMinimumAndroidSdk: null,
+		arMinimumIosVersion: null,
+		arAnimationDurationMs: null,
 	} as const
 	if (version.contentType === "trivia_question") {
 		const [detail] = await database
@@ -333,6 +394,19 @@ export async function withChildDetails<
 			surveyPurpose: detail?.surveyPurpose ?? null,
 			surveySubjectContentItemId: detail?.surveySubjectContentItemId ?? null,
 			surveyQuestions: grouped.get(version.id) ?? [],
+		}
+	}
+	if (version.contentType === "ar_experience") {
+		const [detail] = await database
+			.select(arExperienceDetailColumns)
+			.from(arExperienceDetails)
+			.where(eq(arExperienceDetails.contentVersionId, version.id))
+		return {
+			...version,
+			...empty,
+			arMinimumAndroidSdk: detail?.arMinimumAndroidSdk ?? null,
+			arMinimumIosVersion: detail?.arMinimumIosVersion ?? null,
+			arAnimationDurationMs: detail?.arAnimationDurationMs ?? null,
 		}
 	}
 	return { ...version, ...empty }
@@ -409,6 +483,10 @@ export async function getContentDetail(
 			eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 		)
 		.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
+		.leftJoin(
+			arExperienceDetails,
+			eq(arExperienceDetails.contentVersionId, contentVersions.id)
+		)
 		.where(eq(contentItems.id, itemId))
 	if (!row) return null
 	return {

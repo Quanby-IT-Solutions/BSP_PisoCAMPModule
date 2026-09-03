@@ -13,6 +13,7 @@ import type {
 	PisoCampSurveyPurpose,
 } from "@repo/contracts"
 import {
+	arExperienceDetails,
 	contentItems,
 	contentVersions,
 	pisoCampCurrencyDenominations,
@@ -35,6 +36,7 @@ import type { V1Inputs } from "@/config/contract-types"
 import { copyVersionAssets } from "../assets/version-assets"
 import {
 	fromContentVersion,
+	toArExperienceDetailValues,
 	toSurveyDetailValues,
 	toSurveyQuestionValues,
 	toTriviaDetailValues,
@@ -213,6 +215,8 @@ export class ContentService {
 				select count(*)::int from ${surveyQuestions}
 				where ${surveyQuestions.contentVersionId} = ${contentVersions.id}
 			)`,
+			arMinimumAndroidSdk: arExperienceDetails.minimumAndroidSdk,
+			arMinimumIosVersion: arExperienceDetails.minimumIosVersion,
 			creatorId: creator.id,
 			creatorName: creator.name,
 			editorId: editor.id,
@@ -231,6 +235,10 @@ export class ContentService {
 				eq(triviaQuestionDetails.contentVersionId, contentVersions.id)
 			)
 			.leftJoin(surveyDetails, eq(surveyDetails.contentVersionId, contentVersions.id))
+			.leftJoin(
+				arExperienceDetails,
+				eq(arExperienceDetails.contentVersionId, contentVersions.id)
+			)
 			.where(where)
 			.orderBy(desc(contentItems.updatedAt), asc(contentItems.id))
 			.limit(limit)
@@ -326,6 +334,8 @@ export class ContentService {
 			const questions = toSurveyQuestionValues(content, identity)
 			if (questions?.length) await tx.insert(surveyQuestions).values(questions)
 		}
+		const arExperience = toArExperienceDetailValues(content, identity)
+		if (arExperience !== null) await tx.insert(arExperienceDetails).values(arExperience)
 	}
 
 	private async insertLinks(
@@ -412,6 +422,8 @@ export class ContentService {
 		triviaActive: boolean | null
 		surveyPurpose: PisoCampSurveyPurpose | null
 		surveyQuestionCount: number
+		arMinimumAndroidSdk: number | null
+		arMinimumIosVersion: string | null
 		creatorId: string
 		creatorName: string
 		editorId: string
@@ -445,6 +457,17 @@ export class ContentService {
 				...common,
 				purpose: row.surveyPurpose!,
 				questionCount: row.surveyQuestionCount,
+			} as PisoCampContentSummary
+		}
+		if (row.contentType === "ar_experience") {
+			return {
+				...common,
+				seriesCode: row.seriesCode!,
+				denominationCode: row.denominationCode!,
+				// Shown in the list so a reviewer sees what a device needs
+				// without opening the item.
+				minimumAndroidSdk: row.arMinimumAndroidSdk,
+				minimumIosVersion: row.arMinimumIosVersion,
 			} as PisoCampContentSummary
 		}
 		return {

@@ -7,6 +7,8 @@ export const PISO_CAMP_ASSET_ROLES = [
 	"texture",
 	"audio",
 	"animation",
+	// AR-2. The 3D model an AR experience places in the room.
+	"ar_model",
 ] as const
 
 export const PISO_CAMP_ASSET_MEDIA_TYPES = [

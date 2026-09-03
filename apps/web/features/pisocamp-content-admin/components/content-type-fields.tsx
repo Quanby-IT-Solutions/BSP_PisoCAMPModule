@@ -37,6 +37,7 @@ const CONTENT_TYPE_OPTIONS: readonly { value: PisoCampContentType; label: string
 	{ value: "link", label: "Link" },
 	{ value: "trivia_question", label: "Trivia question" },
 	{ value: "survey", label: "Survey" },
+	{ value: "ar_experience", label: "AR experience" },
 ]
 
 const TRIVIA_DIFFICULTY_OPTIONS = [
@@ -89,7 +90,9 @@ export function ContentTypeFields({
 	onChange,
 }: ContentTypeFieldsProps) {
 	const set = (key: keyof ContentFormValues, value: string) => onChange({ ...values, [key]: value })
-	const currency = ["banknote", "coin", "security_feature"].includes(values.contentType)
+	const currency = ["banknote", "coin", "security_feature", "ar_experience"].includes(
+		values.contentType
+	)
 
 	return (
 		<FieldGroup className="w-full max-w-full min-w-0">
@@ -338,6 +341,10 @@ export function ContentTypeFields({
 				/>
 			) : null}
 
+			{values.contentType === "ar_experience" ? (
+				<ArExperienceFields values={values} errors={errors} onChange={onChange} />
+			) : null}
+
 			{values.contentType === "link" ? (
 				<TextField
 					id="primary-url"
@@ -350,6 +357,59 @@ export function ContentTypeFields({
 				/>
 			) : null}
 		</FieldGroup>
+	)
+}
+
+/**
+ * AR-2. What a device needs, and how long the animation runs.
+ *
+ * Two platform boxes rather than one "minimum capability": ARCore is an Android
+ * SDK level and ARKit is an iOS version, and a single number would mean
+ * something different on each. A blank box says the experience does not run on
+ * that platform, which is a different statement from a zero.
+ */
+function ArExperienceFields({
+	values,
+	errors,
+	onChange,
+}: {
+	values: ContentFormValues
+	errors: Partial<Record<string, string>>
+	onChange: (values: ContentFormValues) => void
+}) {
+	const set = (key: keyof ContentFormValues, value: string) => onChange({ ...values, [key]: value })
+
+	return (
+		<>
+			<TextField
+				id="minimum-android-sdk"
+				label="Minimum Android SDK (ARCore)"
+				type="number"
+				value={values.minimumAndroidSdk}
+				error={errors.minimumAndroidSdk ?? errors.deviceRequirement}
+				onChange={value => set("minimumAndroidSdk", value)}
+			/>
+			<TextField
+				id="minimum-ios-version"
+				label="Minimum iOS version (ARKit)"
+				value={values.minimumIosVersion}
+				error={errors.minimumIosVersion}
+				onChange={value => set("minimumIosVersion", value)}
+			/>
+			<TextField
+				id="animation-duration-ms"
+				label="Animation length (milliseconds)"
+				type="number"
+				value={values.animationDurationMs}
+				error={errors.animationDurationMs}
+				onChange={value => set("animationDurationMs", value)}
+			/>
+			<p className="text-muted-foreground text-sm">
+				Leave a platform blank when the experience does not run on it. The 3D model,
+				its animation and its narration are attached as assets, and all three are
+				needed before it can be submitted for review.
+			</p>
+		</>
 	)
 }
 
@@ -383,7 +443,7 @@ function TextField({
 				onChange={event => onChange(event.target.value)}
 				aria-invalid={error ? true : undefined}
 				aria-describedby={error ? `${id}-error` : undefined}
-				className="max-w-full min-w-0"
+				className="min-h-11 max-w-full min-w-0"
 			/>
 			<FieldError id={`${id}-error`}>{error}</FieldError>
 		</Field>

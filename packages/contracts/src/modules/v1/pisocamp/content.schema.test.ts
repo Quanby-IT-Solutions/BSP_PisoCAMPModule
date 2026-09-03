@@ -116,6 +116,7 @@ describe("CM-1 draft input schemas", () => {
 			"link",
 			"trivia_question",
 			"survey",
+			"ar_experience",
 		])
 		expect([...CONTENT_STATUSES]).toEqual([
 			"draft",
