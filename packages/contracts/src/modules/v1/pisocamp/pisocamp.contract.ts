@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract"
 
 import { pisoCampAnalyticsContract } from "./analytics.contract.js"
 import { pisoCampSurveyContract } from "./survey-response.contract.js"
+import { pisoCampAccountContract } from "./account.contract.js"
 import { pisoCampReportContract } from "./report.contract.js"
 import { pisoCampSurveyTriggerContract } from "./survey-trigger.contract.js"
 import { pisoCampTriviaContract } from "./trivia.contract.js"
@@ -35,6 +36,7 @@ export const pisoCampContract = {
 		preview: pisoCampContentPreviewContract,
 		surveyTriggers: pisoCampSurveyTriggerContract,
 		reports: pisoCampReportContract,
+		accounts: pisoCampAccountContract,
 		config: {
 			get: oc
 				.route({

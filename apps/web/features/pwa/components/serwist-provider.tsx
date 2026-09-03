@@ -103,10 +103,18 @@ function ServiceWorkerUpdatePrompt() {
 			})
 		})
 
-		// Reload once the new worker has taken control, so every open tab lands
-		// on the same version rather than a mix of old and new chunks.
+		// Reload once a *replacement* worker has taken control, so every open tab
+		// lands on the same version rather than a mix of old and new chunks.
+		//
+		// Only a replacement. On a first visit the newly installed worker also
+		// claims the page and fires this event, and reloading then throws away
+		// whatever the person was in the middle of — most visibly, the message
+		// explaining why their sign-in was refused, which vanished before it
+		// could be read. A page that had no controller is not being updated.
+		const hadController = Boolean(navigator.serviceWorker.controller)
 		const onControllerChange = () => {
-			if (!cancelled) window.location.reload()
+			if (cancelled || !hadController) return
+			window.location.reload()
 		}
 		navigator.serviceWorker.addEventListener("controllerchange", onControllerChange)
 

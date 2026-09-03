@@ -18,6 +18,7 @@ import {
 import { Input } from "@/core/components/ui/input"
 import { useRateLimitCountdown } from "@/core/hooks/use-rate-limit-countdown"
 import { parseRateLimitError } from "@/core/lib/rate-limit-utils"
+import { alreadyReported } from "@/core/lib/handled-rejection"
 import { cn } from "@/core/lib/utils"
 import { PasswordInput } from "@/features/auth/components/password-input"
 import { RateLimitBanner } from "@/features/auth/components/rate-limit-banner"
@@ -46,8 +47,8 @@ export function RegisterForm({ className, ...props }: React.ComponentProps<"div"
 			onSubmit: RegisterSchema,
 		},
 		onSubmit: async ({ value }) => {
-			const result = await register(value)
-			if (result.requiresVerification) {
+			const result = await alreadyReported(register(value))
+			if (result?.requiresVerification) {
 				setVerificationEmail(result.email)
 			}
 		},

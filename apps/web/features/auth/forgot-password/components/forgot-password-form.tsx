@@ -16,6 +16,7 @@ import {
 import { Input } from "@/core/components/ui/input"
 import { useRateLimitCountdown } from "@/core/hooks/use-rate-limit-countdown"
 import { parseRateLimitError } from "@/core/lib/rate-limit-utils"
+import { alreadyReported } from "@/core/lib/handled-rejection"
 import { cn } from "@/core/lib/utils"
 import { RateLimitBanner } from "@/features/auth/components/rate-limit-banner"
 
@@ -38,7 +39,7 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
 			onSubmit: ForgotPasswordSchema,
 		},
 		onSubmit: async ({ value }) => {
-			await forgotPassword(value)
+			await alreadyReported(forgotPassword(value))
 			setIsSubmitted(true)
 		},
 	})

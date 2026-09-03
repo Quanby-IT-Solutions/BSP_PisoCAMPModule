@@ -6,6 +6,7 @@ import { ConsentGuard } from "@/shared/guards/consent.guard"
 import { IdempotencyInterceptor } from "@/shared/interceptors/idempotency.interceptor"
 import { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 
+import { PisoCampAccountsModule } from "./accounts/accounts.module"
 import { AnalyticsModule } from "./analytics/analytics.module"
 import { AssetsModule } from "./assets/assets.module"
 import { BundleModule } from "./bundle/bundle.module"
@@ -41,6 +42,7 @@ import { TriviaModule } from "./trivia/trivia.module"
 		TriviaModule,
 		SurveysModule,
 		ReportsModule,
+		PisoCampAccountsModule,
 	],
 	controllers: [PisoCampController, PisoCampProfileController],
 	providers: [

@@ -8,6 +8,7 @@ import { Button } from "@/core/components/ui/button"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/core/components/ui/field"
 import { Input } from "@/core/components/ui/input"
 import { useRateLimitCountdown } from "@/core/hooks/use-rate-limit-countdown"
+import { alreadyReported } from "@/core/lib/handled-rejection"
 import { parseRateLimitError } from "@/core/lib/rate-limit-utils"
 import { RateLimitBanner } from "@/features/auth/components/rate-limit-banner"
 
@@ -37,7 +38,7 @@ export function ResendVerificationForm({ prefillEmail }: ResendVerificationFormP
 			onSubmit: ResendSchema,
 		},
 		onSubmit: async ({ value }) => {
-			await resend(value)
+			await alreadyReported(resend(value))
 			setIsSubmitted(true)
 		},
 	})

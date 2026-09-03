@@ -5,10 +5,13 @@ import { APIError } from "better-auth/api"
 import { openAPI } from "better-auth/plugins"
 import { z } from "zod"
 
+import { eq } from "drizzle-orm"
+
 import { createDBClient, type DBClient } from "@repo/db/client"
-import { accounts, sessions, users, verifications } from "@repo/db/schema"
+import { accounts, pisoCampAccountState, sessions, users, verifications } from "@repo/db/schema"
 
 import { cookieDomainSchema } from "./cookie-domain-schema.js"
+import { assertAccountMayStartSession } from "./deactivated-account.js"
 import { booleanFromEnv } from "./mailer/bool-schema.js"
 import { sendMail } from "./mailer/send-mail.js"
 import { buildResetPasswordEmail } from "./mailer/templates/reset-password-email.js"
@@ -279,6 +282,36 @@ export function createAuth(database: DBClient = createDBClient()): ReturnType<ty
 			// session keeps working until the cache lapses — the same staleness
 			// AB-2 removed from the RBAC cache, and not worth reintroducing here.
 			cookieCache: { enabled: false },
+		},
+
+		/**
+		 * SA-1: a deactivated account cannot start a session.
+		 *
+		 * Deleting the open sessions withdraws the access somebody already had;
+		 * this withdraws the access they would otherwise get next. Both are
+		 * needed — without this, a deactivated user simply signs in again — and
+		 * it sits on session creation rather than on the password check so it
+		 * covers social sign-in on the same terms.
+		 *
+		 * The message says what happened and who to ask. "Invalid credentials"
+		 * would send somebody to reset a password that was never the problem.
+		 */
+		databaseHooks: {
+			session: {
+				create: {
+					before: async (session: { userId: string }) => {
+						await assertAccountMayStartSession(async userId => {
+							const [state] = await database
+								.select({ status: pisoCampAccountState.status })
+								.from(pisoCampAccountState)
+								.where(eq(pisoCampAccountState.accountId, userId))
+							return state?.status ?? null
+						}, session.userId)
+
+						return { data: session }
+					},
+				},
+			},
 		},
 
 		/**

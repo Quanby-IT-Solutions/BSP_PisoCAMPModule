@@ -312,6 +312,23 @@ export type {
 	KeyActionEvent,
 } from "./modules/v1/pisocamp/adoption.schema.js"
 
+// SA-1 account activation and deactivation
+export {
+	ACCOUNT_STATUSES,
+	AccountStatusSchema,
+	ListPisoCampAccountsInputSchema,
+	ListPisoCampAccountsOutputSchema,
+	PisoCampAccountSchema,
+	SetPisoCampAccountStatusInputSchema,
+} from "./modules/v1/pisocamp/account.schema.js"
+export type {
+	AccountStatus,
+	ListPisoCampAccountsInput,
+	ListPisoCampAccountsOutput,
+	PisoCampAccount,
+	SetPisoCampAccountStatusInput,
+} from "./modules/v1/pisocamp/account.schema.js"
+
 // AN-8 the parameter-driven report framework
 export {
 	ActivitySummarySchema,

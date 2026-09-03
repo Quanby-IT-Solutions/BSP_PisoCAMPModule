@@ -14,6 +14,7 @@ import {
 } from "@/core/components/ui/field"
 import { useRateLimitCountdown } from "@/core/hooks/use-rate-limit-countdown"
 import { parseRateLimitError } from "@/core/lib/rate-limit-utils"
+import { alreadyReported } from "@/core/lib/handled-rejection"
 import { cn } from "@/core/lib/utils"
 import { PasswordInput } from "@/features/auth/components/password-input"
 import { RateLimitBanner } from "@/features/auth/components/rate-limit-banner"
@@ -53,7 +54,7 @@ export function ResetPasswordForm({ token, className, ...props }: ResetPasswordF
 		},
 		onSubmit: async ({ value }) => {
 			if (!token) return
-			await resetPassword({ newPassword: value.newPassword, token })
+			await alreadyReported(resetPassword({ newPassword: value.newPassword, token }))
 		},
 	})
 
