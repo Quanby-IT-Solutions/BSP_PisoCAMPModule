@@ -59,6 +59,7 @@ export interface ContentFormValues {
 	minimumAndroidSdk: string
 	minimumIosVersion: string
 	animationDurationMs: string
+	narrationTranscript: string
 	relatedLinks: RelatedLinkFormValue[]
 }
 
@@ -232,6 +233,7 @@ export function createEmptyContentForm(contentType: PisoCampContentType): Conten
 		minimumAndroidSdk: "",
 		minimumIosVersion: "",
 		animationDurationMs: "",
+		narrationTranscript: "",
 		relatedLinks: [],
 	}
 }
@@ -369,6 +371,7 @@ function rawContent(values: ContentFormValues) {
 			animationDurationMs: values.animationDurationMs.trim()
 				? Number(values.animationDurationMs)
 				: Number.NaN,
+			narrationTranscript: values.narrationTranscript,
 		}
 	}
 	if (values.contentType === "link") {

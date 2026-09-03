@@ -143,6 +143,16 @@ export function renderPublishedContentResources(
 								questions: candidate.surveyQuestions ?? [],
 							}
 						: {}),
+					// AR-3 fields, and only for an experience. The transcript travels
+					// with it because it is the caption: a device with the sound off
+					// still has to be able to read what the narration says.
+					...(content.contentType === "ar_experience"
+						? {
+								animationDurationMs: content.animationDurationMs,
+								narrationTranscript: content.narrationTranscript,
+								deviceRequirement: content.deviceRequirement,
+							}
+						: {}),
 					relatedLinks: candidate.relatedLinks,
 				}),
 				"utf8"

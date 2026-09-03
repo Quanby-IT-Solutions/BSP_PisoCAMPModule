@@ -173,6 +173,8 @@ function formValuesFromDetail(detail: PisoCampContentDetail): ContentFormValues 
 				: "",
 		animationDurationMs:
 			content.contentType === "ar_experience" ? String(content.animationDurationMs) : "",
+		narrationTranscript:
+			content.contentType === "ar_experience" ? content.narrationTranscript : "",
 		relatedLinks,
 	}
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/app_router.dart';
 import 'package:mobile/features/pisocamp/data/analytics_event.dart';
+import 'package:mobile/features/pisocamp/data/ar_narration.dart';
 import 'package:mobile/features/pisocamp/data/ar_session.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
@@ -38,6 +39,9 @@ class ArExperienceScreen extends ConsumerStatefulWidget {
     required this.logicalId,
     required this.probe,
     required this.sessions,
+    this.narration,
+    this.narrationTranscript,
+    this.animationDuration = const Duration(seconds: 12),
     this.clock,
   });
 
@@ -45,6 +49,17 @@ class ArExperienceScreen extends ConsumerStatefulWidget {
   final String logicalId;
   final ArCapabilityProbe probe;
   final ArSessionFactory sessions;
+
+  /// Overridden in tests; the platform's player otherwise. A build with no
+  /// audio runtime plays nothing and still shows the captions.
+  final ArNarrationPlayer? narration;
+
+  /// What the narration says, from the published experience. Null when the
+  /// experience has not been synced, in which case there is nothing to caption.
+  final String? narrationTranscript;
+
+  /// How long the animation runs, which is the timeline the narration follows.
+  final Duration animationDuration;
 
   /// Injectable so a test can measure a session without waiting for one.
   final DateTime Function()? clock;
@@ -59,6 +74,11 @@ class _ArExperienceScreenState extends ConsumerState<ArExperienceScreen> {
   ArSession? _session;
   DateTime? _startedAt;
   bool _endReported = false;
+  late final ArNarrationSync _narration = ArNarrationSync(
+    player: widget.narration ?? const SilentArNarrationPlayer(),
+    animationDuration: widget.animationDuration,
+  );
+  var _captionsOn = true;
 
   /// Held from the moment the session starts.
   ///
@@ -75,6 +95,7 @@ class _ArExperienceScreenState extends ConsumerState<ArExperienceScreen> {
     // gesture, or a route change. Ten open-and-close cycles leave nothing
     // behind because every one of them passes through here.
     _reportEnd();
+    unawaited(_narration.dispose());
     unawaited(_session?.dispose());
     _session = null;
     super.dispose();
@@ -112,6 +133,9 @@ class _ArExperienceScreenState extends ConsumerState<ArExperienceScreen> {
           outcome: ArStartOutcome.started,
         ),
       );
+      // Started with the animation, not before it: audio that begins while the
+      // scene is still placing itself describes something nobody can see yet.
+      await _narration.start();
       setState(() => _stage = ArExperienceStage.running);
     } on ArSessionException catch (error) {
       if (!mounted) return;
@@ -165,8 +189,19 @@ class _ArExperienceScreenState extends ConsumerState<ArExperienceScreen> {
     }
   }
 
+  Future<void> _toggleNarration() async {
+    await _narration.setMuted(!_narration.muted);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _replayNarration() async {
+    await _narration.replay();
+    if (mounted) setState(() {});
+  }
+
   Future<void> _exit() async {
     _reportEnd();
+    await _narration.stopForExit();
     final session = _session;
     _session = null;
     await session?.dispose();
@@ -197,6 +232,24 @@ class _ArExperienceScreenState extends ConsumerState<ArExperienceScreen> {
           tooltip: 'Exit',
           onPressed: _exit,
         ),
+        actions: <Widget>[
+          if (_stage == ArExperienceStage.running) ...<Widget>[
+            IconButton(
+              icon: Icon(_narration.muted ? Icons.volume_off : Icons.volume_up),
+              tooltip: _narration.muted
+                  ? 'Unmute the narration'
+                  : 'Mute the narration',
+              onPressed: _toggleNarration,
+            ),
+            IconButton(
+              icon: Icon(
+                _captionsOn ? Icons.closed_caption : Icons.closed_caption_off,
+              ),
+              tooltip: _captionsOn ? 'Hide the captions' : 'Show the captions',
+              onPressed: () => setState(() => _captionsOn = !_captionsOn),
+            ),
+          ],
+        ],
       ),
       body: SafeArea(
         child: Padding(
@@ -204,7 +257,12 @@ class _ArExperienceScreenState extends ConsumerState<ArExperienceScreen> {
           child: switch (_stage) {
             ArExperienceStage.explaining => _Explanation(onContinue: _begin),
             ArExperienceStage.loading => const _Loading(),
-            ArExperienceStage.running => _Running(onExit: _exit),
+            ArExperienceStage.running => _Running(
+              onExit: _exit,
+              onReplayNarration: _replayNarration,
+              transcript: widget.narrationTranscript,
+              captionsOn: _captionsOn,
+            ),
             ArExperienceStage.unavailable => _Unavailable(
               reason: _reason ?? ArUnavailableReason.deviceUnsupported,
               onOpenViewer: _openThreeDimensionalViewer,
@@ -273,9 +331,17 @@ class _Loading extends StatelessWidget {
 }
 
 class _Running extends StatelessWidget {
-  const _Running({required this.onExit});
+  const _Running({
+    required this.onExit,
+    required this.onReplayNarration,
+    required this.transcript,
+    required this.captionsOn,
+  });
 
   final VoidCallback onExit;
+  final VoidCallback onReplayNarration;
+  final String? transcript;
+  final bool captionsOn;
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +356,32 @@ class _Running extends StatelessWidget {
           'Point the camera at a flat surface, then walk around the coin to see '
           'it from every side. Tap Exit when you are finished.',
         ),
+        if (transcript != null && captionsOn) ...<Widget>[
+          const SizedBox(height: 16),
+          // The narration in writing. Shown by default rather than behind a
+          // setting: somebody who cannot hear the audio should not have to find
+          // out that a transcript exists.
+          Semantics(
+            label: 'Narration transcript',
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(transcript!),
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
+        SizedBox(
+          height: 48,
+          child: OutlinedButton(
+            onPressed: onReplayNarration,
+            child: const Text('Play the narration again'),
+          ),
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           height: 48,
           child: OutlinedButton(onPressed: onExit, child: const Text('Exit')),

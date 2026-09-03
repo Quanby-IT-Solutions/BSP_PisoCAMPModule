@@ -43,6 +43,56 @@ const CatalogCodeSchema = z
 const DenominationCodeSchema = CatalogCodeSchema
 
 /**
+ * AR-002/003. The coins and banknotes that must each have an AR experience.
+ *
+ * Fourteen coins and ten banknotes, listed rather than derived: "every item in
+ * the catalogue" would quietly change what is mandatory the day somebody adds
+ * one, and what is mandatory is BSP's decision under BR-010 change control.
+ *
+ * The coverage check reads this list. Changing it is a deliberate edit with a
+ * test that fails until the count still comes to twenty-four.
+ */
+export const AR_MANDATORY_EXPERIENCES = [
+	{ seriesCode: "ngc-coins", denominationCode: "sentimo-1" },
+	{ seriesCode: "ngc-coins", denominationCode: "sentimo-5" },
+	{ seriesCode: "ngc-coins", denominationCode: "sentimo-25" },
+	{ seriesCode: "ngc-coins", denominationCode: "php-1" },
+	{ seriesCode: "ngc-coins", denominationCode: "php-5" },
+	{ seriesCode: "ngc-coins", denominationCode: "php-10" },
+	{ seriesCode: "ngc-coins", denominationCode: "php-20" },
+	{ seriesCode: "bsp-coin-series", denominationCode: "sentimo-1" },
+	{ seriesCode: "bsp-coin-series", denominationCode: "sentimo-5" },
+	{ seriesCode: "bsp-coin-series", denominationCode: "sentimo-10" },
+	{ seriesCode: "bsp-coin-series", denominationCode: "sentimo-25" },
+	{ seriesCode: "bsp-coin-series", denominationCode: "php-1" },
+	{ seriesCode: "bsp-coin-series", denominationCode: "php-5" },
+	{ seriesCode: "bsp-coin-series", denominationCode: "php-10" },
+	{ seriesCode: "ngc-banknotes", denominationCode: "php-20" },
+	{ seriesCode: "ngc-banknotes", denominationCode: "php-50" },
+	{ seriesCode: "ngc-banknotes", denominationCode: "php-100" },
+	{ seriesCode: "ngc-banknotes", denominationCode: "php-200" },
+	{ seriesCode: "ngc-banknotes", denominationCode: "php-500" },
+	{ seriesCode: "ngc-banknotes", denominationCode: "php-1000" },
+	{ seriesCode: "fpp-banknotes", denominationCode: "php-50" },
+	{ seriesCode: "fpp-banknotes", denominationCode: "php-100" },
+	{ seriesCode: "fpp-banknotes", denominationCode: "php-500" },
+	{ seriesCode: "fpp-banknotes", denominationCode: "php-1000" },
+] as const satisfies readonly { seriesCode: string; denominationCode: string }[]
+
+/** AR-002/003: fourteen coins and ten banknotes. */
+export const AR_MANDATORY_EXPERIENCE_COUNT = 24
+
+export type ArMandatoryExperience = (typeof AR_MANDATORY_EXPERIENCES)[number]
+
+/** How a mandatory item is named in a report, and in a gap. */
+export function arExperienceKey(item: {
+	seriesCode: string
+	denominationCode: string
+}): string {
+	return `${item.seriesCode}/${item.denominationCode}`
+}
+
+/**
  * BR-012. First-level features are the ones the public may be taught to check
  * unaided. Second-level features are for trained examiners, so they are kept out
  * of the offline bundle entirely rather than merely hidden by a client.
@@ -387,6 +437,14 @@ const ArExperienceDraftSchema = z
 		deviceRequirement: PisoCampArDeviceRequirementSchema,
 		/** How long the animation runs, so AR-3 can check the audio against it. */
 		animationDurationMs: z.number().int().min(1000).max(300_000),
+		/**
+		 * AR-3. What the narration says, word for word.
+		 *
+		 * Required, not optional: it is the caption and the text alternative, and
+		 * an experience whose audio nobody can read is one a deaf visitor, or
+		 * anyone with the sound off, cannot use at all.
+		 */
+		narrationTranscript: z.string().trim().min(1).max(4000),
 	})
 	.strict()
 

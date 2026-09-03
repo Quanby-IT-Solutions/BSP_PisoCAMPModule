@@ -191,7 +191,11 @@ describe("ContentFormView", () => {
 		}
 	})
 
-	it("focuses friendly conditional and nested related-link errors", async () => {
+	// Thirty-odd real interactions, each one a keystroke or a click through the
+	// whole form. It fits inside the default five seconds when it runs alone and
+	// does not when the suite runs in parallel, which made it fail at random
+	// rather than for a reason.
+	it("focuses friendly conditional and nested related-link errors", { timeout: 30_000 }, async () => {
 		const user = userEvent.setup()
 		render(<ContentFormView mode="create" />)
 		await user.type(screen.getByLabelText(/^title/i), "Banknote")

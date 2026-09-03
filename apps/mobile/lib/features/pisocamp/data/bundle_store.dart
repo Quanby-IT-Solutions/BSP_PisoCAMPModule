@@ -83,6 +83,18 @@ final class ActiveCurrencyCatalog implements ActiveCurrencyCatalogReader {
   }
 }
 
+/// Whether an on-demand entry's bytes are already on this device.
+///
+/// Exposed on the catalogue because that is what a screen holds: asking "can I
+/// open this offline?" should not require reaching for the store.
+extension ActiveCatalogOnDemand on ActiveCurrencyCatalog {
+  bool carries(BundleManifestEntry entry) => entries.any(
+    (candidate) =>
+        candidate.logicalId == entry.logicalId &&
+        candidate.sha256 == entry.sha256,
+  );
+}
+
 final class StagedBundle {
   const StagedBundle._({
     required this.version,
@@ -95,8 +107,26 @@ final class StagedBundle {
   final Uint8List envelopeBytes;
 }
 
+/// What a downloader needs from the store: whether an object is already here,
+/// and a way to fetch one that is not.
+///
+/// Narrow on purpose. A screen that downloads AR assets has no business holding
+/// the whole store, and this is the seam that lets one be tested without a
+/// bundle on disk.
+abstract interface class OnDemandObjectStore {
+  Future<bool> hasVerifiedObject(BundleManifestEntry entry);
+
+  Future<void> fetchOnDemand({
+    required BundleManifestEntry entry,
+    required String version,
+    required BundleClient client,
+    BundleCancellationToken? cancellation,
+    void Function(int received, int total)? onBytes,
+  });
+}
+
 /// Content-addressed, crash-recoverable storage rooted below app documents.
-final class BundleStore {
+final class BundleStore implements OnDemandObjectStore {
   BundleStore({
     required Directory documentsRoot,
     BundleAssetLoader? loadAsset,
@@ -197,6 +227,7 @@ final class BundleStore {
     return catalog;
   }
 
+  @override
   Future<bool> hasVerifiedObject(BundleManifestEntry entry) async {
     if (!_digestPattern.hasMatch(entry.sha256)) return false;
     final object = _objectFile(entry.sha256);
@@ -293,6 +324,44 @@ final class BundleStore {
       version: version,
       manifestDigest: envelope.payloadSha256,
       envelopeBytes: Uint8List.fromList(envelopeBytes),
+    );
+  }
+
+  /// AR-005. Fetches one on-demand object into the content-addressed store.
+  ///
+  /// The same download path the core objects use, so an AR asset resumes after
+  /// an interruption exactly as they do (RF-6): the part file and its journal
+  /// survive, and the next attempt continues from the byte it reached.
+  ///
+  /// Nothing is installed until the digest matches, so a half-downloaded
+  /// experience is never one a device will try to open.
+  @override
+  Future<void> fetchOnDemand({
+    required BundleManifestEntry entry,
+    required String version,
+    required BundleClient client,
+    BundleCancellationToken? cancellation,
+    void Function(int received, int total)? onBytes,
+  }) async {
+    if (entry.delivery != BundleEntryDelivery.onDemand) {
+      // Core objects arrive with the bundle. Fetching one here would be a
+      // second, unmanaged copy of something the sync already owns.
+      throw const BundleStoreException('entry_not_on_demand');
+    }
+    await _ensureLayout();
+    if (await hasVerifiedObject(entry)) {
+      onBytes?.call(entry.byteLength, entry.byteLength);
+      return;
+    }
+    await Directory(
+      paths.join(_stagingDirectory(version).path, 'downloads'),
+    ).create(recursive: true);
+    await _downloadObjectWithRetry(
+      entry: entry,
+      version: version,
+      client: client,
+      cancellation: cancellation,
+      onBytes: onBytes,
     );
   }
 
@@ -412,6 +481,7 @@ final class BundleStore {
     required String version,
     required BundleClient client,
     BundleCancellationToken? cancellation,
+    void Function(int received, int total)? onBytes,
   }) async {
     for (
       var attempt = 1;
@@ -425,6 +495,7 @@ final class BundleStore {
           version: version,
           client: client,
           cancellation: cancellation,
+          onBytes: onBytes,
         );
         return;
       } on BundleStoreException catch (error) {
@@ -441,6 +512,7 @@ final class BundleStore {
     required String version,
     required BundleClient client,
     BundleCancellationToken? cancellation,
+    void Function(int received, int total)? onBytes,
   }) async {
     final downloadDirectory = Directory(
       paths.join(_stagingDirectory(version).path, 'downloads'),
@@ -519,6 +591,9 @@ final class BundleStore {
     }
     final append = resume != null;
     var downloaded = resume?.downloadedLength ?? 0;
+    // Reported from what is already on disk, so a resumed download starts its
+    // progress bar where the last attempt stopped rather than at zero.
+    onBytes?.call(downloaded, entry.byteLength);
     final etag = response.etag;
     final resumable = _strongEtagPattern.hasMatch(etag ?? '');
     if (!append && await part.exists()) await part.delete();
@@ -534,6 +609,7 @@ final class BundleStore {
         }
         sink.add(chunk);
         await sink.flush();
+        onBytes?.call(downloaded, entry.byteLength);
         if (resumable) {
           faults.beforeResumeJournalWrite?.call();
           await _writeResume(

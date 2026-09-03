@@ -404,6 +404,31 @@ function ArExperienceFields({
 				error={errors.animationDurationMs}
 				onChange={value => set("animationDurationMs", value)}
 			/>
+			<Field className="max-w-full min-w-0">
+				<FieldLabel htmlFor="narration-transcript">Narration transcript</FieldLabel>
+				<Textarea
+					id="narration-transcript"
+					name="narrationTranscript"
+					autoComplete="off"
+					rows={6}
+					value={values.narrationTranscript}
+					onChange={event => set("narrationTranscript", event.target.value)}
+					aria-invalid={errors.narrationTranscript ? true : undefined}
+					aria-describedby={
+						errors.narrationTranscript
+							? "narration-transcript-error"
+							: "narration-transcript-hint"
+					}
+					className="max-w-full min-w-0"
+				/>
+				<p id="narration-transcript-hint" className="text-muted-foreground text-sm">
+					Word for word, as the narration says it. This is what somebody reads
+					when the sound is off or they cannot hear it.
+				</p>
+				<FieldError id="narration-transcript-error">
+					{errors.narrationTranscript}
+				</FieldError>
+			</Field>
 			<p className="text-muted-foreground text-sm">
 				Leave a platform blank when the experience does not run on it. The 3D model,
 				its animation and its narration are attached as assets, and all three are

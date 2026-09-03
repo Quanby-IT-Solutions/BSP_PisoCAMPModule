@@ -217,6 +217,7 @@ describe("AR-2 AR experience form", () => {
 		minimumAndroidSdk: "26",
 		minimumIosVersion: "13.0",
 		animationDurationMs: "12000",
+		narrationTranscript: "This coin shows the tamaraw of Mindoro.",
 		...overrides,
 	})
 
@@ -231,6 +232,7 @@ describe("AR-2 AR experience form", () => {
 			denominationCode: "php-20",
 			deviceRequirement: { minimumAndroidSdk: 26, minimumIosVersion: "13.0" },
 			animationDurationMs: 12000,
+			narrationTranscript: "This coin shows the tamaraw of Mindoro.",
 		})
 	})
 

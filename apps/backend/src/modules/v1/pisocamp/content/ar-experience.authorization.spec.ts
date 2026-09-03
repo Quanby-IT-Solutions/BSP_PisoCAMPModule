@@ -54,6 +54,7 @@ const arExperienceDraft = {
 	denominationCode: "php-20",
 	deviceRequirement: { minimumAndroidSdk: 26, minimumIosVersion: "13.0" },
 	animationDurationMs: 12_000,
+		narrationTranscript: "This coin shows the tamaraw of Mindoro.",
 }
 
 type MiddlewareRequest = ExpressRequest & {

@@ -946,6 +946,14 @@ export const arExperienceDetails = createTable(
 		minimumIosVersion: t.text("minimum_ios_version"),
 		/** How long the animation runs, so AR-3 can check the audio against it. */
 		animationDurationMs: t.integer("animation_duration_ms").notNull(),
+		/**
+		 * AR-3. What the narration says, word for word.
+		 *
+		 * Not nullable: it is the caption and the text alternative, and an
+		 * experience whose audio nobody can read is one a deaf visitor cannot
+		 * use at all.
+		 */
+		narrationTranscript: t.text("narration_transcript").notNull(),
 	}),
 	t => [
 		foreignKey({
@@ -953,6 +961,10 @@ export const arExperienceDetails = createTable(
 			foreignColumns: [contentVersions.itemId, contentVersions.id],
 			name: "ar_experience_detail_version_fkey",
 		}).onDelete("cascade"),
+		check(
+			"ar_experience_detail_narration_check",
+			sql`char_length(${t.narrationTranscript}) between 1 and 4000`
+		),
 		foreignKey({
 			columns: [t.denominationCode, t.seriesCode],
 			foreignColumns: [

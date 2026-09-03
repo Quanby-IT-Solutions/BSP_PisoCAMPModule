@@ -129,6 +129,7 @@ export function toArExperienceDetailValues(
 		minimumAndroidSdk: content.deviceRequirement.minimumAndroidSdk ?? null,
 		minimumIosVersion: content.deviceRequirement.minimumIosVersion ?? null,
 		animationDurationMs: content.animationDurationMs,
+		narrationTranscript: content.narrationTranscript,
 	}
 }
 
@@ -191,6 +192,7 @@ export interface ArExperienceDetailRow {
 	arMinimumAndroidSdk: number | null
 	arMinimumIosVersion: string | null
 	arAnimationDurationMs: number | null
+	arNarrationTranscript: string | null
 }
 
 /** The AR-2 columns every version select joins. */
@@ -198,6 +200,7 @@ export const arExperienceDetailColumns = {
 	arMinimumAndroidSdk: arExperienceDetails.minimumAndroidSdk,
 	arMinimumIosVersion: arExperienceDetails.minimumIosVersion,
 	arAnimationDurationMs: arExperienceDetails.animationDurationMs,
+	arNarrationTranscript: arExperienceDetails.narrationTranscript,
 } as const
 
 /** Every child-table column a version select needs, in one spread. */
@@ -318,6 +321,7 @@ export function fromContentVersion(row: ContentVersionRow): PisoCampContentDraft
 				minimumIosVersion: row.arMinimumIosVersion,
 			},
 			animationDurationMs: row.arAnimationDurationMs!,
+			narrationTranscript: row.arNarrationTranscript!,
 		}
 	}
 	if (row.contentType === "security_feature") {
@@ -367,6 +371,7 @@ export async function withChildDetails<
 		arMinimumAndroidSdk: null,
 		arMinimumIosVersion: null,
 		arAnimationDurationMs: null,
+		arNarrationTranscript: null,
 	} as const
 	if (version.contentType === "trivia_question") {
 		const [detail] = await database
@@ -407,6 +412,7 @@ export async function withChildDetails<
 			arMinimumAndroidSdk: detail?.arMinimumAndroidSdk ?? null,
 			arMinimumIosVersion: detail?.arMinimumIosVersion ?? null,
 			arAnimationDurationMs: detail?.arAnimationDurationMs ?? null,
+			arNarrationTranscript: detail?.arNarrationTranscript ?? null,
 		}
 	}
 	return { ...version, ...empty }

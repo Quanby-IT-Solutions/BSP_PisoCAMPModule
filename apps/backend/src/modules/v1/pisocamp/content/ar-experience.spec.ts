@@ -47,6 +47,7 @@ const experience = (overrides: Record<string, unknown> = {}) =>
 		denominationCode: DENOMINATION,
 		deviceRequirement: { minimumAndroidSdk: 26, minimumIosVersion: "13.0" },
 		animationDurationMs: 12_000,
+		narrationTranscript: "This coin shows the tamaraw of Mindoro.",
 		...overrides,
 	}) as never
 
@@ -143,6 +144,7 @@ describe("AR-2 AR experience content admin", () => {
 				minimumAndroidSdk: 26,
 				minimumIosVersion: "13.0",
 				animationDurationMs: 12_000,
+		narrationTranscript: "This coin shows the tamaraw of Mindoro.",
 			})
 
 			const stored = await content.get(itemId)
@@ -151,6 +153,7 @@ describe("AR-2 AR experience content admin", () => {
 				contentType: "ar_experience",
 				deviceRequirement: { minimumAndroidSdk: 26, minimumIosVersion: "13.0" },
 				animationDurationMs: 12_000,
+		narrationTranscript: "This coin shows the tamaraw of Mindoro.",
 			})
 		})
 

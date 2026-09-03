@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/features/pisocamp/data/analytics_event.dart';
+import 'package:mobile/features/pisocamp/data/ar_narration.dart';
 import 'package:mobile/features/pisocamp/data/ar_session.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
@@ -82,6 +83,8 @@ void main() {
     required ArCapabilityProbe probe,
     required ArSessionFactory sessions,
     DateTime Function()? clock,
+    ArNarrationPlayer? narration,
+    String? transcript,
   }) async {
     final router = GoRouter(
       initialLocation: '/ar',
@@ -94,6 +97,8 @@ void main() {
             probe: probe,
             sessions: sessions,
             clock: clock,
+            narration: narration,
+            narrationTranscript: transcript,
           ),
         ),
         GoRoute(
@@ -319,4 +324,126 @@ void main() {
     }
     expect(tester.takeException(), isNull);
   });
+
+  group('AR-3 narration and captions', () {
+    testWidgets('shows the narration in writing while it plays', (tester) async {
+      final player = _RecordingNarration();
+      await pumpScreen(
+        tester,
+        probe: _SupportedProbe(),
+        sessions: _FakeSessionFactory(<String>[]),
+        narration: player,
+        transcript: 'The tamaraw of Mindoro appears on this coin.',
+      );
+
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      // Shown by default, not behind a setting: somebody who cannot hear the
+      // audio should not have to discover that a transcript exists.
+      expect(
+        find.text('The tamaraw of Mindoro appears on this coin.'),
+        findsOneWidget,
+      );
+      // And the narration started with the animation, not before it.
+      expect(player.log, <String>['play:0']);
+    });
+
+    testWidgets('mutes and replays the narration without losing the captions', (
+      tester,
+    ) async {
+      final player = _RecordingNarration();
+      await pumpScreen(
+        tester,
+        probe: _SupportedProbe(),
+        sessions: _FakeSessionFactory(<String>[]),
+        narration: player,
+        transcript: 'The tamaraw of Mindoro appears on this coin.',
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Mute the narration'));
+      await tester.pumpAndSettle();
+      expect(player.log, contains('pause'));
+      // The text alternative carries on regardless: it is what makes the
+      // experience usable with the sound off in the first place.
+      expect(
+        find.text('The tamaraw of Mindoro appears on this coin.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byTooltip('Unmute the narration'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Play the narration again'));
+      await tester.pumpAndSettle();
+      expect(player.log.last, 'play:0');
+    });
+
+    testWidgets('captions can be hidden by somebody who does not want them', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        probe: _SupportedProbe(),
+        sessions: _FakeSessionFactory(<String>[]),
+        transcript: 'The tamaraw of Mindoro appears on this coin.',
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Hide the captions'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('The tamaraw of Mindoro appears on this coin.'),
+        findsNothing,
+      );
+      expect(find.byTooltip('Show the captions'), findsOneWidget);
+    });
+
+    testWidgets('leaving stops the narration rather than letting it run on', (
+      tester,
+    ) async {
+      final player = _RecordingNarration();
+      await pumpScreen(
+        tester,
+        probe: _SupportedProbe(),
+        sessions: _FakeSessionFactory(<String>[]),
+        narration: player,
+        transcript: 'The tamaraw of Mindoro appears on this coin.',
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Exit'));
+      await tester.pumpAndSettle();
+
+      expect(player.log, contains('stop'));
+    });
+  });
+}
+
+/// Records what the narration was asked to do.
+class _RecordingNarration implements ArNarrationPlayer {
+  final List<String> log = <String>[];
+  Duration _position = Duration.zero;
+
+  @override
+  Duration get position => _position;
+
+  @override
+  Future<void> play({Duration position = Duration.zero}) async {
+    _position = position;
+    log.add('play:${position.inMilliseconds}');
+  }
+
+  @override
+  Future<void> pause() async => log.add('pause');
+
+  @override
+  Future<void> stop() async => log.add('stop');
+
+  @override
+  Future<void> dispose() async => log.add('dispose');
 }
