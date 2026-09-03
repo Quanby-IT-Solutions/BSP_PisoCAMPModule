@@ -304,6 +304,49 @@ describe("AN-8 parameter-driven historical reports", () => {
 		})
 	})
 
+	describe("SA-4 — the audit trail exports through this framework", () => {
+		/** The entries are written as this suite runs, so the range is around now. */
+		function auditRequest(overrides: Record<string, unknown> = {}) {
+			const today = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10)
+			return request({ definitionKey: "audit", from: today, to: today, ...overrides })
+		}
+
+		it("runs as a report, so AN-9 exports it and audits the export", async () => {
+			const run = await reports.generate(auditRequest())
+
+			expect(run.result).toMatchObject({ definitionKey: "audit" })
+			expect(run.dataSource).toBe("audit_log")
+			// The generation is itself an entry, so the trail records that the
+			// trail was taken out of the building.
+			const audits = await db
+				.select()
+				.from(auditLog)
+				.where(eq(auditLog.targetId, run.id))
+			expect(audits).toHaveLength(1)
+		})
+
+		it("narrows the trail by the filters SA-4 offers", async () => {
+			await reports.generate(request({ definitionKey: "activity" }))
+
+			const mine = await reports.generate(
+				auditRequest({ filters: { activityType: "report.generate" } })
+			)
+			const nobodys = await reports.generate(auditRequest({ filters: { actor: "somebody-else" } }))
+
+			const entries = (mine.result as { audit: { entries: unknown[] } }).audit.entries
+			expect(entries.length).toBeGreaterThan(0)
+			expect((nobodys.result as { audit: { entryCount: number } }).audit.entryCount).toBe(0)
+		})
+
+		it("says so when more matched than one report carries", async () => {
+			const run = await reports.generate(auditRequest())
+
+			// A truncated report that claimed to be complete would be read as
+			// "that is everything that happened".
+			expect(run.result).toMatchObject({ audit: { truncated: false } })
+		})
+	})
+
 	describe("demographic filters wait for AN-10", () => {
 		it("withholds the figures and says why", async () => {
 			await db.insert(analyticsEvents).values([event(ALICE, manila(10, 10))])

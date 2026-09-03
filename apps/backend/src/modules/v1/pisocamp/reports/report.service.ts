@@ -64,6 +64,50 @@ export class ReportService {
 				definitionKey: "activity",
 				activity: await this.activity.summary(range),
 			}),
+			audit: async range => ({
+				definitionKey: "audit",
+				audit: await this.auditReport(range),
+			}),
+		}
+	}
+
+	/**
+	 * SA-4's trail, as a report AN-9 can export.
+	 *
+	 * The rows come from `AuditService.list`, the audit domain's own query, so
+	 * the file says exactly what the viewer says. Bounded: a report is a
+	 * document somebody opens, and it says so when there was more.
+	 */
+	private async auditReport(range: Range) {
+		const limit = 5000
+		const { entries, nextCursor } = await this.auditService.list({
+			limit,
+			from: range.from,
+			to: range.to,
+			...(range.filters.actor ? { actorId: range.filters.actor } : {}),
+			...(range.filters.activityType ? { action: range.filters.activityType } : {}),
+			...(range.filters.targetType ? { targetType: range.filters.targetType } : {}),
+		})
+
+		return {
+			from: range.from,
+			to: range.to,
+			timezone: "Asia/Manila" as const,
+			entryCount: entries.length,
+			truncated: nextCursor !== null,
+			entries: entries.map(entry => ({
+				id: entry.id,
+				at: entry.createdAt.toISOString(),
+				// The address when the account still exists, the id when it does
+				// not: an entry outlives the account that produced it, by design.
+				actor: entry.actorEmail ?? entry.actorId ?? "system",
+				action: entry.action,
+				outcome: entry.outcome,
+				target: [entry.targetType, entry.targetId].filter(Boolean).join(" ") || "—",
+				before: entry.oldValue === null ? "" : JSON.stringify(entry.oldValue),
+				after: entry.newValue === null ? "" : JSON.stringify(entry.newValue),
+				reason: entry.reason ?? "",
+			})),
 		}
 	}
 

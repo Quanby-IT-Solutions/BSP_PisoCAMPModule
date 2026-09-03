@@ -123,6 +123,32 @@ const TABLES: { [K in ReportResult["definitionKey"]]: (result: never) => ReportT
 			},
 		]
 	},
+	audit: (result: Extract<ReportResult, { definitionKey: "audit" }>) => {
+		const report = result.audit
+		return [
+			pairs([
+				["Entries", report.entryCount],
+				[
+					"Complete",
+					report.truncated ? "No — more entries matched than one report carries" : "Yes",
+				],
+			]),
+			{
+				title: "Audit entries",
+				columns: ["When", "Actor", "Action", "Outcome", "Target", "Before", "After", "Reason"],
+				rows: report.entries.map(entry => [
+					entry.at,
+					entry.actor,
+					entry.action,
+					entry.outcome,
+					entry.target,
+					entry.before,
+					entry.after,
+					entry.reason,
+				]),
+			},
+		]
+	},
 	activity: (result: Extract<ReportResult, { definitionKey: "activity" }>) => {
 		const summary = result.activity
 		return [

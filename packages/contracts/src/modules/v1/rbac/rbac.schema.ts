@@ -118,6 +118,14 @@ export const ListAuditLogRequestSchema = z.object({
 	/** Return only entries older than this id — cursor paging, stable under
 	 *  concurrent appends in a way OFFSET is not. */
 	before: z.coerce.number().int().positive().optional(),
+	// SA-4's filters. Optional throughout, so the unfiltered page every existing
+	// caller asks for is the same page it always was.
+	actorId: z.string().min(1).max(200).optional(),
+	action: z.string().min(1).max(120).optional(),
+	targetType: z.string().min(1).max(120).optional(),
+	/** Asia/Manila days, inclusive of both ends. */
+	from: z.iso.date().optional(),
+	to: z.iso.date().optional(),
 })
 
 export const ListAuditLogResponseSchema = z.object({

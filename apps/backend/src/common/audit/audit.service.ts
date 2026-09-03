@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common"
-import { desc, eq, lt } from "drizzle-orm"
+import { and, desc, eq, gte, lt, type SQL } from "drizzle-orm"
 
 import type { AuditLogEntry, AuditOutcome, ListAuditLogRequest } from "@repo/contracts"
 import { auditLog, users } from "@repo/db/schema"
@@ -15,6 +15,37 @@ import { db } from "@/common/database/database.client"
  * used here but not their full types.
  */
 export type AuditDb = Pick<typeof db, "insert">
+
+/**
+ * SA-4's filters, as one predicate.
+ *
+ * Every one is optional, so a caller that asks for nothing gets the whole
+ * trail exactly as it did before. The dates are Manila days inclusive of
+ * both ends: "the 3rd to the 3rd" means that day, not nothing.
+ */
+function filtersFor(query: ListAuditLogRequest): SQL | undefined {
+	const clauses: SQL[] = []
+
+	if (query.before) clauses.push(lt(auditLog.id, query.before))
+	if (query.actorId) clauses.push(eq(auditLog.actorId, query.actorId))
+	if (query.action) clauses.push(eq(auditLog.action, query.action))
+	if (query.targetType) clauses.push(eq(auditLog.targetType, query.targetType))
+	if (query.from) {
+		clauses.push(gte(auditLog.createdAt, manilaDayStart(query.from)))
+	}
+	if (query.to) {
+		// The day *after* the last one asked for: "the 3rd to the 3rd" means
+		// that whole day, and an upper bound at its start would mean nothing.
+		clauses.push(lt(auditLog.createdAt, manilaDayStart(query.to, 1)))
+	}
+
+	return clauses.length === 0 ? undefined : and(...clauses)
+}
+
+/** The instant an Asia/Manila day begins, as the UTC the column stores. */
+function manilaDayStart(day: string, plusDays = 0): Date {
+	return new Date(Date.parse(`${day}T00:00:00+08:00`) + plusDays * 86_400_000)
+}
 
 /** Domain tag for RBAC events. Kept here so callers cannot drift on spelling. */
 export const AUDIT_DOMAIN_RBAC = "rbac"
@@ -109,7 +140,7 @@ export class AuditService {
 			.from(auditLog)
 			// Left join: an entry outlives the account that produced it, by design.
 			.leftJoin(users, eq(auditLog.actorId, users.id))
-			.where(query.before ? lt(auditLog.id, query.before) : undefined)
+			.where(filtersFor(query))
 			// Ordered by id, not createdAt: two rows written in the same
 			// transaction share a timestamp, and only the id totally orders them.
 			.orderBy(desc(auditLog.id))
