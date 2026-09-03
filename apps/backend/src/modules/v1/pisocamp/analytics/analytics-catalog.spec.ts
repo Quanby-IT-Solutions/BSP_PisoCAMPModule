@@ -94,6 +94,16 @@ const CATALOG: Record<
 		feature: "account",
 		properties: {},
 	},
+	ar_start: {
+		screen: "ar_viewer",
+		feature: "ar",
+		properties: { logicalId: "content.one", outcome: "started" },
+	},
+	ar_end: {
+		screen: "ar_viewer",
+		feature: "ar",
+		properties: { logicalId: "content.one", durationMs: 42000 },
+	},
 	first_open: {
 		screen: "pisocamp_home",
 		feature: "module",

@@ -36,6 +36,8 @@ export const ANALYTICS_EVENT_NAMES = [
 	"module_load",
 	"network_failure",
 	"first_open",
+	"ar_start",
+	"ar_end",
 ] as const
 
 /**
@@ -230,6 +232,35 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 				// content, and analytics carries none.
 				linkType: z.enum(["external", "internal", "topic", "deep_link"]),
 				logicalId: z.string().trim().min(1).max(128),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("ar_start"),
+		screen: z.literal("ar_viewer"),
+		feature: z.literal("ar"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				logicalId: z.string().trim().min(1).max(128),
+				// Whether the session actually started or fell back, so a low
+				// start count can be read as "few devices" rather than "few
+				// people interested".
+				outcome: z.enum(["started", "unsupported", "permission_denied"]),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("ar_end"),
+		screen: z.literal("ar_viewer"),
+		feature: z.literal("ar"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				logicalId: z.string().trim().min(1).max(128),
+				// Capped at an hour: anything longer is a session somebody left
+				// open, not one they watched.
+				durationMs: z.number().int().min(0).max(3_600_000),
 			})
 			.strict(),
 	}).strict(),

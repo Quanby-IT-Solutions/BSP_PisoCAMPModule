@@ -14,6 +14,8 @@ import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_home_scre
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_preview_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_registration_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:mobile/features/pisocamp/data/ar_session.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/ar_experience_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/coin_viewer_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/currency_detail_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/tactile_viewer_screen.dart';
@@ -63,6 +65,12 @@ class AppRoutes {
     required String logicalId,
   }) {
     return '${currencyDetail(kind: kind, logicalId: logicalId)}/3d';
+  }
+
+  /// AR-1's augmented-reality view of one denomination. The screen itself
+  /// explains an unsupported device and offers the 3D viewer instead.
+  static String currencyAr({required String kind, required String logicalId}) {
+    return '${currencyDetail(kind: kind, logicalId: logicalId)}/ar';
   }
 
   /// The tactile simulation for one denomination. Banknotes only carry a map;
@@ -283,6 +291,26 @@ GoRouter appRouter(Ref ref) {
             initialCatalog: state.extra is CurrencyCatalogView
                 ? state.extra! as CurrencyCatalogView
                 : null,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/pisocamp/currency/:kind/:logicalId/ar',
+        builder: (context, state) {
+          final kind = CurrencyRouteKind.fromPathSegment(
+            state.pathParameters['kind'] ?? '',
+          );
+          final logicalId = state.pathParameters['logicalId'] ?? '';
+          if (kind == null || !isValidCurrencyLogicalId(logicalId)) {
+            return const _SafeNotFoundScreen();
+          }
+          return ArExperienceScreen(
+            kind: kind,
+            logicalId: logicalId,
+            // A build with no approved AR runtime answers "not here", and the
+            // screen offers CE-2's viewer rather than a blank camera.
+            probe: const UnavailableArCapabilityProbe(),
+            sessions: const UnavailableArSessionFactory(),
           );
         },
       ),

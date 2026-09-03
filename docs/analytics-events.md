@@ -9,6 +9,8 @@ The executable Zod schemas in `packages/contracts/src/modules/v1/pisocamp/analyt
 | `account_prompt_guest` | `pisocamp_home`   | `account_prompt`     | `completed` | `{}`                                               | After guest continuation and device pseudonym persistence succeed. |
 | `content_view`         | `currency_detail` | `currency_education` | `completed` | `{ logicalId: string (1–128) }`                    | Once per opened CE-1 currency-detail route.                        |
 | `first_open`           | `pisocamp_home`   | `module`             | `completed` | `{}`                                               | Once per install, at the first module entry (AN-11).               |
+| `ar_start`             | `ar_viewer`       | `ar`                 | `completed` | `{ logicalId, outcome }`                           | When an AR session starts, or cannot (AR-1).                       |
+| `ar_end`               | `ar_viewer`       | `ar`                 | `completed` | `{ logicalId, durationMs: 0–3600000 }`             | When an AR session ends (AR-1).                                    |
 | `module_load`          | `pisocamp_home`   | `module`             | `completed` | `{ phase: cold \| warm, durationMs: 0–120000 }`     | Once per module entry, at the first frame (AN-022).                |
 | `network_failure`      | `pisocamp_home`   | `module`             | `failed`    | `{ failureType, operation }`                       | When a sync or download could not finish (AN-024).                 |
 
@@ -18,6 +20,10 @@ Its `failureType` is one of `timeout`, `no_connectivity`, `sync_failed`,
 `download_failed`, `report_failed` or `upload_failed`, and its `operation` is one
 of `config`, `bundle`, `asset`, `events`, `survey` or `other` — what was being
 attempted, never where: a URL is content.
+
+`ar_start` carries an `outcome` of `started`, `unsupported` or
+`permission_denied`, because a low start count means something different when
+devices could not run the experience at all than when people chose not to.
 
 ## Common envelope
 

@@ -94,6 +94,8 @@ describe("AN-1 analytics event catalog", () => {
 			"module_load",
 			"network_failure",
 			"first_open",
+			"ar_start",
+			"ar_end",
 		])
 	})
 

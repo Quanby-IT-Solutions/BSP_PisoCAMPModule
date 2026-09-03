@@ -354,7 +354,7 @@ export const analyticsEvents = createTable(
 				'content_view', 'feature_use', 'link_open', 'trivia_prompt_shown',
 				'trivia_prompt_answered', 'trivia_prompt_skipped', 'survey_prompt_shown',
 				'survey_declined', 'survey_submitted', 'advisory_shown', 'profile_created',
-				'module_load', 'network_failure', 'first_open')`
+				'module_load', 'network_failure', 'first_open', 'ar_start', 'ar_end')`
 		),
 		check(
 			"analytics_event_subject_pseudo_id_check",
@@ -377,6 +377,7 @@ export const analyticsEvents = createTable(
 				or (${t.eventName} = 'module_load' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'completed')
 				or (${t.eventName} = 'network_failure' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'failed')
 				or (${t.eventName} = 'first_open' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'completed')
+				or (${t.eventName} in ('ar_start', 'ar_end') and ${t.screen} = 'ar_viewer' and ${t.feature} = 'ar' and ${t.status} = 'completed')
 			)`
 		),
 		check(

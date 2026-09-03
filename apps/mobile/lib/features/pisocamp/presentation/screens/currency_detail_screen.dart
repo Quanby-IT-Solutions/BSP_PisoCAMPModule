@@ -276,6 +276,8 @@ class _DetailBody extends StatelessWidget {
                   document: document,
                   catalog: detail.catalog,
                 ),
+                const SizedBox(height: 16),
+                _PlaceInYourRoom(document: document),
               ],
               if (document.hasTactileMap) ...[
                 const SizedBox(height: 16),
@@ -368,6 +370,35 @@ class _ViewInThreeDimensions extends StatelessWidget {
         ),
         icon: const Icon(Icons.threed_rotation),
         label: const Text('View in 3D'),
+      ),
+    );
+  }
+}
+
+/// AR-1 entry point.
+///
+/// Offered wherever a 3D model exists, because the AR screen itself explains an
+/// unsupported device and hands the person to that same model. Deciding here
+/// whether the phone can run AR would mean asking the camera stack a question
+/// before anybody has said they want it.
+class _PlaceInYourRoom extends StatelessWidget {
+  const _PlaceInYourRoom({required this.document});
+
+  final CurrencyContentDocument document;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: OutlinedButton.icon(
+        onPressed: () => context.push(
+          AppRoutes.currencyAr(
+            kind: CurrencyRouteKind.coins.pathSegment,
+            logicalId: document.logicalId,
+          ),
+        ),
+        icon: const Icon(Icons.view_in_ar),
+        label: const Text('Place in your room'),
       ),
     );
   }

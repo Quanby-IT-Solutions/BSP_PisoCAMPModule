@@ -240,5 +240,47 @@
 		"networkState": "unknown",
 		"status": "completed",
 		"properties": {}
+	},
+	{
+		"schemaVersion": 1,
+		"eventId": "0190f49b-57a8-4b85-9d0e-5e274f0e4ac1",
+		"eventName": "ar_start",
+		"occurredAt": "2026-08-30T01:02:03.000Z",
+		"subjectPseudoId": "AbCdEfGhIjKlMnOpQrStUv",
+		"sessionId": "f6635d24-b4d1-4f63-8a06-4026fa4e8fd6",
+		"accountType": "guest",
+		"screen": "ar_viewer",
+		"feature": "ar",
+		"appVersion": "1.0.0+1",
+		"osName": "android",
+		"osVersion": "Android 15",
+		"deviceCategory": "phone",
+		"networkState": "online",
+		"status": "completed",
+		"properties": {
+			"logicalId": "content.one",
+			"outcome": "started"
+		}
+	},
+	{
+		"schemaVersion": 1,
+		"eventId": "0190f49b-57a8-4b85-9d0e-5e274f0e4ac2",
+		"eventName": "ar_end",
+		"occurredAt": "2026-08-30T01:02:03.000Z",
+		"subjectPseudoId": "AbCdEfGhIjKlMnOpQrStUv",
+		"sessionId": "f6635d24-b4d1-4f63-8a06-4026fa4e8fd6",
+		"accountType": "guest",
+		"screen": "ar_viewer",
+		"feature": "ar",
+		"appVersion": "1.0.0+1",
+		"osName": "android",
+		"osVersion": "Android 15",
+		"deviceCategory": "phone",
+		"networkState": "online",
+		"status": "completed",
+		"properties": {
+			"logicalId": "content.one",
+			"durationMs": 42000
+		}
 	}
 ]

@@ -110,6 +110,19 @@ enum AnalyticsNetworkOperation {
   final String wireValue;
 }
 
+/// AR-1. How an AR session actually began.
+///
+/// Reported because a low start count means something different when devices
+/// could not run the experience at all than when people chose not to.
+enum ArStartOutcome {
+  started('started'),
+  unsupported('unsupported'),
+  permissionDenied('permission_denied');
+
+  const ArStartOutcome(this.wireValue);
+  final String wireValue;
+}
+
 enum AnalyticsAccountType {
   guest('guest'),
   registered('registered');
@@ -311,6 +324,53 @@ final class ProfileCreatedIntent extends AnalyticsIntent {
 
   @override
   Map<String, Object?> get properties => const <String, Object?>{};
+}
+
+final class ArStartIntent extends AnalyticsIntent {
+  const ArStartIntent({required this.logicalId, required this.outcome});
+
+  final String logicalId;
+  final ArStartOutcome outcome;
+
+  @override
+  String get eventName => 'ar_start';
+
+  @override
+  String get screen => 'ar_viewer';
+
+  @override
+  String get feature => 'ar';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+    'outcome': outcome.wireValue,
+  };
+}
+
+final class ArEndIntent extends AnalyticsIntent {
+  const ArEndIntent({required this.logicalId, required this.durationMs});
+
+  final String logicalId;
+
+  /// Capped by the contract at an hour: longer is a session somebody left
+  /// open, not one they watched.
+  final int durationMs;
+
+  @override
+  String get eventName => 'ar_end';
+
+  @override
+  String get screen => 'ar_viewer';
+
+  @override
+  String get feature => 'ar';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'logicalId': logicalId,
+    'durationMs': durationMs,
+  };
 }
 
 final class FirstOpenIntent extends AnalyticsIntent {
@@ -868,6 +928,31 @@ AnalyticsIntent _parseIntent({
         );
       }
       return const ProfileCreatedIntent();
+    case 'ar_start':
+      _requireExactKeys(properties, const <String>{'logicalId', 'outcome'});
+      if (screen != 'ar_viewer' || feature != 'ar') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return ArStartIntent(
+        logicalId: _requiredBoundedString(properties, 'logicalId', 128),
+        outcome: _parseWire(
+          ArStartOutcome.values,
+          _requiredString(properties, 'outcome'),
+        ),
+      );
+    case 'ar_end':
+      _requireExactKeys(properties, const <String>{'logicalId', 'durationMs'});
+      if (screen != 'ar_viewer' || feature != 'ar') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return ArEndIntent(
+        logicalId: _requiredBoundedString(properties, 'logicalId', 128),
+        durationMs: _requiredBoundedInt(properties, 'durationMs', 3600000),
+      );
     case 'first_open':
       _requireExactKeys(properties, const <String>{});
       if (screen != 'pisocamp_home' || feature != 'module') {
@@ -1184,6 +1269,7 @@ T _parseWire<T extends Enum>(List<T> values, String wireValue) {
       ModuleLoadPhase value => value.wireValue,
       AnalyticsNetworkFailureType value => value.wireValue,
       AnalyticsNetworkOperation value => value.wireValue,
+      ArStartOutcome value => value.wireValue,
       _ => null,
     };
     if (actual == wireValue) return value;
