@@ -329,6 +329,25 @@ export type {
 	TriviaParticipation,
 } from "./modules/v1/pisocamp/gamification.schema.js"
 
+// AN-6 evaluation, ratings and NPS metrics
+export {
+	NpsBreakdownSchema,
+	ScaleDistributionPointSchema,
+	SurveyConsentStatusSchema,
+	SurveyMetricSchema,
+	SurveyMetricsRangeInputSchema,
+	SurveyMetricsSummarySchema,
+	SurveyQuestionMetricSchema,
+} from "./modules/v1/pisocamp/survey-metrics.schema.js"
+export type {
+	NpsBreakdown,
+	ScaleDistributionPoint,
+	SurveyConsentStatus,
+	SurveyMetric,
+	SurveyMetricsSummary,
+	SurveyQuestionMetric,
+} from "./modules/v1/pisocamp/survey-metrics.schema.js"
+
 // GM-5 progress
 export { PisoCampProgressSchema } from "./modules/v1/pisocamp/progress.schema.js"
 export type { PisoCampProgress } from "./modules/v1/pisocamp/progress.schema.js"

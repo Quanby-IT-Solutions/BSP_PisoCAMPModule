@@ -45,6 +45,10 @@
 			"types": "./dist/modules/v1/pisocamp/gamification.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/gamification.schema.js"
 		},
+		"./pisocamp-survey-metrics": {
+			"types": "./dist/modules/v1/pisocamp/survey-metrics.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/survey-metrics.schema.js"
+		},
 		"./pisocamp-progress": {
 			"types": "./dist/modules/v1/pisocamp/progress.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/progress.schema.js"

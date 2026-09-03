@@ -257,6 +257,24 @@ describe("analytics summary authorization", () => {
 		expect(rows[0]).toMatchObject({ targetId: "AnalyticsController.gamification" })
 	})
 
+	it("gates the survey dashboard on the same permission, both ways", async () => {
+		const surveys = AnalyticsController.prototype.surveys
+
+		await expect(createGuard().canActivate(contextFor(permittedId, surveys))).resolves.toBe(
+			true
+		)
+		await expect(
+			createGuard().canActivate(contextFor(deniedId, surveys))
+		).rejects.toMatchObject({ status: 403 })
+
+		const rows = await db
+			.select()
+			.from(auditLog)
+			.where(and(eq(auditLog.actorId, deniedId), eq(auditLog.action, "permission_denied")))
+		expect(rows).toHaveLength(1)
+		expect(rows[0]).toMatchObject({ targetId: "AnalyticsController.surveys" })
+	})
+
 	it("gates the retention dashboard on the same permission, both ways", async () => {
 		const retention = AnalyticsController.prototype.retention
 

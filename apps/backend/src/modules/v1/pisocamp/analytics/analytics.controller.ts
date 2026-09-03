@@ -12,6 +12,7 @@ import { AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
 import { GamificationService } from "./gamification.service"
+import { SurveyMetricsService } from "./survey-metrics.service"
 import { RetentionService } from "./retention.service"
 
 @Controller()
@@ -22,6 +23,7 @@ export class AnalyticsController {
 		private readonly adoptionService: AdoptionService,
 		private readonly retentionService: RetentionService,
 		private readonly gamificationService: GamificationService,
+		private readonly surveyMetricsService: SurveyMetricsService,
 		private readonly logger: Logger
 	) {}
 
@@ -67,6 +69,14 @@ export class AnalyticsController {
 	}
 
 	@RequirePermissions("reports.dashboards.view")
+	@Implement(v1.pisocamp.analytics.surveys)
+	surveys() {
+		return implement(v1.pisocamp.analytics.surveys).handler(({ input }) =>
+			this.runSafely("surveys", () => this.surveyMetricsService.summary(input))
+		)
+	}
+
+	@RequirePermissions("reports.dashboards.view")
 	@Implement(v1.pisocamp.analytics.moduleEntryToday)
 	moduleEntryToday() {
 		return implement(v1.pisocamp.analytics.moduleEntryToday).handler(() =>
@@ -75,7 +85,14 @@ export class AnalyticsController {
 	}
 
 	private async runSafely<T>(
-		operation: "ingest" | "moduleEntryToday" | "engagement" | "adoption" | "retention" | "gamification",
+		operation:
+			| "ingest"
+			| "moduleEntryToday"
+			| "engagement"
+			| "adoption"
+			| "retention"
+			| "gamification"
+			| "surveys",
 		work: () => Promise<T>
 	) {
 		try {

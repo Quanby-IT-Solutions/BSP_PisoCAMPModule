@@ -183,6 +183,27 @@ test.describe("AN-2 engagement dashboard", () => {
 		expectClean(observed)
 	})
 
+	test("shows the AN-6 survey figures beside the engagement ones", async ({ page }) => {
+		const observed = observe(page)
+		await signOutCompletely(page)
+		await signInAs(page, "contentAdmin")
+
+		await page.goto("/pisocamp/engagement")
+		await page.waitForLoadState("networkidle")
+
+		await expect(page.getByRole("heading", { name: "Surveys" })).toBeVisible({
+			timeout: 20_000,
+		})
+		await expect(page.getByText("Net promoter score")).toBeVisible()
+		await expect(page.getByText("Average rating")).toBeVisible()
+		await expect(page.getByText("Withdrawn consent")).toBeVisible()
+		// The store ratings are AN-11's, and saying so beats a figure that looks
+		// consolidated and is not.
+		await expect(page.getByText("In-app answers only")).toBeVisible()
+
+		expectClean(observed)
+	})
+
 	test("stays readable and operable by keyboard at 320 px", async ({ page }) => {
 		const observed = observe(page)
 		await page.setViewportSize({ width: 320, height: 720 })

@@ -5,6 +5,7 @@ import { useQuery, type UseQueryOptions } from "@tanstack/react-query"
 import type {
 	AdoptionSummary,
 	GamificationSummary,
+	SurveyMetricsSummary,
 	EngagementRangeInput,
 	EngagementSummary,
 	ModuleEntryToday,
@@ -60,6 +61,18 @@ export function useGamificationSummaryQuery(input: EngagementRangeInput) {
 
 	return useQuery<GamificationSummary, Error>(
 		options as unknown as UseQueryOptions<GamificationSummary, Error>
+	)
+}
+
+export function useSurveyMetricsQuery(input: EngagementRangeInput) {
+	const options = orpc.pisocamp.analytics.surveys.queryOptions({
+		input,
+		networkMode: "online",
+		staleTime: 60_000,
+	})
+
+	return useQuery<SurveyMetricsSummary, Error>(
+		options as unknown as UseQueryOptions<SurveyMetricsSummary, Error>
 	)
 }
 

@@ -10,6 +10,7 @@ import { EngagementService } from "./engagement.service"
 import { GamificationService } from "./gamification.service"
 import { RetentionService } from "./retention.service"
 import { SessionizerService } from "./sessionizer.service"
+import { SurveyMetricsService } from "./survey-metrics.service"
 
 @Module({
 	imports: [AuditModule],
@@ -22,6 +23,7 @@ import { SessionizerService } from "./sessionizer.service"
 		GamificationService,
 		RetentionService,
 		SessionizerService,
+		SurveyMetricsService,
 		PisoCampAdminConfigService,
 	],
 	exports: [SessionizerService, EngagementService, RetentionService, AdoptionService],

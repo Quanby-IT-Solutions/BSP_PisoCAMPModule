@@ -15,6 +15,10 @@ import {
 	GamificationRangeInputSchema,
 	GamificationSummarySchema,
 } from "./gamification.schema.js"
+import {
+	SurveyMetricsRangeInputSchema,
+	SurveyMetricsSummarySchema,
+} from "./survey-metrics.schema.js"
 
 export const pisoCampAnalyticsContract = {
 	events: {
@@ -74,5 +78,14 @@ export const pisoCampAnalyticsContract = {
 			})
 			.input(GamificationRangeInputSchema)
 			.output(GamificationSummarySchema),
+		surveys: oc
+			.route({
+				method: "GET",
+				path: "/admin/pisocamp/analytics/surveys",
+				summary: "Survey results, ratings, NPS and consent status",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(SurveyMetricsRangeInputSchema)
+			.output(SurveyMetricsSummarySchema),
 	},
 }

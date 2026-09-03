@@ -21,6 +21,7 @@ import { useEngagementSummaryQuery } from "@/features/analytics/api/analytics.ho
 import { AdoptionDashboard } from "@/features/analytics/components/adoption-dashboard"
 import { GamificationDashboard } from "@/features/analytics/components/gamification-dashboard"
 import { RetentionDashboard } from "@/features/analytics/components/retention-dashboard"
+import { SurveyDashboard } from "@/features/analytics/components/survey-dashboard"
 
 const number = new Intl.NumberFormat("en-US")
 const decimal = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 })
@@ -142,6 +143,9 @@ export function EngagementDashboard() {
 
 			<h2 className="text-xl font-semibold">Gamification</h2>
 			<GamificationDashboard from={range.from} to={range.to} />
+
+			<h2 className="text-xl font-semibold">Surveys</h2>
+			<SurveyDashboard from={range.from} to={range.to} />
 		</div>
 	)
 }

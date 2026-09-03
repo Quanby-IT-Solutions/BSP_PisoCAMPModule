@@ -2,6 +2,19 @@ import { createHash } from "node:crypto"
 
 import type { PisoCampPublishedBundleCandidate } from "../content/content-workflow.service"
 
+/**
+ * How a content item is named to a device.
+ *
+ * A device reports what it did by logical id, so anything that maps a report
+ * back to the item it was about has to use the same rule. One definition, here,
+ * rather than the same string built twice.
+ */
+export const CONTENT_LOGICAL_ID_PREFIX = "content."
+
+export function contentLogicalId(itemId: string): string {
+	return `${CONTENT_LOGICAL_ID_PREFIX}${itemId}`
+}
+
 export interface RenderedBundleResource {
 	logicalId: string
 	bytes: Buffer
@@ -19,7 +32,7 @@ export function renderPublishedContentResources(
 ): RenderedBundleResource[] {
 	return candidates
 		.map(candidate => {
-			const logicalId = `content.${candidate.itemId}`
+			const logicalId = contentLogicalId(candidate.itemId)
 			const content = candidate.content
 			const bytes = Buffer.from(
 				JSON.stringify({
