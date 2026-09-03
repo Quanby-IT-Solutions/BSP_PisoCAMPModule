@@ -34,6 +34,7 @@ import { pisoCampContentPreviewContract, pisoCampPreviewContract } from "./previ
 export const pisoCampContract = {
 	events: pisoCampAnalyticsContract.events,
 	analytics: pisoCampAnalyticsContract.analytics,
+	monitoring: pisoCampAnalyticsContract.monitoring,
 	trivia: pisoCampTriviaContract.responses,
 	surveys: pisoCampSurveyContract.responses,
 	bundle: pisoCampBundleContract,

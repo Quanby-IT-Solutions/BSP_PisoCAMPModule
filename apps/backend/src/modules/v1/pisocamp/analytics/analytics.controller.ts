@@ -13,6 +13,7 @@ import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
 import { GamificationService } from "./gamification.service"
 import { SurveyMetricsService } from "./survey-metrics.service"
+import { TechnicalMetricsService } from "./technical-metrics.service"
 import { RetentionService } from "./retention.service"
 
 @Controller()
@@ -24,6 +25,7 @@ export class AnalyticsController {
 		private readonly retentionService: RetentionService,
 		private readonly gamificationService: GamificationService,
 		private readonly surveyMetricsService: SurveyMetricsService,
+		private readonly technicalMetricsService: TechnicalMetricsService,
 		private readonly logger: Logger
 	) {}
 
@@ -77,6 +79,14 @@ export class AnalyticsController {
 	}
 
 	@RequirePermissions("reports.dashboards.view")
+	@Implement(v1.pisocamp.analytics.technical)
+	technical() {
+		return implement(v1.pisocamp.analytics.technical).handler(({ input }) =>
+			this.runSafely("technical", () => this.technicalMetricsService.summary(input))
+		)
+	}
+
+	@RequirePermissions("reports.dashboards.view")
 	@Implement(v1.pisocamp.analytics.moduleEntryToday)
 	moduleEntryToday() {
 		return implement(v1.pisocamp.analytics.moduleEntryToday).handler(() =>
@@ -92,7 +102,8 @@ export class AnalyticsController {
 			| "adoption"
 			| "retention"
 			| "gamification"
-			| "surveys",
+			| "surveys"
+			| "technical",
 		work: () => Promise<T>
 	) {
 		try {

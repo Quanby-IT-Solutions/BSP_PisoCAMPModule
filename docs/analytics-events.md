@@ -8,10 +8,19 @@ The executable Zod schemas in `packages/contracts/src/modules/v1/pisocamp/analyt
 | `account_prompt_shown` | `pisocamp_home`   | `account_prompt`     | `completed` | `{}`                                               | Once when the optional-account prompt is displayed.                |
 | `account_prompt_guest` | `pisocamp_home`   | `account_prompt`     | `completed` | `{}`                                               | After guest continuation and device pseudonym persistence succeed. |
 | `content_view`         | `currency_detail` | `currency_education` | `completed` | `{ logicalId: string (1–128) }`                    | Once per opened CE-1 currency-detail route.                        |
+| `module_load`          | `pisocamp_home`   | `module`             | `completed` | `{ phase: cold \| warm, durationMs: 0–120000 }`     | Once per module entry, at the first frame (AN-022).                |
+| `network_failure`      | `pisocamp_home`   | `module`             | `failed`    | `{ failureType, operation }`                       | When a sync or download could not finish (AN-024).                 |
+
+`network_failure` is the only event whose `status` is not `completed`: it exists
+because something did not work, and reporting it as a completion would be a lie.
+Its `failureType` is one of `timeout`, `no_connectivity`, `sync_failed`,
+`download_failed`, `report_failed` or `upload_failed`, and its `operation` is one
+of `config`, `bundle`, `asset`, `events`, `survey` or `other` — what was being
+attempted, never where: a URL is content.
 
 ## Common envelope
 
-Every event has exactly these common fields: `schemaVersion` (literal `1`), UUIDv4 `eventId`, offset ISO-8601 `occurredAt`, 22-character Base64URL `subjectPseudoId`, UUIDv4 `sessionId`, `accountType` (`guest` or `registered`), `appVersion`, `osName` (`android`, `ios`, or `other`), `osVersion`, `deviceCategory` (`phone`, `tablet`, or `other`), and `networkState` (`online`, `offline`, or `unknown`). The catalog controls `eventName`, `screen`, `feature`, `status`, and the exact `properties` shape.
+Every event has exactly these common fields: `schemaVersion` (literal `1`), UUIDv4 `eventId`, offset ISO-8601 `occurredAt`, 22-character Base64URL `subjectPseudoId`, UUIDv4 `sessionId`, `accountType` (`guest` or `registered`), `appVersion`, `osName` (`android`, `ios`, or `other`), `osVersion`, `deviceCategory` (`phone`, `tablet`, or `other`), and `networkState` (`online`, `offline`, or `unknown`). The catalog controls `eventName`, `screen`, `feature`, `status`, and the exact `properties` shape. Each event declares its own `status`; every event but `network_failure` declares `completed`.
 
 ## Forbidden data
 

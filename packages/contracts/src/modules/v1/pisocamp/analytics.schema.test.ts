@@ -91,6 +91,8 @@ describe("AN-1 analytics event catalog", () => {
 			"survey_submitted",
 			"advisory_shown",
 			"profile_created",
+			"module_load",
+			"network_failure",
 		])
 	})
 

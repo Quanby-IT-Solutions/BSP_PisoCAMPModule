@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useState } from "react"
 
 import type { EngagementSummary } from "@repo/contracts"
 
@@ -14,27 +14,20 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/core/components/ui/card"
-import { Input } from "@/core/components/ui/input"
-import { Label } from "@/core/components/ui/label"
 import { Skeleton } from "@/core/components/ui/skeleton"
 import { useEngagementSummaryQuery } from "@/features/analytics/api/analytics.hooks"
 import { AdoptionDashboard } from "@/features/analytics/components/adoption-dashboard"
+import {
+	AnalyticsRangeCard,
+	daysBefore,
+	manilaToday,
+} from "@/features/analytics/components/analytics-range-card"
 import { GamificationDashboard } from "@/features/analytics/components/gamification-dashboard"
 import { RetentionDashboard } from "@/features/analytics/components/retention-dashboard"
 import { SurveyDashboard } from "@/features/analytics/components/survey-dashboard"
 
 const number = new Intl.NumberFormat("en-US")
 const decimal = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 })
-
-function manilaToday() {
-	return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10)
-}
-
-function daysBefore(date: string, days: number) {
-	return new Date(Date.parse(`${date}T00:00:00Z`) - days * 86_400_000)
-		.toISOString()
-		.slice(0, 10)
-}
 
 /** Seconds as minutes and seconds, because "1,320 seconds" is not a duration. */
 function duration(seconds: number) {
@@ -46,19 +39,7 @@ function duration(seconds: number) {
 export function EngagementDashboard() {
 	const today = manilaToday()
 	const [range, setRange] = useState({ from: daysBefore(today, 29), to: today })
-	const [draft, setDraft] = useState(range)
-	const [error, setError] = useState<string | null>(null)
 	const summary = useEngagementSummaryQuery(range)
-
-	function apply(event: FormEvent<HTMLFormElement>) {
-		event.preventDefault()
-		if (draft.from > draft.to) {
-			setError("The range must start on or before it ends.")
-			return
-		}
-		setError(null)
-		setRange(draft)
-	}
 
 	return (
 		<div className="space-y-6">
@@ -67,48 +48,7 @@ export function EngagementDashboard() {
 				description="Sessions and engagement KPIs, by Asia/Manila day."
 			/>
 
-			<Card>
-				<CardHeader>
-					<CardTitle>Date range</CardTitle>
-					<CardDescription>Up to 366 days.</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<form className="flex flex-wrap items-end gap-4" onSubmit={apply}>
-						<div className="min-w-0 space-y-2">
-							<Label htmlFor="engagement-from">From</Label>
-							<Input
-								id="engagement-from"
-								name="from"
-								type="date"
-								className="min-h-11"
-								value={draft.from}
-								onChange={event => setDraft({ ...draft, from: event.target.value })}
-								aria-invalid={error ? true : undefined}
-								aria-describedby={error ? "engagement-range-error" : undefined}
-							/>
-						</div>
-						<div className="min-w-0 space-y-2">
-							<Label htmlFor="engagement-to">To</Label>
-							<Input
-								id="engagement-to"
-								name="to"
-								type="date"
-								className="min-h-11"
-								value={draft.to}
-								onChange={event => setDraft({ ...draft, to: event.target.value })}
-							/>
-						</div>
-						<Button type="submit" className="min-h-11">
-							Apply Range
-						</Button>
-						{error ? (
-							<p id="engagement-range-error" role="alert" className="text-destructive text-sm">
-								{error}
-							</p>
-						) : null}
-					</form>
-				</CardContent>
-			</Card>
+			<AnalyticsRangeCard idPrefix="engagement" initial={range} onApply={setRange} />
 
 			{summary.isPending ? (
 				<div role="status" aria-label="Loading engagement" className="space-y-3">

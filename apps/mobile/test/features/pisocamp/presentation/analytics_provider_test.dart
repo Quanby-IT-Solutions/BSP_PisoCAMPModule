@@ -21,6 +21,35 @@ import 'package:mobile/services/storage/secure_storage_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 void main() {
+  group('AN-7 classifies a failure by what actually went wrong', () {
+    test('an offline device reports no connectivity, whatever threw', () {
+      expect(
+        networkFailureTypeFor(StateError('anything'), isOnline: false),
+        AnalyticsNetworkFailureType.noConnectivity,
+      );
+    });
+
+    test('a timeout is not the same problem as a missing network', () {
+      expect(
+        networkFailureTypeFor(
+          const AnalyticsRepositoryException(
+            AnalyticsRepositoryFailureKind.transient,
+            'timeout',
+          ),
+          isOnline: true,
+        ),
+        AnalyticsNetworkFailureType.timeout,
+      );
+    });
+
+    test('an unrecognised failure is a failed sync, not a guess', () {
+      expect(
+        networkFailureTypeFor(StateError('unexpected'), isOnline: true),
+        AnalyticsNetworkFailureType.syncFailed,
+      );
+    });
+  });
+
   test(
     'emit waits for the durable queue write before scheduling sync',
     () async {

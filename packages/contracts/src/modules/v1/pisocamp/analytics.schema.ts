@@ -33,6 +33,23 @@ export const ANALYTICS_EVENT_NAMES = [
 	"survey_submitted",
 	"advisory_shown",
 	"profile_created",
+	"module_load",
+	"network_failure",
+] as const
+
+/**
+ * The ways a request can fail on a device, as AN-024 asks them to be counted.
+ *
+ * "No connectivity" and "timeout" are different problems with different fixes,
+ * and a single failure count would hide which one people are hitting.
+ */
+export const ANALYTICS_NETWORK_FAILURE_TYPES = [
+	"timeout",
+	"no_connectivity",
+	"sync_failed",
+	"download_failed",
+	"report_failed",
+	"upload_failed",
 ] as const
 
 /**
@@ -212,6 +229,37 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 				// content, and analytics carries none.
 				linkType: z.enum(["external", "internal", "topic", "deep_link"]),
 				logicalId: z.string().trim().min(1).max(128),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("module_load"),
+		screen: z.literal("pisocamp_home"),
+		feature: z.literal("module"),
+		status: z.literal("completed"),
+		properties: z
+			.object({
+				// A cold start pays for the process as well as the module, and
+				// mixing the two would hide which of them got slower.
+				phase: z.enum(["cold", "warm"]),
+				// Capped at two minutes: anything longer is a device that gave up
+				// or a clock that moved, not a load time worth a percentile.
+				durationMs: z.number().int().min(0).max(120_000),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("network_failure"),
+		screen: z.literal("pisocamp_home"),
+		feature: z.literal("module"),
+		// The one event whose status is a failure: it exists because something
+		// did not work, so reporting it as completed would be a lie.
+		status: z.literal("failed"),
+		properties: z
+			.object({
+				failureType: z.enum(ANALYTICS_NETWORK_FAILURE_TYPES),
+				// What was being attempted, never where: a URL is content.
+				operation: z.enum(["config", "bundle", "asset", "events", "survey", "other"]),
 			})
 			.strict(),
 	}).strict(),

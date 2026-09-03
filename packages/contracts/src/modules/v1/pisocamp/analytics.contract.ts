@@ -19,6 +19,14 @@ import {
 	SurveyMetricsRangeInputSchema,
 	SurveyMetricsSummarySchema,
 } from "./survey-metrics.schema.js"
+import {
+	ImportMonitoringMetricsInputSchema,
+	ImportMonitoringMetricsOutputSchema,
+	PerformanceTestResultSchema,
+	RecordPerformanceTestInputSchema,
+	TechnicalMetricsRangeInputSchema,
+	TechnicalMetricsSummarySchema,
+} from "./technical.schema.js"
 
 export const pisoCampAnalyticsContract = {
 	events: {
@@ -87,5 +95,34 @@ export const pisoCampAnalyticsContract = {
 			})
 			.input(SurveyMetricsRangeInputSchema)
 			.output(SurveyMetricsSummarySchema),
+		technical: oc
+			.route({
+				method: "GET",
+				path: "/admin/pisocamp/analytics/technical",
+				summary: "Crash, load-time, API and network health for a range of days",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(TechnicalMetricsRangeInputSchema)
+			.output(TechnicalMetricsSummarySchema),
+	},
+	monitoring: {
+		import: oc
+			.route({
+				method: "POST",
+				path: "/admin/pisocamp/monitoring/metrics",
+				summary: "Import a period of crash and API metrics from the monitoring tool",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(ImportMonitoringMetricsInputSchema)
+			.output(ImportMonitoringMetricsOutputSchema),
+		recordPerformanceTest: oc
+			.route({
+				method: "POST",
+				path: "/admin/pisocamp/monitoring/performance-tests",
+				summary: "Record the results of a performance test run",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(RecordPerformanceTestInputSchema)
+			.output(PerformanceTestResultSchema),
 	},
 }

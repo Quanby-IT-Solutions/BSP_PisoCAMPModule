@@ -16,7 +16,16 @@ import { assertDisposablePostgres } from "@/test-support/destructive-database.gu
  * drift test: an event added to the catalog and not to this table fails here,
  * and one added here and not to the database fails on insert.
  */
-const CATALOG: Record<string, { screen: string; feature: string; properties: object }> = {
+const CATALOG: Record<
+	string,
+	{
+		screen: string
+		feature: string
+		properties: object
+		/** Only `network_failure` reports anything but a completion. */
+		status?: "completed" | "failed"
+	}
+> = {
 	module_entry: {
 		screen: "pisocamp_home",
 		feature: "module",
@@ -85,6 +94,18 @@ const CATALOG: Record<string, { screen: string; feature: string; properties: obj
 		feature: "account",
 		properties: {},
 	},
+	module_load: {
+		screen: "pisocamp_home",
+		feature: "module",
+		properties: { phase: "cold", durationMs: 1450 },
+	},
+	network_failure: {
+		screen: "pisocamp_home",
+		feature: "module",
+		properties: { failureType: "timeout", operation: "bundle" },
+		// The one event that exists because something did not work.
+		status: "failed",
+	},
 }
 
 /**
@@ -129,7 +150,7 @@ describe("the analytics catalog the database accepts", () => {
 			osVersion: "15",
 			deviceCategory: "phone" as const,
 			networkState: "online" as const,
-			status: "completed" as const,
+			status: (shape.status ?? "completed") as never,
 			properties: shape.properties as never,
 		}))
 

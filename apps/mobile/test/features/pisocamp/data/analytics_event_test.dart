@@ -14,6 +14,8 @@ void main() {
       .map((vector) => Map<String, Object?>.from(vector))
       .toList(growable: false);
 
+  _an7Tests();
+
   test('parses and round-trips every shared TypeScript fixture exactly', () {
     final result = vectors
         .map((vector) => AnalyticsEvent.fromJson(vector).toJson())
@@ -272,6 +274,90 @@ Matcher get _throwsForbiddenValue => throwsA(
     (error) => error.reason,
     'stable reason',
     AnalyticsValidationReason.forbiddenValue,
+  ),
+);
+
+void _an7Tests() {
+  group('AN-7 technical events', () {
+    test('a module load carries its phase and duration', () {
+      final json = AnalyticsEvent.build(
+        intent: const ModuleLoadIntent(
+          phase: ModuleLoadPhase.cold,
+          durationMs: 1450,
+        ),
+        context: _context(),
+        createEventId: () => '0190f49b-57a8-4b85-9d0e-5e274f0e4aa1',
+        clock: () => DateTime.parse('2026-08-30T09:02:03.123456+08:00'),
+      ).toJson();
+
+      expect(json['eventName'], 'module_load');
+      expect(json['status'], 'completed');
+      expect(json['properties'], <String, Object?>{
+        'phase': 'cold',
+        'durationMs': 1450,
+      });
+    });
+
+    test('a network failure reports a failure, not a completion', () {
+      final json = AnalyticsEvent.build(
+        intent: const NetworkFailureIntent(
+          failureType: AnalyticsNetworkFailureType.timeout,
+          operation: AnalyticsNetworkOperation.bundle,
+        ),
+        context: _context(),
+        createEventId: () => '0190f49b-57a8-4b85-9d0e-5e274f0e4aa1',
+        clock: () => DateTime.parse('2026-08-30T09:02:03.123456+08:00'),
+      ).toJson();
+
+      // The one event that exists because something did not work.
+      expect(json['status'], 'failed');
+      expect(json['properties'], <String, Object?>{
+        'failureType': 'timeout',
+        'operation': 'bundle',
+      });
+      expect(AnalyticsEvent.fromJson(json).toJson(), json);
+    });
+
+    test('refuses a load longer than the contract allows', () {
+      final vector = Map<String, Object?>.from(
+        vectorsForTest.firstWhere(
+          (candidate) => candidate['eventName'] == 'module_load',
+        ),
+      );
+      vector['properties'] = <String, Object?>{
+        'phase': 'cold',
+        'durationMs': 120001,
+      };
+
+      // A device that waited longer than two minutes gave up; that is not a
+      // load time worth a percentile.
+      expect(
+        () => AnalyticsEvent.fromJson(vector),
+        _rejects(AnalyticsValidationReason.invalidField),
+      );
+    });
+
+    test('refuses a network failure that claims to have completed', () {
+      final vector = Map<String, Object?>.from(
+        vectorsForTest.firstWhere(
+          (candidate) => candidate['eventName'] == 'network_failure',
+        ),
+      );
+      vector['status'] = 'completed';
+
+      expect(
+        () => AnalyticsEvent.fromJson(vector),
+        _rejects(AnalyticsValidationReason.invalidField),
+      );
+    });
+  });
+}
+
+Matcher _rejects(AnalyticsValidationReason reason) => throwsA(
+  isA<AnalyticsValidationException>().having(
+    (error) => error.reason,
+    'reason',
+    reason,
   ),
 );
 

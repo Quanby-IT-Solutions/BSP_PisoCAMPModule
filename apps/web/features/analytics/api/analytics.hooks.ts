@@ -1,6 +1,11 @@
 "use client"
 
-import { useQuery, type UseQueryOptions } from "@tanstack/react-query"
+import {
+	useMutation,
+	useQuery,
+	useQueryClient,
+	type UseQueryOptions,
+} from "@tanstack/react-query"
 
 import type {
 	AdoptionSummary,
@@ -10,6 +15,9 @@ import type {
 	EngagementSummary,
 	ModuleEntryToday,
 	RetentionSummary,
+	PerformanceTestResultView,
+	RecordPerformanceTestInput,
+	TechnicalMetricsSummary,
 } from "@repo/contracts"
 
 import { orpc } from "@/services/orpc/client"
@@ -74,6 +82,37 @@ export function useSurveyMetricsQuery(input: EngagementRangeInput) {
 	return useQuery<SurveyMetricsSummary, Error>(
 		options as unknown as UseQueryOptions<SurveyMetricsSummary, Error>
 	)
+}
+
+export function useTechnicalMetricsQuery(input: EngagementRangeInput) {
+	const options = orpc.pisocamp.analytics.technical.queryOptions({
+		input,
+		networkMode: "online",
+		staleTime: 60_000,
+	})
+
+	return useQuery<TechnicalMetricsSummary, Error>(
+		options as unknown as UseQueryOptions<TechnicalMetricsSummary, Error>
+	)
+}
+
+/**
+ * AN-025's manual entry.
+ *
+ * Invalidates the technical figures on success, because the run somebody just
+ * recorded belongs in the table above the form they recorded it in.
+ */
+export function useRecordPerformanceTestMutation() {
+	const queryClient = useQueryClient()
+
+	return useMutation<PerformanceTestResultView, Error, RecordPerformanceTestInput>({
+		mutationFn: input =>
+			orpc.pisocamp.monitoring.recordPerformanceTest.call(
+				input
+			) as unknown as Promise<PerformanceTestResultView>,
+		onSuccess: () =>
+			queryClient.invalidateQueries({ queryKey: orpc.pisocamp.analytics.technical.key() }),
+	})
 }
 
 export function useAdoptionSummaryQuery(input: EngagementRangeInput) {

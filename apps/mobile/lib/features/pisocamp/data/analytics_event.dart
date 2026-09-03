@@ -71,6 +71,45 @@ enum AnalyticsFeature {
   final String screen;
 }
 
+/// AN-022. A cold start pays for the process as well as the module, so the two
+/// are reported apart: one figure would hide which of them got slower.
+enum ModuleLoadPhase {
+  cold('cold'),
+  warm('warm');
+
+  const ModuleLoadPhase(this.wireValue);
+  final String wireValue;
+}
+
+/// AN-024. The ways a request can fail on a device.
+///
+/// "No connectivity" and "timeout" are different problems with different
+/// fixes, and one failure count would hide which one people are hitting.
+enum AnalyticsNetworkFailureType {
+  timeout('timeout'),
+  noConnectivity('no_connectivity'),
+  syncFailed('sync_failed'),
+  downloadFailed('download_failed'),
+  reportFailed('report_failed'),
+  uploadFailed('upload_failed');
+
+  const AnalyticsNetworkFailureType(this.wireValue);
+  final String wireValue;
+}
+
+/// What was being attempted, never where: a URL is content.
+enum AnalyticsNetworkOperation {
+  config('config'),
+  bundle('bundle'),
+  asset('asset'),
+  events('events'),
+  survey('survey'),
+  other('other');
+
+  const AnalyticsNetworkOperation(this.wireValue);
+  final String wireValue;
+}
+
 enum AnalyticsAccountType {
   guest('guest'),
   registered('registered');
@@ -272,6 +311,61 @@ final class ProfileCreatedIntent extends AnalyticsIntent {
 
   @override
   Map<String, Object?> get properties => const <String, Object?>{};
+}
+
+final class ModuleLoadIntent extends AnalyticsIntent {
+  const ModuleLoadIntent({required this.phase, required this.durationMs});
+
+  final ModuleLoadPhase phase;
+
+  /// Capped at two minutes by the contract: anything longer is a device that
+  /// gave up or a clock that moved, not a load time worth a percentile.
+  final int durationMs;
+
+  @override
+  String get eventName => 'module_load';
+
+  @override
+  String get screen => 'pisocamp_home';
+
+  @override
+  String get feature => 'module';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'phase': phase.wireValue,
+    'durationMs': durationMs,
+  };
+}
+
+final class NetworkFailureIntent extends AnalyticsIntent {
+  const NetworkFailureIntent({
+    required this.failureType,
+    required this.operation,
+  });
+
+  final AnalyticsNetworkFailureType failureType;
+  final AnalyticsNetworkOperation operation;
+
+  @override
+  String get eventName => 'network_failure';
+
+  @override
+  String get screen => 'pisocamp_home';
+
+  @override
+  String get feature => 'module';
+
+  /// The one event that exists because something did not work, so reporting it
+  /// as a completion would be a lie.
+  @override
+  String get status => 'failed';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'failureType': failureType.wireValue,
+    'operation': operation.wireValue,
+  };
 }
 
 final class AdvisoryShownIntent extends AnalyticsIntent {
@@ -551,7 +645,6 @@ final class AnalyticsEvent {
       ),
     );
     _requireLiteral(json, 'schemaVersion', _schemaVersion);
-    _requireLiteral(json, 'status', 'completed');
     final properties = _requiredMap(json, 'properties');
     _inspectEnvelopeValues(json, properties);
     final intent = _parseIntent(
@@ -560,6 +653,9 @@ final class AnalyticsEvent {
       feature: _requiredString(json, 'feature'),
       properties: properties,
     );
+    // Each event declares its own status, and only `network_failure` reports
+    // anything but a completion.
+    _requireLiteral(json, 'status', intent.status);
 
     final event = AnalyticsEvent._(
       eventId: eventId,
@@ -753,6 +849,37 @@ AnalyticsIntent _parseIntent({
         );
       }
       return const ProfileCreatedIntent();
+    case 'module_load':
+      _requireExactKeys(properties, const <String>{'phase', 'durationMs'});
+      if (screen != 'pisocamp_home' || feature != 'module') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return ModuleLoadIntent(
+        phase: _parseWire(
+          ModuleLoadPhase.values,
+          _requiredString(properties, 'phase'),
+        ),
+        durationMs: _requiredBoundedInt(properties, 'durationMs', 120000),
+      );
+    case 'network_failure':
+      _requireExactKeys(properties, const <String>{'failureType', 'operation'});
+      if (screen != 'pisocamp_home' || feature != 'module') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return NetworkFailureIntent(
+        failureType: _parseWire(
+          AnalyticsNetworkFailureType.values,
+          _requiredString(properties, 'failureType'),
+        ),
+        operation: _parseWire(
+          AnalyticsNetworkOperation.values,
+          _requiredString(properties, 'operation'),
+        ),
+      );
     case 'advisory_shown':
       _requireExactKeys(properties, const <String>{'logicalId'});
       if (screen != 'exit_advisory' || feature != 'advisory') {
@@ -987,6 +1114,20 @@ String _requiredTriviaDifficulty(Map<String, Object?> properties) {
   return value! as String;
 }
 
+int _requiredBoundedInt(
+  Map<String, Object?> properties,
+  String key,
+  int maximum,
+) {
+  final value = properties[key];
+  if (value is! int || value < 0 || value > maximum) {
+    throw const AnalyticsValidationException(
+      AnalyticsValidationReason.invalidField,
+    );
+  }
+  return value;
+}
+
 bool _requiredBool(Map<String, Object?> properties, String key) {
   final value = properties[key];
   if (value is! bool) {
@@ -1013,6 +1154,9 @@ T _parseWire<T extends Enum>(List<T> values, String wireValue) {
       AnalyticsOsName value => value.wireValue,
       AnalyticsDeviceCategory value => value.wireValue,
       AnalyticsNetworkState value => value.wireValue,
+      ModuleLoadPhase value => value.wireValue,
+      AnalyticsNetworkFailureType value => value.wireValue,
+      AnalyticsNetworkOperation value => value.wireValue,
       _ => null,
     };
     if (actual == wireValue) return value;

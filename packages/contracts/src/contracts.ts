@@ -348,6 +348,31 @@ export type {
 	SurveyQuestionMetric,
 } from "./modules/v1/pisocamp/survey-metrics.schema.js"
 
+// AN-7 technical health
+export {
+	ApiEndpointMetricSchema,
+	CrashMetricsSchema,
+	ImportMonitoringMetricsInputSchema,
+	ImportMonitoringMetricsOutputSchema,
+	LoadTimeMetricsSchema,
+	MonitoringSourceSchema,
+	NetworkFailureCountSchema,
+	PerformanceTestResultSchema,
+	RecordPerformanceTestInputSchema,
+	TechnicalMetricsRangeInputSchema,
+	TechnicalMetricsSummarySchema,
+} from "./modules/v1/pisocamp/technical.schema.js"
+export type {
+	ApiEndpointMetricView,
+	CrashMetrics,
+	ImportMonitoringMetricsInput,
+	LoadTimeMetrics,
+	NetworkFailureCount,
+	PerformanceTestResultView,
+	RecordPerformanceTestInput,
+	TechnicalMetricsSummary,
+} from "./modules/v1/pisocamp/technical.schema.js"
+
 // GM-5 progress
 export { PisoCampProgressSchema } from "./modules/v1/pisocamp/progress.schema.js"
 export type { PisoCampProgress } from "./modules/v1/pisocamp/progress.schema.js"

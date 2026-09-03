@@ -353,7 +353,8 @@ export const analyticsEvents = createTable(
 			sql`${t.eventName} in ('module_entry', 'account_prompt_shown', 'account_prompt_guest',
 				'content_view', 'feature_use', 'link_open', 'trivia_prompt_shown',
 				'trivia_prompt_answered', 'trivia_prompt_skipped', 'survey_prompt_shown',
-				'survey_declined', 'survey_submitted', 'advisory_shown', 'profile_created')`
+				'survey_declined', 'survey_submitted', 'advisory_shown', 'profile_created',
+				'module_load', 'network_failure')`
 		),
 		check(
 			"analytics_event_subject_pseudo_id_check",
@@ -373,6 +374,8 @@ export const analyticsEvents = createTable(
 				or (${t.eventName} in ('survey_prompt_shown', 'survey_declined', 'survey_submitted') and ${t.screen} = 'survey_prompt' and ${t.feature} = 'survey' and ${t.status} = 'completed')
 				or (${t.eventName} = 'advisory_shown' and ${t.screen} = 'exit_advisory' and ${t.feature} = 'advisory' and ${t.status} = 'completed')
 				or (${t.eventName} = 'profile_created' and ${t.screen} = 'pisocamp_registration' and ${t.feature} = 'account' and ${t.status} = 'completed')
+				or (${t.eventName} = 'module_load' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'completed')
+				or (${t.eventName} = 'network_failure' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'failed')
 			)`
 		),
 		check(
@@ -1706,6 +1709,148 @@ export const reportRuns = createTable(
 )
 
 // ============================================================================
+// AN-7 TECHNICAL HEALTH
+// ============================================================================
+
+/**
+ * Crash figures for a period, imported from the monitoring tool (AN-021).
+ *
+ * The module does not observe its own crashes — a process that has died cannot
+ * report anything — so these arrive from the tool that does, through the §12
+ * import interface. One row per source and period, replaced on re-import, so
+ * running the import twice cannot double the crash count.
+ */
+export const crashSnapshots = createTable(
+	"crash_snapshot",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		/** Which monitoring tool the figures came from. */
+		source: t.text("source").notNull(),
+		periodStart: t.date("period_start").notNull(),
+		periodEnd: t.date("period_end").notNull(),
+		crashCount: t.integer("crash_count").notNull(),
+		affectedUsers: t.integer("affected_users").notNull(),
+		affectedSessions: t.integer("affected_sessions").notNull(),
+		/** Sessions the tool saw, which is what a crash-free rate divides by. */
+		totalSessions: t.integer("total_sessions").notNull(),
+		importedBy: t.text("imported_by").references(() => users.id, { onDelete: "set null" }),
+		importedAt: t.timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("crash_snapshot_source_period_unique").on(t.source, t.periodStart, t.periodEnd),
+		check("crash_snapshot_range_check", sql`${t.periodStart} <= ${t.periodEnd}`),
+		check(
+			"crash_snapshot_counts_check",
+			sql`${t.crashCount} >= 0 and ${t.affectedUsers} >= 0
+				and ${t.affectedSessions} >= 0 and ${t.totalSessions} >= 0
+				and ${t.affectedSessions} <= ${t.totalSessions}`
+		),
+		index("crash_snapshot_period_idx").on(t.periodStart, t.periodEnd),
+	]
+)
+
+/**
+ * Per-endpoint API figures for a period, from the same import (AN-023).
+ *
+ * Latency is stored as the percentiles the gateway reports rather than raw
+ * samples: the module has no business keeping a request-level log of its own,
+ * and percentiles are what the criterion asks to display.
+ */
+export const apiEndpointMetrics = createTable(
+	"api_endpoint_metric",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		source: t.text("source").notNull(),
+		periodStart: t.date("period_start").notNull(),
+		periodEnd: t.date("period_end").notNull(),
+		/** Method and path as the gateway groups them, e.g. "GET /pisocamp/config". */
+		endpoint: t.text("endpoint").notNull(),
+		requestCount: t.integer("request_count").notNull(),
+		errorCount: t.integer("error_count").notNull(),
+		timeoutCount: t.integer("timeout_count").notNull(),
+		authFailureCount: t.integer("auth_failure_count").notNull(),
+		latencyP50Ms: t.integer("latency_p50_ms").notNull(),
+		latencyP95Ms: t.integer("latency_p95_ms").notNull(),
+		importedBy: t.text("imported_by").references(() => users.id, { onDelete: "set null" }),
+		importedAt: t.timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("api_endpoint_metric_period_endpoint_unique").on(
+			t.source,
+			t.periodStart,
+			t.periodEnd,
+			t.endpoint
+		),
+		check("api_endpoint_metric_range_check", sql`${t.periodStart} <= ${t.periodEnd}`),
+		check(
+			"api_endpoint_metric_counts_check",
+			sql`${t.requestCount} >= 0 and ${t.errorCount} >= 0 and ${t.timeoutCount} >= 0
+				and ${t.authFailureCount} >= 0
+				and ${t.errorCount} <= ${t.requestCount}
+				and ${t.timeoutCount} <= ${t.requestCount}
+				and ${t.authFailureCount} <= ${t.requestCount}`
+		),
+		check(
+			"api_endpoint_metric_latency_check",
+			sql`${t.latencyP50Ms} >= 0 and ${t.latencyP95Ms} >= ${t.latencyP50Ms}`
+		),
+		index("api_endpoint_metric_period_idx").on(t.periodStart, t.periodEnd),
+	]
+)
+
+/**
+ * One performance-test run, entered by hand (AN-025).
+ *
+ * These figures come from a measured build on real hardware, not from
+ * anything the module can observe about itself, so the report records who
+ * entered them and when: a number nobody is accountable for is not evidence.
+ */
+export const performanceTestResults = createTable(
+	"performance_test_result",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		testedAt: t.date("tested_at").notNull(),
+		appVersion: t.text("app_version").notNull(),
+		platform: t.text("platform").notNull().$type<"android" | "ios">(),
+		deviceModel: t.text("device_model").notNull(),
+		appSizeMb: t.doublePrecision("app_size_mb").notNull(),
+		moduleSizeIncreaseMb: t.doublePrecision("module_size_increase_mb").notNull(),
+		downloadedAssetsMb: t.doublePrecision("downloaded_assets_mb").notNull(),
+		localStorageMb: t.doublePrecision("local_storage_mb").notNull(),
+		/** Battery used over a fixed session, as a percentage of a full charge. */
+		batteryImpactPercent: t.doublePrecision("battery_impact_percent").notNull(),
+		notes: t.text("notes"),
+		recordedBy: t
+			.text("recorded_by")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		recordedAt: t.timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		check("performance_test_result_platform_check", sql`${t.platform} in ('android', 'ios')`),
+		check(
+			"performance_test_result_measures_check",
+			sql`${t.appSizeMb} > 0 and ${t.moduleSizeIncreaseMb} >= 0
+				and ${t.downloadedAssetsMb} >= 0 and ${t.localStorageMb} >= 0
+				and ${t.batteryImpactPercent} >= 0 and ${t.batteryImpactPercent} <= 100`
+		),
+		check(
+			"performance_test_result_version_check",
+			sql`${t.appVersion} = btrim(${t.appVersion}) and char_length(${t.appVersion}) between 1 and 64`
+		),
+		check(
+			"performance_test_result_device_check",
+			sql`${t.deviceModel} = btrim(${t.deviceModel}) and char_length(${t.deviceModel}) between 1 and 120`
+		),
+		check(
+			"performance_test_result_notes_check",
+			sql`${t.notes} is null or (${t.notes} = btrim(${t.notes}) and char_length(${t.notes}) between 1 and 1000)`
+		),
+		index("performance_test_result_tested_at_idx").on(t.testedAt.desc()),
+	]
+)
+
+// ============================================================================
 // AUDIT LOG
 // ============================================================================
 
@@ -2102,6 +2247,9 @@ export const schema = Object.assign(
 		contentBundleRebuildRequests,
 		relatedLinks,
 		auditLog,
+		crashSnapshots,
+		apiEndpointMetrics,
+		performanceTestResults,
 	},
 	relations
 )

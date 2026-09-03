@@ -10,6 +10,7 @@ import { AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
 import { GamificationService } from "./gamification.service"
 import { SurveyMetricsService } from "./survey-metrics.service"
+import { TechnicalMetricsService } from "./technical-metrics.service"
 import { RetentionService } from "./retention.service"
 import { EngagementService } from "./engagement.service"
 
@@ -98,6 +99,7 @@ describe("AnalyticsController", () => {
 				{ provide: RetentionService, useValue: { summary: async () => null } },
 				{ provide: GamificationService, useValue: { summary: async () => null } },
 				{ provide: SurveyMetricsService, useValue: { summary: async () => null } },
+				{ provide: TechnicalMetricsService, useValue: { summary: async () => null } },
 				{
 					provide: Logger,
 					useValue: { error: (...args: unknown[]) => logCalls.push(args) },

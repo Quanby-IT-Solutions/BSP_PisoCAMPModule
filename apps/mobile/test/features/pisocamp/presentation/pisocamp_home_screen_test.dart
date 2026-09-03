@@ -237,7 +237,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(analyticsQueue.reads, 1);
-      expect(diagnostics, <(String, String)>[('module_entry', 'unexpected')]);
+      // The load timing is emitted at the first frame, so a broken SDK is
+      // reported for it too rather than swallowed.
+      expect(diagnostics, <(String, String)>[
+        ('module_entry', 'unexpected'),
+        ('module_load', 'unexpected'),
+      ]);
       expect(diagnostics.toString(), isNot(contains('private')));
       expect(find.text('Banknotes'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -270,7 +275,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(analyticsQueue.reads, 1);
-    expect(diagnostics, <(String, String)>[('module_entry', 'enqueueFailed')]);
+    expect(diagnostics, <(String, String)>[
+      ('module_entry', 'enqueueFailed'),
+      ('module_load', 'enqueueFailed'),
+    ]);
     expect(find.text('Banknotes'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -300,6 +308,9 @@ void main() {
 
       expect(diagnostics, <(String, String)>[
         ('module_entry', 'unexpected'),
+        ('module_load', 'unexpected'),
+        // The sync that could not start is itself a failure worth reporting.
+        ('network_failure', 'unexpected'),
         ('module_entry', 'unexpected'),
         ('account_prompt_shown', 'unexpected'),
       ]);

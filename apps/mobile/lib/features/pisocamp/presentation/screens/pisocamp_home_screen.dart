@@ -40,6 +40,18 @@ class PisoCampHomeScreen extends ConsumerStatefulWidget {
   ConsumerState<PisoCampHomeScreen> createState() => _PisoCampHomeScreenState();
 }
 
+/// Whether this process has already loaded the module once.
+///
+/// A cold start pays for the process as well as the module, so the second entry
+/// in the same run is a warm one and reporting both as cold would flatter the
+/// figures.
+bool _moduleLoadedOnceThisProcess = false;
+
+@visibleForTesting
+void resetModuleLoadPhaseForTest() {
+  _moduleLoadedOnceThisProcess = false;
+}
+
 class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
   late Future<bool> _continued;
   bool _creatingAccount = false;
@@ -56,6 +68,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     _syncCurrencies(BundleSyncTrigger.startup);
     _syncAnalytics(AnalyticsSyncTrigger.startup);
     _emitAnalytics(const ModuleEntryIntent(ModuleEntryPoint.navigation));
+    _measureLoad();
     unawaited(_offerTrivia());
   }
 
@@ -118,12 +131,69 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     );
   }
 
+  /// AN-022. How long the module took to put something on the screen.
+  ///
+  /// Measured to the first frame rather than to the end of the syncs: what a
+  /// person waits for is something to look at, not for the network to finish.
+  void _measureLoad() {
+    final started = DateTime.now();
+    final phase = _moduleLoadedOnceThisProcess
+        ? ModuleLoadPhase.warm
+        : ModuleLoadPhase.cold;
+    _moduleLoadedOnceThisProcess = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _recordTechnical(
+        const ModuleLoadIntent(
+          phase: ModuleLoadPhase.cold,
+          durationMs: 0,
+        ),
+        (analytics) => analytics.recordLoad(
+          phase: phase,
+          elapsed: DateTime.now().difference(started),
+        ),
+      );
+    });
+  }
+
+  /// AN-024. What failed, and of what kind, when a sync could not finish.
+  void _reportNetworkFailure(
+    Object error,
+    AnalyticsNetworkOperation operation,
+  ) {
+    final isOnline = ref.read(connectivityStatusProvider).asData?.value ?? true;
+    final failureType = networkFailureTypeFor(error, isOnline: isOnline);
+    _recordTechnical(
+      NetworkFailureIntent(failureType: failureType, operation: operation),
+      (analytics) => analytics.recordNetworkFailure(
+        failureType: failureType,
+        operation: operation,
+      ),
+    );
+  }
+
+  void _recordTechnical(
+    AnalyticsIntent intent,
+    Future<void> Function(TechnicalAnalytics analytics) record,
+  ) {
+    final TechnicalAnalytics analytics;
+    try {
+      analytics = ref.read(technicalAnalyticsProvider);
+    } on Object catch (error) {
+      reportAnalyticsFailure(intent, error);
+      return;
+    }
+    emitAnalyticsFuture(intent, () => record(analytics));
+  }
+
   void _syncCurrencies(BundleSyncTrigger trigger) {
     unawaited(
       ref
           .read(currencyBundleSyncProvider.future)
           .then((sync) => sync.sync(trigger))
-          .catchError((_) {}),
+          .catchError((Object error) {
+            _reportNetworkFailure(error, AnalyticsNetworkOperation.bundle);
+          }),
     );
   }
 
@@ -134,9 +204,17 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
       controller = ref.read(analyticsSyncControllerProvider.future);
     } on Object catch (error) {
       reportAnalyticsFailure(intent, error);
+      _reportNetworkFailure(error, AnalyticsNetworkOperation.events);
       return;
     }
-    emitAnalyticsFuture(intent, () async => (await controller).sync(trigger));
+    emitAnalyticsFuture(intent, () async {
+      try {
+        await (await controller).sync(trigger);
+      } on Object catch (error) {
+        _reportNetworkFailure(error, AnalyticsNetworkOperation.events);
+        rethrow;
+      }
+    });
   }
 
   void _emitAnalytics(AnalyticsIntent intent) {

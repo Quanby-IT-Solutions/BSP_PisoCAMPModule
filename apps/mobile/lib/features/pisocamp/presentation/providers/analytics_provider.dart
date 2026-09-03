@@ -156,6 +156,73 @@ final analyticsSdkProvider = Provider<AnalyticsSdk>((ref) {
   );
 });
 
+final technicalAnalyticsProvider = Provider<TechnicalAnalytics>(
+  (ref) => _SdkTechnicalAnalytics(ref.watch(analyticsSdkProvider)),
+);
+
+/// AN-7's half of the SDK: how long the module took, and what failed on the
+/// way. Only the device knows either, which is why these are events rather
+/// than something the server could work out.
+abstract interface class TechnicalAnalytics {
+  Future<void> recordLoad({
+    required ModuleLoadPhase phase,
+    required Duration elapsed,
+  });
+
+  Future<void> recordNetworkFailure({
+    required AnalyticsNetworkFailureType failureType,
+    required AnalyticsNetworkOperation operation,
+  });
+}
+
+final class _SdkTechnicalAnalytics implements TechnicalAnalytics {
+  const _SdkTechnicalAnalytics(this._sdk);
+
+  final AnalyticsSdk _sdk;
+
+  @override
+  Future<void> recordLoad({
+    required ModuleLoadPhase phase,
+    required Duration elapsed,
+  }) => _sdk.emit(
+    ModuleLoadIntent(
+      phase: phase,
+      // Clamped rather than dropped: a device whose clock moved still loaded,
+      // and the contract's ceiling is what the percentiles are computed over.
+      durationMs: elapsed.inMilliseconds.clamp(0, 120000),
+    ),
+  );
+
+  @override
+  Future<void> recordNetworkFailure({
+    required AnalyticsNetworkFailureType failureType,
+    required AnalyticsNetworkOperation operation,
+  }) => _sdk.emit(
+    NetworkFailureIntent(failureType: failureType, operation: operation),
+  );
+}
+
+/// What kind of failure an error was, for AN-024's breakdown.
+///
+/// The distinction that matters is between a network that was not there, one
+/// that was too slow, and a request that arrived and was refused: they are
+/// three different problems and only one of them is the device's own.
+AnalyticsNetworkFailureType networkFailureTypeFor(
+  Object error, {
+  required bool isOnline,
+}) {
+  if (!isOnline) return AnalyticsNetworkFailureType.noConnectivity;
+  final code = switch (error) {
+    AnalyticsRepositoryException(:final code) => code,
+    _ => null,
+  };
+  return switch (code) {
+    'timeout' => AnalyticsNetworkFailureType.timeout,
+    'network' => AnalyticsNetworkFailureType.noConnectivity,
+    _ => AnalyticsNetworkFailureType.syncFailed,
+  };
+}
+
 final contentViewAnalyticsProvider = Provider<ContentViewAnalytics>(
   (ref) => _SdkContentViewAnalytics(ref.watch(analyticsSdkProvider)),
 );
