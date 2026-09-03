@@ -36,7 +36,10 @@ jest.mock("@orpc/server", () => ({
 jest.mock("@/config/api-versions.config", () => ({
 	v1: {
 		pisocamp: {
-			admin: { accounts: { list: "list", setStatus: "setStatus" } },
+			admin: {
+				accounts: { list: "list", setStatus: "setStatus" },
+				roles: { list: "listRoles", setUserRoles: "setUserRoles" },
+			},
 		},
 	},
 }))
@@ -45,7 +48,7 @@ jest.mock("better-auth/node", () => ({ fromNodeHeaders: () => ({}) }))
 jest.mock("@repo/auth", () => ({ getAuth: () => ({ api: { getSession: async () => null } }) }))
 jest.mock("@repo/contracts", () => ({
 	ADMIN_ROLE: "Admin",
-	PERMISSION_NAMES: ["admin.accounts.manage", "users:read"],
+	PERMISSION_NAMES: ["admin.accounts.manage", "admin.roles.assign", "users:read"],
 }))
 
 const permittedId = "sa1-account-manager"
@@ -105,10 +108,12 @@ describe("account management authorization", () => {
 			.insert(permissions)
 			.values([
 				{ name: "admin.accounts.manage", description: "SA-1 account management" },
+				{ name: "admin.roles.assign", description: "SA-2 role assignment" },
 				{ name: "users:read", description: "Directory read" },
 			])
 			.returning()
 		const manage = inserted.find(row => row.name === "admin.accounts.manage")!
+		const assign = inserted.find(row => row.name === "admin.roles.assign")!
 		const read = inserted.find(row => row.name === "users:read")!
 		const insertedRoles = await db
 			.insert(roles)
@@ -121,6 +126,7 @@ describe("account management authorization", () => {
 		const reader = insertedRoles.find(row => row.name === "Directory Reader")!
 		await db.insert(rolePermissions).values([
 			{ roleId: manager.id, permissionId: manage.id },
+			{ roleId: manager.id, permissionId: assign.id },
 			{ roleId: reader.id, permissionId: read.id },
 		])
 		await db.insert(userRoles).values([
@@ -144,8 +150,10 @@ describe("account management authorization", () => {
 	})
 
 	const handlers = {
-		list: "PisoCampAccountsController.list",
-		setStatus: "PisoCampAccountsController.setStatus",
+		list: ["PisoCampAccountsController.list", "admin.accounts.manage"],
+		setStatus: ["PisoCampAccountsController.setStatus", "admin.accounts.manage"],
+		listRoles: ["PisoCampAccountsController.listRoles", "admin.roles.assign"],
+		setUserRoles: ["PisoCampAccountsController.setUserRoles", "admin.roles.assign"],
 	} as const
 
 	async function bothWays(name: keyof typeof handlers) {
@@ -161,14 +169,15 @@ describe("account management authorization", () => {
 			.from(auditLog)
 			.where(and(eq(auditLog.actorId, deniedId), eq(auditLog.action, "permission_denied")))
 		expect(rows).toHaveLength(1)
+		const [targetId, permission] = handlers[name]
 		expect(rows[0]).toMatchObject({
 			domain: "rbac",
 			outcome: "denied",
 			targetType: "handler",
-			targetId: handlers[name],
+			targetId,
 			newValue: {
-				requiredPermissions: ["admin.accounts.manage"],
-				missingPermissions: ["admin.accounts.manage"],
+				requiredPermissions: [permission],
+				missingPermissions: [permission],
 			},
 		})
 	}
@@ -179,6 +188,16 @@ describe("account management authorization", () => {
 
 	it("gates the status change both ways", async () => {
 		await bothWays("setStatus")
+	})
+
+	it("gates the role list both ways", async () => {
+		await bothWays("listRoles")
+	})
+
+	it("gates role assignment both ways", async () => {
+		// SA-2's permission, not SA-1's: seeing the directory and changing who
+		// can do what are separate privileges, and the denial names which one.
+		await bothWays("setUserRoles")
 	})
 
 	it("refuses a deactivated account manager before resolving the permission", async () => {

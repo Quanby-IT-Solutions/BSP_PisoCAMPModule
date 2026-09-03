@@ -6,11 +6,30 @@ import { AccountManagementView } from "./account-management-view"
 
 const useAccounts = vi.fn()
 const useSetStatus = vi.fn()
+const useRoles = vi.fn()
+const useSetRoles = vi.fn()
 
 vi.mock("@/features/pisocamp-admin/api/accounts.hooks", () => ({
 	usePisoCampAccountsQuery: (input: unknown) => useAccounts(input),
 	useSetPisoCampAccountStatusMutation: () => useSetStatus(),
+	usePisoCampRolesQuery: () => useRoles(),
+	useSetPisoCampUserRolesMutation: () => useSetRoles(),
 }))
+
+const ROLES = [
+	{
+		name: "Reports & Analytics User",
+		description: "Reads dashboards",
+		permissions: ["reports.dashboards.view", "reports.reports.generate"],
+		userCount: 1,
+	},
+	{
+		name: "Registered End User",
+		description: null,
+		permissions: [],
+		userCount: 4,
+	},
+]
 
 const alice = {
 	id: "user-alice",
@@ -42,6 +61,17 @@ describe("AccountManagementView", () => {
 			refetch: vi.fn(),
 		})
 		useSetStatus.mockReturnValue({
+			mutate: vi.fn(),
+			isPending: false,
+			isError: false,
+			error: null,
+		})
+		useRoles.mockReturnValue({
+			isPending: false,
+			isError: false,
+			data: { roles: ROLES },
+		})
+		useSetRoles.mockReturnValue({
 			mutate: vi.fn(),
 			isPending: false,
 			isError: false,
@@ -160,6 +190,84 @@ describe("AccountManagementView", () => {
 		expect(
 			screen.getByText("You cannot change the status of your own account")
 		).toBeInTheDocument()
+	})
+
+	it("shows each role with the permission keys it carries", async () => {
+		const user = userEvent.setup()
+		render(<AccountManagementView />)
+
+		const row = screen.getByRole("row", { name: /Alice Reader/ })
+		await user.click(within(row).getByRole("button", { name: "Edit Roles" }))
+
+		const dialog = screen.getByRole("dialog")
+		// Least privilege is a claim somebody has to be able to check.
+		expect(
+			within(dialog).getByText("reports.dashboards.view, reports.reports.generate")
+		).toBeInTheDocument()
+		// A role that carries nothing says so, rather than showing a blank line.
+		expect(within(dialog).getByText("No permission keys")).toBeInTheDocument()
+	})
+
+	it("ticks the roles the account already holds", async () => {
+		const user = userEvent.setup()
+		render(<AccountManagementView />)
+
+		const row = screen.getByRole("row", { name: /Alice Reader/ })
+		await user.click(within(row).getByRole("button", { name: "Edit Roles" }))
+
+		expect(screen.getByRole("checkbox", { name: /Registered End User/ })).toBeChecked()
+		expect(
+			screen.getByRole("checkbox", { name: /Reports & Analytics User/ })
+		).not.toBeChecked()
+	})
+
+	it("sends the complete set of roles, not the change", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn()
+		useSetRoles.mockReturnValue({ mutate, isPending: false, isError: false, error: null })
+		render(<AccountManagementView />)
+
+		const row = screen.getByRole("row", { name: /Alice Reader/ })
+		await user.click(within(row).getByRole("button", { name: "Edit Roles" }))
+		await user.click(screen.getByRole("checkbox", { name: /Reports & Analytics User/ }))
+		await user.click(screen.getByRole("button", { name: "Save Roles" }))
+
+		// The whole answer: the server works out the difference, so the screen
+		// never has to reason about what it is replacing.
+		expect(mutate.mock.calls[0]?.[0]).toEqual({
+			userId: "user-alice",
+			roles: ["Registered End User", "Reports & Analytics User"],
+		})
+	})
+
+	it("can clear every role", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn()
+		useSetRoles.mockReturnValue({ mutate, isPending: false, isError: false, error: null })
+		render(<AccountManagementView />)
+
+		const row = screen.getByRole("row", { name: /Alice Reader/ })
+		await user.click(within(row).getByRole("button", { name: "Edit Roles" }))
+		await user.click(screen.getByRole("checkbox", { name: /Registered End User/ }))
+		await user.click(screen.getByRole("button", { name: "Save Roles" }))
+
+		expect(mutate.mock.calls[0]?.[0]).toEqual({ userId: "user-alice", roles: [] })
+	})
+
+	it("shows the server's reason when roles could not be saved", async () => {
+		const user = userEvent.setup()
+		useSetRoles.mockReturnValue({
+			mutate: vi.fn(),
+			isPending: false,
+			isError: true,
+			error: new Error("Only an Admin may grant the Admin role"),
+		})
+		render(<AccountManagementView />)
+
+		const row = screen.getByRole("row", { name: /Alice Reader/ })
+		await user.click(within(row).getByRole("button", { name: "Edit Roles" }))
+
+		expect(screen.getByText("Only an Admin may grant the Admin role")).toBeInTheDocument()
 	})
 
 	it("offers a way back when the list could not be loaded", async () => {

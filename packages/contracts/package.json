@@ -45,6 +45,10 @@
 			"types": "./dist/modules/v1/pisocamp/account.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/account.schema.js"
 		},
+		"./pisocamp-role": {
+			"types": "./dist/modules/v1/pisocamp/role.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/role.schema.js"
+		},
 		"./pisocamp-report": {
 			"types": "./dist/modules/v1/pisocamp/report.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/report.schema.js"

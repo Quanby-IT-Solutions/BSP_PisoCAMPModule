@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react"
 
-import type { PisoCampAccount } from "@repo/contracts"
+import type { PisoCampAccount, PisoCampRole } from "@repo/contracts"
 
 import { PageHeader } from "@/core/components/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/core/components/ui/alert"
@@ -37,7 +37,9 @@ import {
 } from "@/core/components/ui/table"
 import {
 	usePisoCampAccountsQuery,
+	usePisoCampRolesQuery,
 	useSetPisoCampAccountStatusMutation,
+	useSetPisoCampUserRolesMutation,
 } from "@/features/pisocamp-admin/api/accounts.hooks"
 
 const PAGE_SIZE = 20
@@ -54,6 +56,7 @@ export function AccountManagementView() {
 	const [status, setStatus] = useState<"" | "active" | "deactivated">("")
 	const [page, setPage] = useState(1)
 	const [pending, setPending] = useState<PisoCampAccount | null>(null)
+	const [editingRoles, setEditingRoles] = useState<PisoCampAccount | null>(null)
 
 	const accounts = usePisoCampAccountsQuery({
 		page,
@@ -62,6 +65,7 @@ export function AccountManagementView() {
 		...(status ? { status } : {}),
 	})
 	const setAccountStatus = useSetPisoCampAccountStatusMutation()
+	const setUserRoles = useSetPisoCampUserRolesMutation()
 
 	function applySearch(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
@@ -173,6 +177,7 @@ export function AccountManagementView() {
 									<TableHead>Email</TableHead>
 									<TableHead>Status</TableHead>
 									<TableHead>Reason</TableHead>
+									<TableHead>Roles</TableHead>
 									<TableHead>Action</TableHead>
 								</TableRow>
 							</TableHeader>
@@ -191,6 +196,20 @@ export function AccountManagementView() {
 											</Badge>
 										</TableCell>
 										<TableCell>{account.reason ?? "—"}</TableCell>
+										<TableCell>
+											<span className="flex flex-wrap items-center gap-2">
+												<span>{account.roles.length === 0 ? "None" : account.roles.join(", ")}</span>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													className="min-h-11"
+													onClick={() => setEditingRoles(account)}
+												>
+													Edit Roles
+												</Button>
+											</span>
+										</TableCell>
 										<TableCell>
 											{account.status === "deactivated" ? (
 												<Button
@@ -251,6 +270,20 @@ export function AccountManagementView() {
 					</Button>
 				</nav>
 			) : null}
+
+			<RolesDialog
+				account={editingRoles}
+				pending={setUserRoles.isPending}
+				error={setUserRoles.isError ? setUserRoles.error.message : null}
+				onCancel={() => setEditingRoles(null)}
+				onConfirm={roleNames => {
+					if (!editingRoles) return
+					setUserRoles.mutate(
+						{ userId: editingRoles.id, roles: roleNames },
+						{ onSuccess: () => setEditingRoles(null) }
+					)
+				}}
+			/>
 
 			<DeactivateDialog
 				account={pending}
@@ -352,6 +385,114 @@ function DeactivateDialog({
 						</Button>
 					</DialogFooter>
 				</form>
+			</DialogContent>
+		</Dialog>
+	)
+}
+
+/**
+ * Which roles an account holds, and what each role would let them do.
+ *
+ * The permission keys are shown beside every role, read-only. An assignment
+ * whose consequences nobody can see is not one anybody can review, and least
+ * privilege is a claim you have to be able to check.
+ */
+function RolesDialog({
+	account,
+	pending,
+	error,
+	onCancel,
+	onConfirm,
+}: {
+	account: PisoCampAccount | null
+	pending: boolean
+	error: string | null
+	onCancel: () => void
+	onConfirm: (roles: string[]) => void
+}) {
+	const catalogue = usePisoCampRolesQuery()
+	const [selected, setSelected] = useState<string[] | null>(null)
+	const held = selected ?? account?.roles ?? []
+
+	function toggle(role: PisoCampRole, checked: boolean) {
+		const next = checked ? [...held, role.name] : held.filter(name => name !== role.name)
+		setSelected(next)
+	}
+
+	return (
+		<Dialog
+			open={account !== null}
+			onOpenChange={open => {
+				if (!open) {
+					setSelected(null)
+					onCancel()
+				}
+			}}
+		>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>Roles for {account?.name}</DialogTitle>
+					<DialogDescription>
+						Each role carries the permission keys listed beneath it. Editing what a role
+						contains is a separate change.
+					</DialogDescription>
+				</DialogHeader>
+
+				{catalogue.isPending ? (
+					<div role="status" aria-label="Loading roles">
+						<Skeleton className="h-24 w-full" />
+						<span className="sr-only">Loading roles</span>
+					</div>
+				) : catalogue.isError || !catalogue.data ? (
+					<Alert variant="destructive">
+						<AlertTitle>Could not load roles</AlertTitle>
+						<AlertDescription>Check your connection or access, then try again.</AlertDescription>
+					</Alert>
+				) : (
+					<fieldset className="max-h-80 space-y-3 overflow-y-auto">
+						<legend className="sr-only">Roles</legend>
+						{catalogue.data.roles.map(role => (
+							<div key={role.name} className="flex min-h-11 items-start gap-3">
+								<input
+									id={`role-${role.name}`}
+									type="checkbox"
+									className="mt-1 size-5"
+									checked={held.includes(role.name)}
+									onChange={event => toggle(role, event.target.checked)}
+								/>
+								<Label htmlFor={`role-${role.name}`} className="flex flex-col items-start gap-1">
+									<span>{role.name}</span>
+									<span className="text-muted-foreground text-xs">
+										{role.permissions.length === 0
+											? "No permission keys"
+											: role.permissions.join(", ")}
+									</span>
+								</Label>
+							</div>
+						))}
+					</fieldset>
+				)}
+
+				{error ? (
+					<Alert variant="destructive">
+						<AlertTitle>Could not save roles</AlertTitle>
+						<AlertDescription>{error}</AlertDescription>
+					</Alert>
+				) : null}
+
+				<DialogFooter>
+					<Button type="button" variant="outline" className="min-h-11" onClick={onCancel}>
+						Cancel
+					</Button>
+					<Button
+						type="button"
+						className="min-h-11"
+						disabled={pending}
+						onClick={() => onConfirm(held)}
+					>
+						{pending ? "Saving…" : "Save Roles"}
+					</Button>
+				</DialogFooter>
 			</DialogContent>
 		</Dialog>
 	)

@@ -11,8 +11,11 @@ import {
 import type {
 	ListPisoCampAccountsInput,
 	ListPisoCampAccountsOutput,
+	ListPisoCampRolesOutput,
 	PisoCampAccount,
 	SetPisoCampAccountStatusInput,
+	SetPisoCampUserRolesInput,
+	SetPisoCampUserRolesOutput,
 } from "@repo/contracts"
 
 import { orpc } from "@/services/orpc/client"
@@ -48,6 +51,37 @@ export function useSetPisoCampAccountStatusMutation() {
 			PisoCampAccount,
 			Error,
 			SetPisoCampAccountStatusInput
+		>
+	)
+}
+
+export function usePisoCampRolesQuery() {
+	const options = orpc.pisocamp.admin.roles.list.queryOptions({
+		networkMode: "online",
+		// The role catalogue changes far less often than who holds what.
+		staleTime: 300_000,
+	})
+
+	return useQuery<ListPisoCampRolesOutput, Error>(
+		options as unknown as UseQueryOptions<ListPisoCampRolesOutput, Error>
+	)
+}
+
+export function useSetPisoCampUserRolesMutation() {
+	const queryClient = useQueryClient()
+
+	const options = orpc.pisocamp.admin.roles.setUserRoles.mutationOptions({
+		networkMode: "online",
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({ queryKey: orpc.pisocamp.key() })
+		},
+	})
+
+	return useMutation<SetPisoCampUserRolesOutput, Error, SetPisoCampUserRolesInput>(
+		options as unknown as UseMutationOptions<
+			SetPisoCampUserRolesOutput,
+			Error,
+			SetPisoCampUserRolesInput
 		>
 	)
 }

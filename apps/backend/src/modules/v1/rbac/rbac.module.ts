@@ -11,5 +11,6 @@ import { RbacController } from "./rbac.controller"
 	imports: [RbacModule],
 	controllers: [RbacController],
 	providers: [RbacAdminService, IdempotencyService, IdempotencyInterceptor],
+	exports: [RbacAdminService],
 })
 export class RbacAdminModule {}

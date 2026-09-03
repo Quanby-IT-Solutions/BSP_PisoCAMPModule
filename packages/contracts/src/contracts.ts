@@ -312,6 +312,20 @@ export type {
 	KeyActionEvent,
 } from "./modules/v1/pisocamp/adoption.schema.js"
 
+// SA-2 role assignment
+export {
+	ListPisoCampRolesOutputSchema,
+	PisoCampRoleSchema,
+	SetPisoCampUserRolesInputSchema,
+	SetPisoCampUserRolesOutputSchema,
+} from "./modules/v1/pisocamp/role.schema.js"
+export type {
+	ListPisoCampRolesOutput,
+	PisoCampRole,
+	SetPisoCampUserRolesInput,
+	SetPisoCampUserRolesOutput,
+} from "./modules/v1/pisocamp/role.schema.js"
+
 // SA-1 account activation and deactivation
 export {
 	ACCOUNT_STATUSES,
