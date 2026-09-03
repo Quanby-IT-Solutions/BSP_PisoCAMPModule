@@ -9,6 +9,8 @@ import {
 } from "@tanstack/react-query"
 
 import type {
+	DeletePisoCampSubjectDataInput,
+	DeletePisoCampSubjectDataOutput,
 	ListPisoCampAccountsInput,
 	ListPisoCampAccountsOutput,
 	ListPisoCampRolesOutput,
@@ -82,6 +84,29 @@ export function useSetPisoCampUserRolesMutation() {
 			SetPisoCampUserRolesOutput,
 			Error,
 			SetPisoCampUserRolesInput
+		>
+	)
+}
+
+export function useDeletePisoCampSubjectDataMutation() {
+	const queryClient = useQueryClient()
+
+	const options = orpc.pisocamp.admin.dataSubject.delete.mutationOptions({
+		networkMode: "online",
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({ queryKey: orpc.pisocamp.key() })
+		},
+	})
+
+	return useMutation<
+		DeletePisoCampSubjectDataOutput,
+		Error,
+		DeletePisoCampSubjectDataInput
+	>(
+		options as unknown as UseMutationOptions<
+			DeletePisoCampSubjectDataOutput,
+			Error,
+			DeletePisoCampSubjectDataInput
 		>
 	)
 }

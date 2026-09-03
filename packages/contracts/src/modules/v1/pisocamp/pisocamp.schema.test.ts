@@ -394,16 +394,18 @@ describe("Piso CAMP consent schemas", () => {
 				ConsentPurposeSchema.parse(value)
 			)
 		).toEqual(["registration", "survey", "demographic_analytics"])
-		expect(["granted", "declined"].map(value => ConsentDecisionSchema.parse(value))).toEqual([
-			"granted",
-			"declined",
-		])
+		// SA-7 adds withdrawal as a decision somebody can make, not only a state
+		// they can end up in: declining is never having agreed, and withdrawing
+		// is having agreed and changed your mind.
+		expect(
+			["granted", "declined", "withdrawn"].map(value => ConsentDecisionSchema.parse(value))
+		).toEqual(["granted", "declined", "withdrawn"])
 		expect(
 			["none", "granted", "declined", "withdrawn", "requires_reconsent"].map(value =>
 				ConsentStateSchema.parse(value)
 			)
 		).toHaveLength(5)
-		expect(() => ConsentDecisionSchema.parse("withdrawn")).toThrow()
+		expect(() => ConsentDecisionSchema.parse("requires_reconsent")).toThrow()
 	})
 
 	it("accepts exactly the F1 22-character base64url guest identity", () => {

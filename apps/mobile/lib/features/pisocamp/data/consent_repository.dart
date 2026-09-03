@@ -235,9 +235,11 @@ class ConsentRepository {
       throw const FormatException('Invalid recorded consent timestamp');
     }
     final parsedState = ConsentServerState.fromWire(state);
-    final expectedState = record.decision == ConsentDecision.granted
-        ? ConsentServerState.granted
-        : ConsentServerState.declined;
+    final expectedState = switch (record.decision) {
+      ConsentDecision.granted => ConsentServerState.granted,
+      ConsentDecision.declined => ConsentServerState.declined,
+      ConsentDecision.withdrawn => ConsentServerState.withdrawn,
+    };
     if (parsedState != expectedState) {
       throw const FormatException('Consent acknowledgement state mismatch');
     }

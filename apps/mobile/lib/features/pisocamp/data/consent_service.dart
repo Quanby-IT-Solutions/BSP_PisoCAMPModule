@@ -155,6 +155,8 @@ class ConsentService {
           await _store.markSynced(record.recordId);
           return decision == ConsentDecision.granted
               ? ConsentGateResult.grantedSynced
+              // Declining and withdrawing both leave the gate shut, which is
+              // all the caller of this needs to know.
               : ConsentGateResult.declined;
         } on DioException catch (error) {
           if (_isStaleConflict(error)) {

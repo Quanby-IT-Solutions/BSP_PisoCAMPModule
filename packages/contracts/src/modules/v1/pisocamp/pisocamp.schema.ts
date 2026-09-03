@@ -164,7 +164,15 @@ export type UpdatePisoCampAdminConfig = z.infer<typeof UpdatePisoCampAdminConfig
 export const CONSENT_PURPOSES = ["registration", "survey", "demographic_analytics"] as const
 export const ConsentPurposeSchema = z.enum(CONSENT_PURPOSES)
 
-export const CONSENT_DECISIONS = ["granted", "declined"] as const
+/**
+ * What somebody can say about a purpose.
+ *
+ * SA-7 adds withdrawal. It is its own answer, not a late "declined": declining
+ * is never having agreed, and withdrawing is having agreed and changed your
+ * mind — and only the second obliges anybody to stop what they were already
+ * doing with what they collected.
+ */
+export const CONSENT_DECISIONS = ["granted", "declined", "withdrawn"] as const
 export const ConsentDecisionSchema = z.enum(CONSENT_DECISIONS)
 
 export const CONSENT_STATES = [

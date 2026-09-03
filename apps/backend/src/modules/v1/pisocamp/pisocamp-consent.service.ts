@@ -203,7 +203,9 @@ export class PisoCampConsentService {
 			purpose: record.purpose,
 			noticeId: record.noticeId,
 			noticeVersion: record.noticeVersion,
-			decision: record.status === "withdrawn" ? "declined" : record.status,
+			// Withdrawal is now an answer in its own right, so it is reported as
+			// itself rather than flattened into a decline it never was.
+			decision: record.status,
 			respondedAt: record.respondedAt.toISOString(),
 			recordedAt: record.recordedAt.toISOString(),
 			state: record.status,

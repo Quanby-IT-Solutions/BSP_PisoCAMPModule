@@ -4,6 +4,10 @@ import { pisoCampAnalyticsContract } from "./analytics.contract.js"
 import { pisoCampSurveyContract } from "./survey-response.contract.js"
 import { pisoCampAccountContract } from "./account.contract.js"
 import { pisoCampAuditContract } from "./audit.contract.js"
+import {
+	pisoCampAdminDataSubjectContract,
+	pisoCampDataSubjectContract,
+} from "./data-subject.contract.js"
 import { pisoCampReportContract } from "./report.contract.js"
 import { pisoCampRoleContract } from "./role.contract.js"
 import { pisoCampSurveyTriggerContract } from "./survey-trigger.contract.js"
@@ -41,6 +45,7 @@ export const pisoCampContract = {
 		accounts: pisoCampAccountContract,
 		roles: pisoCampRoleContract,
 		audit: pisoCampAuditContract,
+		dataSubject: pisoCampAdminDataSubjectContract,
 		config: {
 			get: oc
 				.route({
@@ -61,6 +66,7 @@ export const pisoCampContract = {
 				.output(PisoCampAdminConfigSchema),
 		},
 	},
+	me: pisoCampDataSubjectContract,
 	config: {
 		get: oc
 			.route({

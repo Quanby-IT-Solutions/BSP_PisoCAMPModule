@@ -26,6 +26,7 @@ import 'package:mobile/features/pisocamp/presentation/widgets/trivia_prompt.dart
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/account_prompt.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/privacy_settings_screen.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 
 class PisoCampHomeScreen extends ConsumerStatefulWidget {
@@ -299,6 +300,34 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     }
   }
 
+  Future<void> _openPrivacySettings(BuildContext context) async {
+    final notice = await ref
+        .read(consentRepositoryProvider)
+        .readCachedNotice();
+    if (!context.mounted) return;
+
+    if (notice == null) {
+      // Without the notice there is nothing to withdraw *against*: a consent
+      // record names the version it answered.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Privacy settings need the module to load once first.'),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PrivacySettingsScreen(
+          consentService: ref.read(consentServiceProvider),
+          notice: notice,
+          online: ref.read(connectivityStatusProvider).asData?.value ?? false,
+        ),
+      ),
+    );
+  }
+
   Widget _buildScaffold(
     BuildContext context, {
     required AsyncValue<PisoCampHomeLoadResult> state,
@@ -310,7 +339,18 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     required AdvisoryDocument? advisory,
   }) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Piso CAMP')),
+      appBar: AppBar(
+        title: const Text('Piso CAMP'),
+        actions: <Widget>[
+          IconButton(
+            icon: const Icon(Icons.privacy_tip_outlined),
+            // SA-7: withdrawing a consent is something somebody has to be able
+            // to find, so it lives one tap from the module they gave it in.
+            tooltip: 'Privacy',
+            onPressed: () => _openPrivacySettings(context),
+          ),
+        ],
+      ),
       bottomSheet: advisory != null
           ? SafeArea(
               child: Padding(

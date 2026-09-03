@@ -312,6 +312,18 @@ export type {
 	KeyActionEvent,
 } from "./modules/v1/pisocamp/adoption.schema.js"
 
+// SA-7 data subject export and deletion
+export {
+	DataSubjectExportSchema,
+	DeletePisoCampSubjectDataInputSchema,
+	DeletePisoCampSubjectDataOutputSchema,
+} from "./modules/v1/pisocamp/data-subject.schema.js"
+export type {
+	DataSubjectExport,
+	DeletePisoCampSubjectDataInput,
+	DeletePisoCampSubjectDataOutput,
+} from "./modules/v1/pisocamp/data-subject.schema.js"
+
 // SA-2 role assignment
 export {
 	ListPisoCampRolesOutputSchema,

@@ -20,7 +20,11 @@ enum ConsentPurpose {
 
 enum ConsentDecision {
   granted('granted'),
-  declined('declined');
+  declined('declined'),
+  // SA-7. Withdrawal queues and retries exactly like the other two, so it
+  // survives being made offline — the moment somebody changes their mind is
+  // rarely the moment they have a signal.
+  withdrawn('withdrawn');
 
   const ConsentDecision(this.wireValue);
 

@@ -196,6 +196,48 @@ void main() {
   );
 
   test(
+    'withdrawal is durable offline and shuts the gate like a decline',
+    () async {
+      final store = ConsentLocalStore(SecureStorageService());
+      final service = subject(FakeConsentRepository(), store);
+
+      // SA-7. The moment somebody changes their mind is rarely the moment they
+      // have a signal, so a withdrawal queues and retries like anything else.
+      final result = await service.recordDecision(
+        purpose: ConsentPurpose.survey,
+        notice: noticeV1,
+        decision: ConsentDecision.withdrawn,
+        online: false,
+      );
+
+      expect(result, ConsentGateResult.declined);
+      final saved = (await store.readRecords()).single;
+      expect(saved.decision, ConsentDecision.withdrawn);
+      expect(saved.syncState, ConsentSyncState.pending);
+    },
+  );
+
+  test(
+    'a withdrawal reaches the server as a withdrawal, not as a decline',
+    () async {
+      final store = ConsentLocalStore(SecureStorageService());
+      final repository = FakeConsentRepository();
+      final service = subject(repository, store);
+
+      await service.recordDecision(
+        purpose: ConsentPurpose.survey,
+        notice: noticeV1,
+        decision: ConsentDecision.withdrawn,
+        online: true,
+      );
+
+      // Declining is never having agreed; withdrawing is having agreed and
+      // changed your mind, and the server has to be told which happened.
+      expect(repository.synced.single.decision, ConsentDecision.withdrawn);
+    },
+  );
+
+  test(
     'online grant is durable before sync and becomes grantedSynced on ack',
     () async {
       final store = ConsentLocalStore(SecureStorageService());

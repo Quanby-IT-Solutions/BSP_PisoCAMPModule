@@ -9,6 +9,7 @@ import { IdempotencyService } from "@/shared/interceptors/idempotency.service"
 import { PisoCampAccountsModule } from "./accounts/accounts.module"
 import { AnalyticsModule } from "./analytics/analytics.module"
 import { PisoCampAuditViewerModule } from "./audit/audit-viewer.module"
+import { PisoCampDataSubjectModule } from "./data-subject/data-subject.module"
 import { AssetsModule } from "./assets/assets.module"
 import { BundleModule } from "./bundle/bundle.module"
 import { ContentModule } from "./content/content.module"
@@ -45,6 +46,7 @@ import { TriviaModule } from "./trivia/trivia.module"
 		ReportsModule,
 		PisoCampAccountsModule,
 		PisoCampAuditViewerModule,
+		PisoCampDataSubjectModule,
 	],
 	controllers: [PisoCampController, PisoCampProfileController],
 	providers: [

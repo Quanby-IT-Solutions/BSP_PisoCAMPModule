@@ -2,7 +2,11 @@
 
 import { useState, type FormEvent } from "react"
 
-import type { PisoCampAccount, PisoCampRole } from "@repo/contracts"
+import type {
+	DeletePisoCampSubjectDataOutput,
+	PisoCampAccount,
+	PisoCampRole,
+} from "@repo/contracts"
 
 import { PageHeader } from "@/core/components/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/core/components/ui/alert"
@@ -36,6 +40,7 @@ import {
 	TableRow,
 } from "@/core/components/ui/table"
 import {
+	useDeletePisoCampSubjectDataMutation,
 	usePisoCampAccountsQuery,
 	usePisoCampRolesQuery,
 	useSetPisoCampAccountStatusMutation,
@@ -57,6 +62,7 @@ export function AccountManagementView() {
 	const [page, setPage] = useState(1)
 	const [pending, setPending] = useState<PisoCampAccount | null>(null)
 	const [editingRoles, setEditingRoles] = useState<PisoCampAccount | null>(null)
+	const [deleting, setDeleting] = useState<PisoCampAccount | null>(null)
 
 	const accounts = usePisoCampAccountsQuery({
 		page,
@@ -66,6 +72,7 @@ export function AccountManagementView() {
 	})
 	const setAccountStatus = useSetPisoCampAccountStatusMutation()
 	const setUserRoles = useSetPisoCampUserRolesMutation()
+	const deleteData = useDeletePisoCampSubjectDataMutation()
 
 	function applySearch(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
@@ -236,6 +243,14 @@ export function AccountManagementView() {
 													Deactivate
 												</Button>
 											)}
+											<Button
+												type="button"
+												variant="outline"
+												className="ml-2 min-h-11"
+												onClick={() => setDeleting(account)}
+											>
+												Delete Data
+											</Button>
 										</TableCell>
 									</TableRow>
 								))}
@@ -270,6 +285,21 @@ export function AccountManagementView() {
 					</Button>
 				</nav>
 			) : null}
+
+			<DeleteDataDialog
+				account={deleting}
+				pending={deleteData.isPending}
+				error={deleteData.isError ? deleteData.error.message : null}
+				result={deleteData.data ?? null}
+				onCancel={() => {
+					deleteData.reset()
+					setDeleting(null)
+				}}
+				onConfirm={approvalReference => {
+					if (!deleting) return
+					deleteData.mutate({ accountId: deleting.id, approvalReference })
+				}}
+			/>
 
 			<RolesDialog
 				account={editingRoles}
@@ -493,6 +523,124 @@ function RolesDialog({
 						{pending ? "Saving…" : "Save Roles"}
 					</Button>
 				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	)
+}
+
+/**
+ * Deleting somebody's data asks twice: what for, and are you sure.
+ *
+ * There is no undo. The dialog says exactly what will go and what will stay,
+ * because "delete my data" and "delete my account" are different requests and
+ * an administrator pressing this should know which one they are answering.
+ */
+function DeleteDataDialog({
+	account,
+	pending,
+	error,
+	result,
+	onCancel,
+	onConfirm,
+}: {
+	account: PisoCampAccount | null
+	pending: boolean
+	error: string | null
+	result: DeletePisoCampSubjectDataOutput | null
+	onCancel: () => void
+	onConfirm: (approvalReference: string) => void
+}) {
+	const [reference, setReference] = useState("")
+	const [problem, setProblem] = useState<string | null>(null)
+
+	function submit(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault()
+		const trimmed = reference.trim()
+		if (trimmed.length === 0) {
+			setProblem("Give the BSP approval reference this deletion was authorised under.")
+			return
+		}
+		setProblem(null)
+		onConfirm(trimmed)
+	}
+
+	return (
+		<Dialog
+			open={account !== null}
+			onOpenChange={open => {
+				if (!open) {
+					setReference("")
+					setProblem(null)
+					onCancel()
+				}
+			}}
+		>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>Delete {account?.name}&apos;s data</DialogTitle>
+					<DialogDescription>
+						Their profile, device links and trivia answers are removed and their sessions
+						ended. Their consent records are kept as proof that collection was lawful, and
+						usage analytics are kept because they were never linked to this person. This
+						cannot be undone.
+					</DialogDescription>
+				</DialogHeader>
+
+				{result ? (
+					<div className="space-y-2 text-sm">
+						<p role="status">Data deleted.</p>
+						<ul className="text-muted-foreground list-disc pl-5">
+							<li>Profile removed: {result.profileDeleted ? "yes" : "none was stored"}</li>
+							<li>Sessions ended: {result.sessionsEnded}</li>
+							<li>Device links removed: {result.deviceLinksRemoved}</li>
+							<li>Trivia answers deleted: {result.triviaResponsesDeleted}</li>
+							<li>Survey answers unlinked: {result.surveyResponsesPseudonymised}</li>
+							<li>Consent records kept: {result.consentRecordsRetained}</li>
+						</ul>
+					</div>
+				) : (
+					<form className="space-y-4" onSubmit={submit} noValidate>
+						<div className="space-y-2">
+							<Label htmlFor="deletion-approval">BSP approval reference</Label>
+							<Input
+								id="deletion-approval"
+								name="approvalReference"
+								className="min-h-11"
+								autoComplete="off"
+								value={reference}
+								onChange={event => setReference(event.target.value)}
+								aria-invalid={problem ? true : undefined}
+								aria-describedby={problem ? "deletion-approval-error" : undefined}
+							/>
+							{problem ? (
+								<p id="deletion-approval-error" role="alert" className="text-destructive text-sm">
+									{problem}
+								</p>
+							) : null}
+						</div>
+
+						{error ? (
+							<Alert variant="destructive">
+								<AlertTitle>Could not delete the data</AlertTitle>
+								<AlertDescription>{error}</AlertDescription>
+							</Alert>
+						) : null}
+
+						<DialogFooter>
+							<Button type="button" variant="outline" className="min-h-11" onClick={onCancel}>
+								Cancel
+							</Button>
+							<Button
+								type="submit"
+								variant="destructive"
+								className="min-h-11"
+								disabled={pending}
+							>
+								{pending ? "Deleting…" : "Delete Data"}
+							</Button>
+						</DialogFooter>
+					</form>
+				)}
 			</DialogContent>
 		</Dialog>
 	)

@@ -8,12 +8,14 @@ const useAccounts = vi.fn()
 const useSetStatus = vi.fn()
 const useRoles = vi.fn()
 const useSetRoles = vi.fn()
+const useDeleteData = vi.fn()
 
 vi.mock("@/features/pisocamp-admin/api/accounts.hooks", () => ({
 	usePisoCampAccountsQuery: (input: unknown) => useAccounts(input),
 	useSetPisoCampAccountStatusMutation: () => useSetStatus(),
 	usePisoCampRolesQuery: () => useRoles(),
 	useSetPisoCampUserRolesMutation: () => useSetRoles(),
+	useDeletePisoCampSubjectDataMutation: () => useDeleteData(),
 }))
 
 const ROLES = [
@@ -76,6 +78,14 @@ describe("AccountManagementView", () => {
 			isPending: false,
 			isError: false,
 			error: null,
+		})
+		useDeleteData.mockReturnValue({
+			mutate: vi.fn(),
+			reset: vi.fn(),
+			isPending: false,
+			isError: false,
+			error: null,
+			data: undefined,
 		})
 	})
 
@@ -268,6 +278,94 @@ describe("AccountManagementView", () => {
 		await user.click(within(row).getByRole("button", { name: "Edit Roles" }))
 
 		expect(screen.getByText("Only an Admin may grant the Admin role")).toBeInTheDocument()
+	})
+
+	it("says what a deletion will remove and what it will keep", async () => {
+		const user = userEvent.setup()
+		render(<AccountManagementView />)
+
+		const row = screen.getByRole("row", { name: /Alice Reader/ })
+		await user.click(within(row).getByRole("button", { name: "Delete Data" }))
+
+		const dialog = screen.getByRole("dialog")
+		// "Delete my data" and "delete my account" are different requests, and
+		// an administrator pressing this should know which one they answered.
+		expect(within(dialog).getByText(/consent records are kept/i)).toBeInTheDocument()
+		expect(within(dialog).getByText(/cannot be undone/i)).toBeInTheDocument()
+	})
+
+	it("will not delete without the approval it was authorised under", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn()
+		useDeleteData.mockReturnValue({
+			mutate,
+			reset: vi.fn(),
+			isPending: false,
+			isError: false,
+			error: null,
+			data: undefined,
+		})
+		render(<AccountManagementView />)
+
+		const row = screen.getByRole("row", { name: /Alice Reader/ })
+		await user.click(within(row).getByRole("button", { name: "Delete Data" }))
+		await user.click(screen.getByRole("button", { name: "Delete Data", hidden: false }))
+
+		expect(mutate).not.toHaveBeenCalled()
+	})
+
+	it("sends the approval reference with the deletion", async () => {
+		const user = userEvent.setup()
+		const mutate = vi.fn()
+		useDeleteData.mockReturnValue({
+			mutate,
+			reset: vi.fn(),
+			isPending: false,
+			isError: false,
+			error: null,
+			data: undefined,
+		})
+		render(<AccountManagementView />)
+
+		const row = screen.getByRole("row", { name: /Alice Reader/ })
+		await user.click(within(row).getByRole("button", { name: "Delete Data" }))
+		await user.type(screen.getByLabelText("BSP approval reference"), "  DSR-2026-014  ")
+		await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete Data" }))
+
+		expect(mutate.mock.calls[0]?.[0]).toEqual({
+			accountId: "user-alice",
+			approvalReference: "DSR-2026-014",
+		})
+	})
+
+	it("reports exactly what the deletion did", async () => {
+		const user = userEvent.setup()
+		useDeleteData.mockReturnValue({
+			mutate: vi.fn(),
+			reset: vi.fn(),
+			isPending: false,
+			isError: false,
+			error: null,
+			data: {
+				accountId: "user-alice",
+				profileDeleted: true,
+				deviceLinksRemoved: 2,
+				sessionsEnded: 3,
+				surveyResponsesPseudonymised: 4,
+				triviaResponsesDeleted: 5,
+				consentRecordsRetained: 6,
+			},
+		})
+		render(<AccountManagementView />)
+
+		const row = screen.getByRole("row", { name: /Alice Reader/ })
+		await user.click(within(row).getByRole("button", { name: "Delete Data" }))
+
+		// Counted, not claimed: "we deleted your data" is something somebody has
+		// to be able to check.
+		const dialog = screen.getByRole("dialog")
+		expect(within(dialog).getByText("Sessions ended: 3")).toBeInTheDocument()
+		expect(within(dialog).getByText("Consent records kept: 6")).toBeInTheDocument()
 	})
 
 	it("offers a way back when the list could not be loaded", async () => {
