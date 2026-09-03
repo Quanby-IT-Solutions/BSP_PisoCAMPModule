@@ -121,19 +121,17 @@ class PisoCampRepository {
     return PisoCampHome.fromJson(decoded);
   }
 
+  /// The settings this build understands, from a configuration that may carry
+  /// more than it knows about.
+  ///
+  /// A key this build has never heard of is ignored rather than allowed to fail
+  /// the whole configuration — the same rule already applied to survey rules
+  /// below. The allowlist that keeps anything private out of this response is
+  /// enforced by the server's strict schema, which is where it can actually be
+  /// enforced; refusing here only guaranteed that every installed app stopped
+  /// working the day BSP added a setting.
   _PublicConfig _validatePublicConfig(Object? data) {
     if (data is! Map) throw const FormatException('Invalid Piso CAMP config');
-    const expectedKeys = <String>{
-      'module_enabled',
-      'account_prompt_enabled',
-      'config_version',
-      'survey_triggers',
-      'exit_advisory_interval_hours',
-    };
-    if (data.length != expectedKeys.length ||
-        !data.keys.every((key) => expectedKeys.contains(key))) {
-      throw const FormatException('Unexpected Piso CAMP config fields');
-    }
     if (data['module_enabled'] is! bool ||
         data['account_prompt_enabled'] is! bool ||
         data['config_version'] is! String ||

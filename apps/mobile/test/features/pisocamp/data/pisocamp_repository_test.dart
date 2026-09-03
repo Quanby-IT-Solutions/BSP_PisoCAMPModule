@@ -114,7 +114,7 @@ void main() {
   });
 
   test(
-    'falls back offline when the config response contains an extra key',
+    'keeps working when the config carries a setting this build predates',
     () async {
       final result = await PisoCampRepository(
         dioRespondingWith(<String, Object>{
@@ -122,13 +122,31 @@ void main() {
           'account_prompt_enabled': true,
           'config_version': 'seed-1',
           'survey_triggers': <Object?>[],
-        'exit_advisory_interval_hours': 24,
-          'secret': 'must-not-leak',
+          'exit_advisory_interval_hours': 24,
+          // SA-3 adds settings to this response over time. An installed app
+          // that refused the whole configuration on seeing one would stop
+          // working the day BSP turned a feature on.
+          'leaderboard_enabled': true,
+          'trivia_repeat_days': 14,
         }),
       ).loadHome().last;
 
-      expect(result.isOffline, isTrue);
-      expect(result.home.title, 'Piso CAMP');
+      expect(result.isOffline, isFalse);
+      expect(result.exitAdvisoryIntervalHours, 24);
     },
   );
+
+  test('still falls back offline when a setting it needs is missing', () async {
+    final result = await PisoCampRepository(
+      dioRespondingWith(<String, Object>{
+        'module_enabled': true,
+        'account_prompt_enabled': true,
+        'config_version': 'seed-1',
+        'survey_triggers': <Object?>[],
+      }),
+    ).loadHome().last;
+
+    expect(result.isOffline, isTrue);
+    expect(result.home.title, 'Piso CAMP');
+  });
 }

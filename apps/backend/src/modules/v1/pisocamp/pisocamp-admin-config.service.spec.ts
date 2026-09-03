@@ -9,9 +9,40 @@ jest.mock("drizzle-orm", () => ({
 	inArray: jest.fn(),
 }))
 
+jest.mock("@orpc/server", () => ({
+	ORPCError: class ORPCError extends Error {
+		constructor(
+			public readonly code: string,
+			options?: { message?: string }
+		) {
+			super(options?.message ?? code)
+		}
+	},
+}))
+
 jest.mock("@/common/database/database.client", () => ({
 	db: { select: jest.fn(), transaction: jest.fn() },
 }))
+
+
+/** Every key the contract requires, so a case can name only what it is about. */
+function fullConfig(overrides: Record<string, unknown> = {}) {
+	type AdminConfig = Parameters<PisoCampAdminConfigService["update"]>[0]
+	return {
+		session_inactivity_minutes: 30,
+		exit_advisory_interval_hours: 24,
+		churn_inactivity_days: 30,
+		trivia_repeat_days: 30,
+		leaderboard_enabled: false,
+		key_action_events: ["content_view"],
+		age_group_buckets: [{ minAge: 0, maxAge: null }],
+		suppression_minimum: 10,
+		recognition_confidence_threshold: 0.8,
+		// Null keeps the notice lookup out of the cases that are not about it.
+		active_privacy_notice_version: null,
+		...overrides,
+	} as unknown as AdminConfig
+}
 
 const mockDb = jest.requireMock("@/common/database/database.client").db as {
 	select: jest.Mock
@@ -32,7 +63,7 @@ describe("PisoCampAdminConfigService", () => {
 		selectWhere.mockResolvedValue([{ key: "session_inactivity_minutes", value: 45 }])
 		const service = new PisoCampAdminConfigService({ record: jest.fn() } as never)
 
-		await expect(service.get()).resolves.toEqual({
+		await expect(service.get()).resolves.toMatchObject({
 			session_inactivity_minutes: 45,
 			exit_advisory_interval_hours: 24,
 			churn_inactivity_days: 30,
@@ -48,7 +79,7 @@ describe("PisoCampAdminConfigService", () => {
 		])
 		const service = new PisoCampAdminConfigService({ record: jest.fn() } as never)
 
-		await expect(service.get()).resolves.toEqual({
+		await expect(service.get()).resolves.toMatchObject({
 			session_inactivity_minutes: 30,
 			exit_advisory_interval_hours: 24,
 			churn_inactivity_days: 30,
@@ -59,7 +90,7 @@ describe("PisoCampAdminConfigService", () => {
 		selectWhere.mockResolvedValue([])
 		const service = new PisoCampAdminConfigService({ record: jest.fn() } as never)
 
-		await expect(service.get()).resolves.toEqual({
+		await expect(service.get()).resolves.toMatchObject({
 			session_inactivity_minutes: 30,
 			exit_advisory_interval_hours: 24,
 			churn_inactivity_days: 30,
@@ -73,25 +104,26 @@ describe("PisoCampAdminConfigService", () => {
 		const txSelect = jest.fn(() => ({ from: jest.fn(() => ({ where: lockWhere })) }))
 		const onConflictDoUpdate = jest.fn().mockResolvedValue(undefined)
 		const values = jest.fn(() => ({ onConflictDoUpdate }))
-		const tx = { select: txSelect, insert: jest.fn(() => ({ values })) }
+		const tx = {
+			select: txSelect,
+			insert: jest.fn(() => ({ values })),
+			delete: jest.fn(() => ({ where: jest.fn().mockResolvedValue(undefined) })),
+		}
 		mockDb.transaction.mockImplementation(async work => work(tx))
 		const service = new PisoCampAdminConfigService(auditService as never)
 
 		await expect(
 			service.update({
+				...fullConfig({ session_inactivity_minutes: 60, churn_inactivity_days: 45 }),
 				actorId: "actor-1",
-				session_inactivity_minutes: 60,
-				exit_advisory_interval_hours: 24,
-				churn_inactivity_days: 45,
 			})
-		).resolves.toEqual({
+		).resolves.toMatchObject({
 			session_inactivity_minutes: 60,
 			exit_advisory_interval_hours: 24,
 			churn_inactivity_days: 45,
 		})
-		// One entry per setting, so a later question about any one of them has an
-		// answer that names it.
-		expect(auditService.record).toHaveBeenCalledTimes(3)
+		// One entry per setting that actually moved, so a later question about
+		// any one of them has an answer that names it.
 		expect(auditService.record).toHaveBeenCalledWith(
 			{
 				domain: "pisocamp",
@@ -104,6 +136,13 @@ describe("PisoCampAdminConfigService", () => {
 			},
 			tx
 		)
+		// An unchanged setting is not an event: the interval stayed at 24, so
+		// nothing about it belongs in the trail.
+		const audited = auditService.record.mock.calls.map(
+			([entry]: [{ targetId: string }]) => entry.targetId
+		)
+		expect(audited).toContain("session_inactivity_minutes")
+		expect(audited).not.toContain("exit_advisory_interval_hours")
 	})
 
 	it("rejects the transaction when audit persistence fails", async () => {
@@ -118,6 +157,7 @@ describe("PisoCampAdminConfigService", () => {
 			insert: jest.fn(() => ({
 				values: jest.fn(() => ({ onConflictDoUpdate: jest.fn().mockResolvedValue(undefined) })),
 			})),
+			delete: jest.fn(() => ({ where: jest.fn().mockResolvedValue(undefined) })),
 		}
 		let committed = false
 		mockDb.transaction.mockImplementation(async work => {
@@ -129,10 +169,8 @@ describe("PisoCampAdminConfigService", () => {
 
 		await expect(
 			service.update({
+				...fullConfig({ session_inactivity_minutes: 60 }),
 				actorId: "actor-1",
-				session_inactivity_minutes: 60,
-				exit_advisory_interval_hours: 24,
-				churn_inactivity_days: 30,
 			})
 		).rejects.toBe(auditFailure)
 		expect(committed).toBe(false)

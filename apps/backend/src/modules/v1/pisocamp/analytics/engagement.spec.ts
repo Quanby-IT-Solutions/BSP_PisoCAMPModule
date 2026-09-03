@@ -11,6 +11,18 @@ import { PisoCampAdminConfigService } from "../pisocamp-admin-config.service"
 import { EngagementService } from "./engagement.service"
 import { SessionizerService } from "./sessionizer.service"
 
+jest.mock("@orpc/server", () => ({
+	ORPCError: class ORPCError extends Error {
+		constructor(
+			public readonly code: string,
+			options?: { message?: string }
+		) {
+			super(options?.message ?? code)
+			this.name = "ORPCError"
+		}
+	},
+}))
+
 const ADMIN_ID = "an2-admin"
 
 /** Two subjects, so "per user" figures have something to divide by. */

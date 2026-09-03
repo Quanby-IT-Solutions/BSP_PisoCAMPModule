@@ -23,13 +23,20 @@ export class PisoCampService {
 	 *
 	 * EV-3's rules and EV-4's advisory interval are part of it because a device
 	 * decides when to ask and when to advise — offline included — and none of
-	 * those facts names anybody.
+	 * those facts names anybody. SA-3 adds the rest of what a device acts on
+	 * for itself, from the same administrator-managed registry.
 	 */
 	async getPublicConfig(): Promise<V1Outputs["pisocamp"]["config"]["get"]> {
+		const config = await this.adminConfig.get()
+
 		return {
 			...staticConfig,
 			survey_triggers: await this.triggers.publicRules(),
-			exit_advisory_interval_hours: await this.adminConfig.exitAdvisoryIntervalHours(),
+			exit_advisory_interval_hours: config.exit_advisory_interval_hours,
+			leaderboard_enabled: config.leaderboard_enabled,
+			trivia_repeat_days: config.trivia_repeat_days,
+			recognition_confidence_threshold: config.recognition_confidence_threshold,
+			active_privacy_notice_version: config.active_privacy_notice_version,
 		}
 	}
 }

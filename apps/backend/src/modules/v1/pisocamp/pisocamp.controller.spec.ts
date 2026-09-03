@@ -91,8 +91,23 @@ describe("PisoCampController", () => {
 	// EV-3: the public configuration carries the trigger rules, so the service
 	// has a collaborator now. The rules themselves are proven elsewhere.
 	const triggerService = { publicRules: jest.fn().mockResolvedValue([]) }
-	// EV-4: the interval reaches devices through the same public config.
-	const configReader = { exitAdvisoryIntervalHours: jest.fn().mockResolvedValue(24) }
+	// EV-4 and SA-3: the device-facing settings reach devices through the same
+	// public config, read from the one administrator-managed registry.
+	const configReader = {
+		exitAdvisoryIntervalHours: jest.fn().mockResolvedValue(24),
+		get: jest.fn().mockResolvedValue({
+			session_inactivity_minutes: 30,
+			exit_advisory_interval_hours: 24,
+			churn_inactivity_days: 30,
+			trivia_repeat_days: 30,
+			leaderboard_enabled: false,
+			key_action_events: ["content_view"],
+			age_group_buckets: [{ minAge: 0, maxAge: null }],
+			suppression_minimum: 10,
+			recognition_confidence_threshold: 0.8,
+			active_privacy_notice_version: null,
+		}),
+	}
 
 	beforeEach(async () => {
 		const module: TestingModule = await Test.createTestingModule({
@@ -201,6 +216,10 @@ describe("PisoCampController", () => {
 			config_version: "seed-1",
 			survey_triggers: [],
 			exit_advisory_interval_hours: 24,
+			leaderboard_enabled: false,
+			trivia_repeat_days: 30,
+			recognition_confidence_threshold: 0.8,
+			active_privacy_notice_version: null,
 		})
 	})
 

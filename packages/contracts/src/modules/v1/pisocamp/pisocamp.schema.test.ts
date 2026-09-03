@@ -130,6 +130,10 @@ describe("PisoCampPublicConfigSchema", () => {
 			config_version: "seed-1",
 			survey_triggers: [],
 			exit_advisory_interval_hours: 24,
+			leaderboard_enabled: false,
+			trivia_repeat_days: 30,
+			recognition_confidence_threshold: 0.8,
+			active_privacy_notice_version: "2024-12-26",
 		}
 
 		expect(PisoCampPublicConfigSchema.parse(config)).toEqual(config)
@@ -169,6 +173,25 @@ describe("PisoCampAdminConfigSchema", () => {
 			session_inactivity_minutes: value,
 			exit_advisory_interval_hours: 24,
 			churn_inactivity_days: 30,
+			trivia_repeat_days: 30,
+			leaderboard_enabled: false,
+			key_action_events: [
+				"content_view",
+				"feature_use",
+				"trivia_prompt_answered",
+				"survey_submitted",
+			],
+			age_group_buckets: [
+				{ minAge: 0, maxAge: 17 },
+				{ minAge: 18, maxAge: 24 },
+				{ minAge: 25, maxAge: 34 },
+				{ minAge: 35, maxAge: 44 },
+				{ minAge: 45, maxAge: 59 },
+				{ minAge: 60, maxAge: null },
+			],
+			suppression_minimum: 10,
+			recognition_confidence_threshold: 0.8,
+			active_privacy_notice_version: null,
 		})
 	})
 
@@ -187,6 +210,13 @@ describe("PisoCampAdminConfigSchema", () => {
 				session_inactivity_minutes: 30,
 				exit_advisory_interval_hours: value,
 				churn_inactivity_days: 30,
+				trivia_repeat_days: 30,
+				leaderboard_enabled: false,
+				key_action_events: ["content_view"],
+				age_group_buckets: [{ minAge: 0, maxAge: null }],
+				suppression_minimum: 10,
+				recognition_confidence_threshold: 0.8,
+				active_privacy_notice_version: "2024-12-26",
 			})
 		).toThrow()
 	})
@@ -207,6 +237,25 @@ describe("PisoCampAdminConfigSchema", () => {
 			session_inactivity_minutes: 30,
 			exit_advisory_interval_hours: 24,
 			churn_inactivity_days: 30,
+			trivia_repeat_days: 30,
+			leaderboard_enabled: false,
+			key_action_events: [
+				"content_view",
+				"feature_use",
+				"trivia_prompt_answered",
+				"survey_submitted",
+			],
+			age_group_buckets: [
+				{ minAge: 0, maxAge: 17 },
+				{ minAge: 18, maxAge: 24 },
+				{ minAge: 25, maxAge: 34 },
+				{ minAge: 35, maxAge: 44 },
+				{ minAge: 45, maxAge: 59 },
+				{ minAge: 60, maxAge: null },
+			],
+			suppression_minimum: 10,
+			recognition_confidence_threshold: 0.8,
+			active_privacy_notice_version: null,
 		})
 	})
 
@@ -226,8 +275,77 @@ describe("PisoCampAdminConfigSchema", () => {
 				session_inactivity_minutes: 30,
 				exit_advisory_interval_hours: 24,
 				churn_inactivity_days: value,
+				trivia_repeat_days: 30,
+				leaderboard_enabled: false,
+				key_action_events: ["content_view"],
+				age_group_buckets: [{ minAge: 0, maxAge: null }],
+				suppression_minimum: 10,
+				recognition_confidence_threshold: 0.8,
+				active_privacy_notice_version: "2024-12-26",
 			})
 		).toThrow()
+	})
+
+	it.each([
+		["age groups that overlap", [{ minAge: 0, maxAge: 20 }, { minAge: 18, maxAge: null }]],
+		["age groups out of order", [{ minAge: 30, maxAge: 40 }, { minAge: 0, maxAge: null }]],
+		["a closed last age group", [{ minAge: 0, maxAge: 65 }]],
+		["a bucket that ends before it starts", [{ minAge: 30, maxAge: 20 }]],
+		["no age groups at all", []],
+	])("refuses %s", (_label, buckets) => {
+		// Overlapping buckets put one person in two groups and make the
+		// percentages add up to more than everybody; a closed last bucket leaves
+		// the oldest people in none.
+		expect(
+			PisoCampAdminConfigSchema.safeParse({ age_group_buckets: buckets }).success
+		).toBe(false)
+	})
+
+	it("takes age groups that tile every age exactly once", () => {
+		expect(
+			PisoCampAdminConfigSchema.safeParse({
+				age_group_buckets: [
+					{ minAge: 0, maxAge: 17 },
+					{ minAge: 18, maxAge: null },
+				],
+			}).success
+		).toBe(true)
+	})
+
+	it("insists on at least one key action", () => {
+		// Time-to-first-key-action with no key actions has nothing to wait for.
+		expect(
+			PisoCampAdminConfigSchema.safeParse({ key_action_events: [] }).success
+		).toBe(false)
+		expect(
+			PisoCampAdminConfigSchema.safeParse({ key_action_events: ["not_an_event"] }).success
+		).toBe(false)
+	})
+
+	it.each([1, 1.5, 1001])("refuses a suppression minimum of %s", value => {
+		// One is not suppression: a group of one is that person.
+		expect(
+			PisoCampAdminConfigSchema.safeParse({ suppression_minimum: value }).success
+		).toBe(false)
+	})
+
+	it.each([0.4, 1.1])("refuses a recognition threshold of %s", value => {
+		expect(
+			PisoCampAdminConfigSchema.safeParse({ recognition_confidence_threshold: value })
+				.success
+		).toBe(false)
+	})
+
+	it("takes no active notice version at all", () => {
+		// Null, not "": a module that has not been given a notice yet has not
+		// been given the empty one.
+		expect(
+			PisoCampAdminConfigSchema.parse({ active_privacy_notice_version: null })
+				.active_privacy_notice_version
+		).toBeNull()
+		expect(
+			PisoCampAdminConfigSchema.safeParse({ active_privacy_notice_version: "" }).success
+		).toBe(false)
 	})
 
 	it("requires every update key and rejects unknown ones", () => {
@@ -246,6 +364,13 @@ describe("PisoCampAdminConfigSchema", () => {
 				session_inactivity_minutes: 30,
 				exit_advisory_interval_hours: 24,
 				churn_inactivity_days: 30,
+				trivia_repeat_days: 30,
+				leaderboard_enabled: false,
+				key_action_events: ["content_view"],
+				age_group_buckets: [{ minAge: 0, maxAge: null }],
+				suppression_minimum: 10,
+				recognition_confidence_threshold: 0.8,
+				active_privacy_notice_version: "2024-12-26",
 				unexpected: true,
 			})
 		).toThrow()

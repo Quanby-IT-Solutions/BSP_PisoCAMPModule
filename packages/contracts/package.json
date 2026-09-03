@@ -41,6 +41,10 @@
 			"types": "./dist/modules/v1/pisocamp/adoption.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/adoption.schema.js"
 		},
+		"./pisocamp-config": {
+			"types": "./dist/modules/v1/pisocamp/pisocamp.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/pisocamp.schema.js"
+		},
 		"./pisocamp-account": {
 			"types": "./dist/modules/v1/pisocamp/account.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/account.schema.js"

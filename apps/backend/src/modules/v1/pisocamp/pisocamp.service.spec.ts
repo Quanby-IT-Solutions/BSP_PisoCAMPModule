@@ -22,11 +22,26 @@ const rule = {
 	priority: 10,
 }
 
-function serviceWith(rules: (typeof rule)[], intervalHours = 24) {
+function serviceWith(
+	rules: (typeof rule)[],
+	overrides: Record<string, unknown> = {}
+) {
 	return new PisoCampService(
 		{ publicRules: async () => rules } as unknown as SurveyTriggerService,
 		{
-			exitAdvisoryIntervalHours: async () => intervalHours,
+			get: async () => ({
+				session_inactivity_minutes: 30,
+				exit_advisory_interval_hours: 24,
+				churn_inactivity_days: 30,
+				trivia_repeat_days: 30,
+				leaderboard_enabled: false,
+				key_action_events: ["content_view"],
+				age_group_buckets: [{ minAge: 0, maxAge: null }],
+				suppression_minimum: 10,
+				recognition_confidence_threshold: 0.8,
+				active_privacy_notice_version: null,
+				...overrides,
+			}),
 		} as unknown as PisoCampAdminConfigService
 	)
 }
@@ -39,13 +54,33 @@ describe("PisoCampService", () => {
 			config_version: "seed-1",
 			survey_triggers: [],
 			exit_advisory_interval_hours: 24,
+			leaderboard_enabled: false,
+			trivia_repeat_days: 30,
+			recognition_confidence_threshold: 0.8,
+			active_privacy_notice_version: null,
 		})
 	})
 
 	it("carries EV-4's advisory interval to the device", async () => {
-		await expect(serviceWith([], 6).getPublicConfig()).resolves.toMatchObject({
-			exit_advisory_interval_hours: 6,
-		})
+		await expect(
+			serviceWith([], { exit_advisory_interval_hours: 6 }).getPublicConfig()
+		).resolves.toMatchObject({ exit_advisory_interval_hours: 6 })
+	})
+
+	it("carries SA-3's device-facing settings, and none of the rest", async () => {
+		const config = await serviceWith([], {
+			leaderboard_enabled: true,
+			trivia_repeat_days: 14,
+		}).getPublicConfig()
+
+		expect(config).toMatchObject({ leaderboard_enabled: true, trivia_repeat_days: 14 })
+		// The analytics settings are the server's business: a device has no use
+		// for them and an unauthenticated response is no place to put them.
+		expect(config).not.toHaveProperty("suppression_minimum")
+		expect(config).not.toHaveProperty("key_action_events")
+		expect(config).not.toHaveProperty("age_group_buckets")
+		expect(config).not.toHaveProperty("churn_inactivity_days")
+		expect(config).not.toHaveProperty("session_inactivity_minutes")
 	})
 
 	it("carries EV-3's trigger rules to the device", async () => {

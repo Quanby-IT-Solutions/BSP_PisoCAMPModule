@@ -83,6 +83,10 @@ describe("survey trigger rules", () => {
 			account_prompt_enabled: true,
 			config_version: "seed-1",
 			exit_advisory_interval_hours: 24,
+			leaderboard_enabled: false,
+			trivia_repeat_days: 30,
+			recognition_confidence_threshold: 0.8,
+			active_privacy_notice_version: null,
 			survey_triggers: [
 				{
 					contentItemId: base.contentItemId,

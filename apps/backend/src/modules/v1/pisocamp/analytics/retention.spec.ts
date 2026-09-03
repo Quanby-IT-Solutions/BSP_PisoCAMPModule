@@ -10,6 +10,18 @@ import { assertDisposablePostgres } from "@/test-support/destructive-database.gu
 import { PisoCampAdminConfigService } from "../pisocamp-admin-config.service"
 import { RetentionService } from "./retention.service"
 
+jest.mock("@orpc/server", () => ({
+	ORPCError: class ORPCError extends Error {
+		constructor(
+			public readonly code: string,
+			options?: { message?: string }
+		) {
+			super(options?.message ?? code)
+			this.name = "ORPCError"
+		}
+	},
+}))
+
 const ADMIN_ID = "an4-admin"
 
 /** Four subjects, so every rate has something to divide by. */
