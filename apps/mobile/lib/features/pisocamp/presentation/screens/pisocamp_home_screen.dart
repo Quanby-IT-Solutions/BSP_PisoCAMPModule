@@ -26,6 +26,9 @@ import 'package:mobile/features/pisocamp/presentation/widgets/trivia_prompt.dart
 import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_registration_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/analytics_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/widgets/account_prompt.dart';
+import 'package:mobile/features/pisocamp/data/leaderboard_repository.dart';
+import 'package:mobile/services/api/api_client.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/leaderboard_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/privacy_settings_screen.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 
@@ -255,6 +258,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
         profileStatus: profileStatus,
         authLoading: authLoading,
         transportAvailable: transportAvailable,
+        leaderboardEnabled: state.asData?.value.leaderboardEnabled ?? false,
         prompt: prompt,
         advisory: advisory,
       ),
@@ -300,6 +304,18 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     }
   }
 
+  Future<void> _openLeaderboard(BuildContext context) async {
+    final authenticated = ref.read(isAuthenticatedProvider);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LeaderboardScreen(
+          repository: LeaderboardRepository(ref.read(dioProvider)),
+          authenticated: authenticated,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openPrivacySettings(BuildContext context) async {
     final notice = await ref
         .read(consentRepositoryProvider)
@@ -335,6 +351,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     required AsyncValue<PisoCampProfileResult?> profileStatus,
     required bool authLoading,
     required bool? transportAvailable,
+    required bool leaderboardEnabled,
     required TriviaQuestionDocument? prompt,
     required AdvisoryDocument? advisory,
   }) {
@@ -342,6 +359,13 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
       appBar: AppBar(
         title: const Text('Piso CAMP'),
         actions: <Widget>[
+          IconButton(
+            icon: const Icon(Icons.leaderboard_outlined),
+            // GM-4: hidden entirely when the flag is off, so a switched-off
+            // feature is not a door that opens onto an apology.
+            tooltip: 'Leaderboard',
+            onPressed: leaderboardEnabled ? () => _openLeaderboard(context) : null,
+          ),
           IconButton(
             icon: const Icon(Icons.privacy_tip_outlined),
             // SA-7: withdrawing a consent is something somebody has to be able

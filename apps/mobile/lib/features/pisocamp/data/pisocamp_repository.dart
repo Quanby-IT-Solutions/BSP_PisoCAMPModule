@@ -63,6 +63,7 @@ class PisoCampHomeLoadResult {
     this.accountPromptEnabled = true,
     this.surveyTriggers = const [],
     this.exitAdvisoryIntervalHours = _defaultExitAdvisoryIntervalHours,
+    this.leaderboardEnabled = false,
   });
 
   final PisoCampHome home;
@@ -76,6 +77,9 @@ class PisoCampHomeLoadResult {
   /// EV-4's interval. The default stands until configuration is read, so the
   /// advisory still appears on a device that has never reached the server.
   final int exitAdvisoryIntervalHours;
+
+  /// GM-4. False until BSP turns the leaderboard on.
+  final bool leaderboardEnabled;
 }
 
 /// The contract's default, repeated here for the offline first emission.
@@ -107,6 +111,7 @@ class PisoCampRepository {
         accountPromptEnabled: config.accountPromptEnabled,
         surveyTriggers: config.surveyTriggers,
         exitAdvisoryIntervalHours: config.exitAdvisoryIntervalHours,
+        leaderboardEnabled: config.leaderboardEnabled,
       );
     } on Object {
       // The first emission is already the safe offline fallback.
@@ -146,6 +151,11 @@ class PisoCampRepository {
       // to fail the whole configuration: the module still works without it.
       surveyTriggers: SurveyTriggerRule.listFromJson(data['survey_triggers']),
       exitAdvisoryIntervalHours: data['exit_advisory_interval_hours'] as int,
+      // GM-4's flag, defaulted when a server predates it — a build that
+      // demanded it would refuse a configuration it could otherwise use.
+      leaderboardEnabled: data['leaderboard_enabled'] is bool
+          ? data['leaderboard_enabled'] as bool
+          : false,
     );
   }
 }
@@ -156,6 +166,7 @@ class _PublicConfig {
     required this.accountPromptEnabled,
     this.surveyTriggers = const [],
     this.exitAdvisoryIntervalHours = _defaultExitAdvisoryIntervalHours,
+    this.leaderboardEnabled = false,
   });
   final bool moduleEnabled;
   final bool accountPromptEnabled;
@@ -165,6 +176,9 @@ class _PublicConfig {
 
   /// EV-4's interval, in hours.
   final int exitAdvisoryIntervalHours;
+
+  /// GM-4's flag.
+  final bool leaderboardEnabled;
 }
 
 @riverpod

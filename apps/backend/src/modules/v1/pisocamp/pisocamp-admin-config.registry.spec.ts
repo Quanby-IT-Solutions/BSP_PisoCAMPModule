@@ -154,6 +154,20 @@ describe("SA-3 module configuration registry", () => {
 		})
 	})
 
+	describe("GM-4 — the leaderboard flag is a configuration key like any other", () => {
+		it("turns the leaderboard on and audits who did it", async () => {
+			const saved = await save({ leaderboard_enabled: true })
+
+			expect(saved.leaderboard_enabled).toBe(true)
+			const rows = await db.select().from(auditLog)
+			expect(rows.map(row => row.targetId)).toEqual(["leaderboard_enabled"])
+			// GM-4 AC6 is F2's gate: the handler carries `admin.config.manage`,
+			// and both branches of it are proven in the configuration
+			// authorization spec rather than a second time here.
+			expect(rows[0]).toMatchObject({ actorId: ADMIN_ID, oldValue: false, newValue: true })
+		})
+	})
+
 	describe("the active privacy notice version", () => {
 		it("refuses a version that is not stored, and changes nothing", async () => {
 			await expect(save({ active_privacy_notice_version: "not-a-version" })).rejects.toMatchObject(

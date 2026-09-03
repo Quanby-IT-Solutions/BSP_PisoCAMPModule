@@ -489,6 +489,14 @@ export const pisoCampProfiles = createTable(
 			.notNull()
 			.references(() => pisoCampRegions.code, { onDelete: "restrict" }),
 		cityCode: t.text("city_code").notNull(),
+		/**
+		 * GM-4. The name shown on the leaderboard, and the only one shown.
+		 *
+		 * Chosen, or generated when it is not: a leaderboard that fell back to a
+		 * real name or an address would publish exactly what the module is
+		 * careful never to publish. Nullable because F3's profiles predate it.
+		 */
+		leaderboardAlias: t.text("leaderboard_alias"),
 		registrationConsentRecordId: t
 			.uuid("registration_consent_record_id")
 			.notNull()
@@ -1583,6 +1591,55 @@ export const relatedLinks = createTable(
 )
 
 // ============================================================================
+// GM-4 LEADERBOARD
+// ============================================================================
+
+/**
+ * One account's standing in one period.
+ *
+ * Keyed by period rather than by "now": a leaderboard that only knew the
+ * current standings could not say whether somebody had gone up or down, and
+ * rank movement is the part that makes it worth looking at twice.
+ *
+ * The scoring job is idempotent per period — it recomputes a period from the
+ * trivia responses in it and replaces what it wrote before — so running it
+ * twice, or after a late upload lands, leaves the same answer.
+ */
+export const leaderboardEntries = createTable(
+	"leaderboard_entry",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		/** Which kind of period, and which one of them. */
+		periodType: t.text("period_type").notNull().$type<"weekly" | "monthly" | "all_time">(),
+		/** The Asia/Manila day the period begins. All-time uses a fixed epoch. */
+		periodStart: t.date("period_start").notNull(),
+		accountId: t
+			.text("account_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		score: t.integer("score").notNull(),
+		rank: t.integer("rank").notNull(),
+		/** Places gained since the previous period of the same kind. */
+		rankMovement: t.integer("rank_movement"),
+		computedAt: t.timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("leaderboard_entry_period_account_unique").on(
+			t.periodType,
+			t.periodStart,
+			t.accountId
+		),
+		check(
+			"leaderboard_entry_period_type_check",
+			sql`${t.periodType} in ('weekly', 'monthly', 'all_time')`
+		),
+		check("leaderboard_entry_score_check", sql`${t.score} >= 0`),
+		check("leaderboard_entry_rank_check", sql`${t.rank} >= 1`),
+		index("leaderboard_entry_period_rank_idx").on(t.periodType, t.periodStart, t.rank),
+	]
+)
+
+// ============================================================================
 // AN-8 REPORT FRAMEWORK
 // ============================================================================
 
@@ -1736,6 +1793,7 @@ export const relations = defineRelations(
 		contentBundleChannels,
 		contentBundleRebuildRequests,
 		relatedLinks,
+		leaderboardEntries,
 		reportDefinitions,
 		reportRuns,
 		auditLog,
