@@ -21,6 +21,8 @@ import type {
 	DemographicDrilldown,
 	DemographicDrilldownInput,
 	DemographicsSummary,
+	AcquisitionSummary,
+	ImportStoreMetricsInput,
 } from "@repo/contracts"
 
 import { orpc } from "@/services/orpc/client"
@@ -147,6 +149,49 @@ export function useDemographicDrilldownQuery(input: DemographicDrilldownInput) {
 	return useQuery<DemographicDrilldown, Error>(
 		options as unknown as UseQueryOptions<DemographicDrilldown, Error>
 	)
+}
+
+export function useAcquisitionSummaryQuery(input: EngagementRangeInput) {
+	const options = orpc.pisocamp.analytics.acquisition.queryOptions({
+		input,
+		networkMode: "online",
+		staleTime: 60_000,
+	})
+
+	return useQuery<AcquisitionSummary, Error>(
+		options as unknown as UseQueryOptions<AcquisitionSummary, Error>
+	)
+}
+
+/**
+ * AN-11's store import.
+ *
+ * Invalidates the acquisition figures and AN-6's survey results on success:
+ * importing a store rating changes what the survey report may claim about
+ * consolidation, and a stale disclaimer would be a lie with a short life.
+ */
+export function useImportStoreMetricsMutation() {
+	const queryClient = useQueryClient()
+
+	return useMutation<
+		{ imported: number; replaced: number },
+		Error,
+		ImportStoreMetricsInput
+	>({
+		mutationFn: input =>
+			orpc.pisocamp.monitoring.importStoreMetrics.call(input) as unknown as Promise<{
+				imported: number
+				replaced: number
+			}>,
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({
+				queryKey: orpc.pisocamp.analytics.acquisition.key(),
+			})
+			await queryClient.invalidateQueries({
+				queryKey: orpc.pisocamp.analytics.surveys.key(),
+			})
+		},
+	})
 }
 
 export function useAdoptionSummaryQuery(input: EngagementRangeInput) {

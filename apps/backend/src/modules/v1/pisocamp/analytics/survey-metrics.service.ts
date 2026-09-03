@@ -139,6 +139,17 @@ export class SurveyMetricsService {
 			`)
 		).rows
 
+		// AN-11's seam: whether any store rating has been imported for the range.
+		// Before AN-11 this was always false; now it says what is actually true.
+		const [storeRatings] = (
+			await db.execute<{ periods: string }>(sql`
+				select count(*)::text as "periods"
+				from store_metric_import
+				where period_start >= ${input.from}::date and period_end <= ${input.to}::date
+					and rating_count is not null
+			`)
+		).rows
+
 		const prompts = (
 			await db.execute<{ contentItemId: string; shown: string; declined: string }>(sql`
 				-- An event names the survey by the logical id the bundle gave it,
@@ -256,9 +267,10 @@ export class SurveyMetricsService {
 				granted: surveys.reduce((sum, survey) => sum + survey.consent.granted, 0),
 				withdrawn: surveys.reduce((sum, survey) => sum + survey.consent.withdrawn, 0),
 			},
-			// AN-11 imports the store ratings; until it lands, saying so is more
-			// honest than a "consolidated" figure that is only the in-app half.
-			storeRatingsAvailable: false,
+			// True only when AN-11 has actually imported a store rating covering
+			// this range: a consolidated figure that is only the in-app half
+			// would be a claim about data nobody has.
+			storeRatingsAvailable: Number(storeRatings?.periods ?? 0) > 0,
 			surveys,
 		}
 	}

@@ -28,7 +28,11 @@ jest.mock("@orpc/server", () => ({
 jest.mock("@/config/api-versions.config", () => ({
 	v1: {
 		pisocamp: {
-			monitoring: { import: "import", recordPerformanceTest: "recordPerformanceTest" },
+			monitoring: {
+				import: "import",
+				importStoreMetrics: "importStoreMetrics",
+				recordPerformanceTest: "recordPerformanceTest",
+			},
 		},
 	},
 }))
@@ -162,6 +166,13 @@ describe("monitoring import authorization", () => {
 		await bothWays(
 			MonitoringController.prototype.recordPerformanceTest,
 			"MonitoringController.recordPerformanceTest"
+		)
+	})
+
+	it("gates the store import the same way", async () => {
+		await bothWays(
+			MonitoringController.prototype.importStoreMetrics,
+			"MonitoringController.importStoreMetrics"
 		)
 	})
 

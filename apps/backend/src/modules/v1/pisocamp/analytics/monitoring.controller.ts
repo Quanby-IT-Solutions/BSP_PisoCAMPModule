@@ -6,6 +6,7 @@ import { Session, type UserSession } from "@thallesp/nestjs-better-auth"
 import { v1 } from "@/config/api-versions.config"
 import { RequirePermissions } from "@/shared/decorators/require-permissions.decorator"
 
+import { AcquisitionService } from "./acquisition.service"
 import { MonitoringImportService } from "./monitoring-import.service"
 
 /**
@@ -17,13 +18,24 @@ import { MonitoringImportService } from "./monitoring-import.service"
  */
 @Controller()
 export class MonitoringController {
-	constructor(private readonly monitoring: MonitoringImportService) {}
+	constructor(
+		private readonly monitoring: MonitoringImportService,
+		private readonly acquisition: AcquisitionService
+	) {}
 
 	@RequirePermissions("admin.integrations.manage")
 	@Implement(v1.pisocamp.monitoring.import)
 	import(@Session() session: UserSession) {
 		return implement(v1.pisocamp.monitoring.import).handler(({ input }) =>
 			this.monitoring.importMetrics(input, session.user.id)
+		)
+	}
+
+	@RequirePermissions("admin.integrations.manage")
+	@Implement(v1.pisocamp.monitoring.importStoreMetrics)
+	importStoreMetrics(@Session() session: UserSession) {
+		return implement(v1.pisocamp.monitoring.importStoreMetrics).handler(({ input }) =>
+			this.acquisition.importStoreMetrics(input, session.user.id)
 		)
 	}
 

@@ -11,6 +11,7 @@ import { StrictThrottle } from "@/shared/decorators/strict-throttle.decorator"
 import { AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
+import { AcquisitionService } from "./acquisition.service"
 import { DemographicsService } from "./demographics.service"
 import { GamificationService } from "./gamification.service"
 import { SurveyMetricsService } from "./survey-metrics.service"
@@ -28,6 +29,7 @@ export class AnalyticsController {
 		private readonly surveyMetricsService: SurveyMetricsService,
 		private readonly technicalMetricsService: TechnicalMetricsService,
 		private readonly demographicsService: DemographicsService,
+		private readonly acquisitionService: AcquisitionService,
 		private readonly logger: Logger
 	) {}
 
@@ -113,6 +115,14 @@ export class AnalyticsController {
 	}
 
 	@RequirePermissions("reports.dashboards.view")
+	@Implement(v1.pisocamp.analytics.acquisition)
+	acquisition() {
+		return implement(v1.pisocamp.analytics.acquisition).handler(({ input }) =>
+			this.runSafely("acquisition", () => this.acquisitionService.summary(input))
+		)
+	}
+
+	@RequirePermissions("reports.dashboards.view")
 	@Implement(v1.pisocamp.analytics.moduleEntryToday)
 	moduleEntryToday() {
 		return implement(v1.pisocamp.analytics.moduleEntryToday).handler(() =>
@@ -131,7 +141,8 @@ export class AnalyticsController {
 			| "surveys"
 			| "technical"
 			| "demographics"
-			| "demographicDrilldown",
+			| "demographicDrilldown"
+			| "acquisition",
 		work: () => Promise<T>
 	) {
 		try {

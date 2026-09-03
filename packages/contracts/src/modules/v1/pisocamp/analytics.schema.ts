@@ -35,6 +35,7 @@ export const ANALYTICS_EVENT_NAMES = [
 	"profile_created",
 	"module_load",
 	"network_failure",
+	"first_open",
 ] as const
 
 /**
@@ -231,6 +232,16 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 				logicalId: z.string().trim().min(1).max(128),
 			})
 			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
+		eventName: z.literal("first_open"),
+		screen: z.literal("pisocamp_home"),
+		feature: z.literal("module"),
+		status: z.literal("completed"),
+		// Nothing at all: the fact that this device opened the module for the
+		// first time is the whole of the event, and anything else would make an
+		// install traceable to a person.
+		properties: z.object({}).strict(),
 	}).strict(),
 	AnalyticsCommonSchema.extend({
 		eventName: z.literal("module_load"),

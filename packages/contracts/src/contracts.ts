@@ -395,6 +395,27 @@ export type {
 	DemographicsSummary,
 } from "./modules/v1/pisocamp/demographics.schema.js"
 
+// AN-11 install volume and store ratings
+export {
+	AcquisitionRangeInputSchema,
+	AcquisitionSummarySchema,
+	ImportStoreMetricsInputSchema,
+	ImportStoreMetricsOutputSchema,
+	InstallVolumeSchema,
+	RatingConsolidationSchema,
+	STORE_SOURCES,
+	StoreMetricSchema,
+	StoreSourceSchema,
+} from "./modules/v1/pisocamp/acquisition.schema.js"
+export type {
+	AcquisitionSummary,
+	ImportStoreMetricsInput,
+	InstallVolume,
+	RatingConsolidation,
+	StoreMetric,
+	StoreSource,
+} from "./modules/v1/pisocamp/acquisition.schema.js"
+
 // GM-5 progress
 export { PisoCampProgressSchema } from "./modules/v1/pisocamp/progress.schema.js"
 export type { PisoCampProgress } from "./modules/v1/pisocamp/progress.schema.js"

@@ -318,6 +318,20 @@ void _an7Tests() {
       expect(AnalyticsEvent.fromJson(json).toJson(), json);
     });
 
+    test('a first open carries nothing at all', () {
+      final json = AnalyticsEvent.build(
+        intent: const FirstOpenIntent(),
+        context: _context(),
+        createEventId: () => '0190f49b-57a8-4b85-9d0e-5e274f0e4aa1',
+        clock: () => DateTime.parse('2026-08-30T09:02:03.123456+08:00'),
+      ).toJson();
+
+      expect(json['eventName'], 'first_open');
+      // Anything else would make an install traceable to a person.
+      expect(json['properties'], const <String, Object?>{});
+      expect(AnalyticsEvent.fromJson(json).toJson(), json);
+    });
+
     test('refuses a load longer than the contract allows', () {
       final vector = Map<String, Object?>.from(
         vectorsForTest.firstWhere(

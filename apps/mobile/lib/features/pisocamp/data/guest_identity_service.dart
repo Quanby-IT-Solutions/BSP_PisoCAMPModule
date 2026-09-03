@@ -9,6 +9,7 @@ class GuestIdentityService {
 
   static const _devicePseudoIdKey = 'device_pseudo_id';
   static const _continuedAsGuestKey = 'pisocamp_continued_as_guest';
+  static const _firstOpenReportedKey = 'pisocamp_first_open_reported';
 
   final SecureStorageService _storage;
 
@@ -24,6 +25,17 @@ class GuestIdentityService {
 
   Future<bool> hasContinuedAsGuest() async {
     return (await _storage.readValue(_continuedAsGuestKey)) == 'true';
+  }
+
+  /// AN-11. Whether this install has already reported its first open.
+  ///
+  /// Returns true exactly once per install, so a device that opens the module
+  /// every day is one install rather than a hundred. Reinstalling clears the
+  /// storage and counts again, which is what an install count means.
+  Future<bool> claimFirstOpen() async {
+    if ((await _storage.readValue(_firstOpenReportedKey)) == 'true') return false;
+    await _storage.writeValue(_firstOpenReportedKey, 'true');
+    return true;
   }
 
   Future<void> continueAsGuest() async {

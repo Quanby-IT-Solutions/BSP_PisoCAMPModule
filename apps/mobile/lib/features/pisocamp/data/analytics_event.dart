@@ -313,6 +313,25 @@ final class ProfileCreatedIntent extends AnalyticsIntent {
   Map<String, Object?> get properties => const <String, Object?>{};
 }
 
+final class FirstOpenIntent extends AnalyticsIntent {
+  const FirstOpenIntent();
+
+  @override
+  String get eventName => 'first_open';
+
+  @override
+  String get screen => 'pisocamp_home';
+
+  @override
+  String get feature => 'module';
+
+  /// Nothing at all: that this device opened the module for the first time is
+  /// the whole of the event, and anything else would make an install traceable
+  /// to a person.
+  @override
+  Map<String, Object?> get properties => const <String, Object?>{};
+}
+
 final class ModuleLoadIntent extends AnalyticsIntent {
   const ModuleLoadIntent({required this.phase, required this.durationMs});
 
@@ -849,6 +868,14 @@ AnalyticsIntent _parseIntent({
         );
       }
       return const ProfileCreatedIntent();
+    case 'first_open':
+      _requireExactKeys(properties, const <String>{});
+      if (screen != 'pisocamp_home' || feature != 'module') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return const FirstOpenIntent();
     case 'module_load':
       _requireExactKeys(properties, const <String>{'phase', 'durationMs'});
       if (screen != 'pisocamp_home' || feature != 'module') {

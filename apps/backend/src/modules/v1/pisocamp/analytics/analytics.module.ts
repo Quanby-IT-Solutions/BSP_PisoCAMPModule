@@ -7,6 +7,7 @@ import { AnalyticsController } from "./analytics.controller"
 import { analyticsDatabaseProvider, AnalyticsService } from "./analytics.service"
 import { AdoptionService } from "./adoption.service"
 import { EngagementService } from "./engagement.service"
+import { AcquisitionService } from "./acquisition.service"
 import { DemographicsService } from "./demographics.service"
 import { GamificationService } from "./gamification.service"
 import { RetentionService } from "./retention.service"
@@ -26,6 +27,7 @@ import { TechnicalMetricsService } from "./technical-metrics.service"
 		EngagementService,
 		GamificationService,
 		DemographicsService,
+		AcquisitionService,
 		RetentionService,
 		SessionizerService,
 		SurveyMetricsService,

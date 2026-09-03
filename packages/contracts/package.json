@@ -57,6 +57,10 @@
 			"types": "./dist/modules/v1/pisocamp/demographics.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/demographics.schema.js"
 		},
+		"./pisocamp-acquisition": {
+			"types": "./dist/modules/v1/pisocamp/acquisition.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/acquisition.schema.js"
+		},
 		"./pisocamp-progress": {
 			"types": "./dist/modules/v1/pisocamp/progress.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/progress.schema.js"

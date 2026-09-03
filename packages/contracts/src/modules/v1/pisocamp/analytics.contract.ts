@@ -20,6 +20,12 @@ import {
 	SurveyMetricsSummarySchema,
 } from "./survey-metrics.schema.js"
 import {
+	AcquisitionRangeInputSchema,
+	AcquisitionSummarySchema,
+	ImportStoreMetricsInputSchema,
+	ImportStoreMetricsOutputSchema,
+} from "./acquisition.schema.js"
+import {
 	DemographicDrilldownInputSchema,
 	DemographicDrilldownSchema,
 	DemographicsRangeInputSchema,
@@ -128,6 +134,15 @@ export const pisoCampAnalyticsContract = {
 			})
 			.input(DemographicDrilldownInputSchema)
 			.output(DemographicDrilldownSchema),
+		acquisition: oc
+			.route({
+				method: "GET",
+				path: "/admin/pisocamp/analytics/acquisition",
+				summary: "Install volume and store ratings beside the in-app ones",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(AcquisitionRangeInputSchema)
+			.output(AcquisitionSummarySchema),
 	},
 	monitoring: {
 		import: oc
@@ -139,6 +154,15 @@ export const pisoCampAnalyticsContract = {
 			})
 			.input(ImportMonitoringMetricsInputSchema)
 			.output(ImportMonitoringMetricsOutputSchema),
+		importStoreMetrics: oc
+			.route({
+				method: "POST",
+				path: "/admin/pisocamp/monitoring/store-metrics",
+				summary: "Import a store's install and rating figures for a period",
+				tags: ["Piso CAMP Analytics"],
+			})
+			.input(ImportStoreMetricsInputSchema)
+			.output(ImportStoreMetricsOutputSchema),
 		recordPerformanceTest: oc
 			.route({
 				method: "POST",

@@ -68,6 +68,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     _syncCurrencies(BundleSyncTrigger.startup);
     _syncAnalytics(AnalyticsSyncTrigger.startup);
     _emitAnalytics(const ModuleEntryIntent(ModuleEntryPoint.navigation));
+    _reportFirstOpen();
     _measureLoad();
     unawaited(_offerTrivia());
   }
@@ -129,6 +130,22 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
           .record(question, result)
           .catchError((_) {}),
     );
+  }
+
+  /// AN-11. The first time this install opened the module.
+  ///
+  /// Claimed from storage so it is emitted once per install rather than once
+  /// per launch: an install count that rose every morning would not be an
+  /// install count.
+  void _reportFirstOpen() {
+    const intent = FirstOpenIntent();
+    final sdk = _readAnalyticsSdk(intent);
+    if (sdk == null) return;
+    emitAnalyticsFuture(intent, () async {
+      if (await ref.read(guestIdentityServiceProvider).claimFirstOpen()) {
+        await sdk.emit(intent);
+      }
+    });
   }
 
   /// AN-022. How long the module took to put something on the screen.

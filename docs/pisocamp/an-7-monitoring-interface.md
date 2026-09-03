@@ -20,6 +20,7 @@ as a user holding `admin.integrations.manage` and posts a period of figures.
 | --- | --- | --- |
 | `POST` | `/api/v1/admin/pisocamp/monitoring/metrics` | `admin.integrations.manage` |
 | `POST` | `/api/v1/admin/pisocamp/monitoring/performance-tests` | `admin.integrations.manage` |
+| `POST` | `/api/v1/admin/pisocamp/monitoring/store-metrics` (AN-11) | `admin.integrations.manage` |
 | `GET` | `/api/v1/admin/pisocamp/analytics/technical` | `reports.dashboards.view` |
 
 Reading technical health and feeding the module figures from outside it are
@@ -94,6 +95,39 @@ says so: a size or a battery figure with nobody behind it cannot be checked by
 anybody later. The same payload is what the "Record a performance test" form on
 `/pisocamp/technical` sends.
 
+## Importing a store report (AN-11)
+
+```http
+POST /api/v1/admin/pisocamp/monitoring/store-metrics
+Content-Type: application/json
+
+{
+  "rows": [
+    {
+      "source": "google_play",
+      "periodStart": "2026-09-01",
+      "periodEnd": "2026-09-07",
+      "installs": 1200,
+      "uninstalls": 40,
+      "ratingAverage": 4.4,
+      "ratingCount": 100
+    }
+  ]
+}
+```
+
+- `source` is `google_play` or `app_store`. The two are kept apart because they
+  count and rate separately.
+- A rating needs **both** an average and a count, or neither: an average over no
+  ratings is not a rating, and a count with no average is half a fact.
+- Re-importing a store's period **replaces** it, so a retried upload cannot
+  double an install count. The response says how many periods were replaced.
+- Every import is audited (`pisocamp` / `store_metrics.import`).
+
+The Acquisition page accepts the same rows as a CSV whose header is exactly
+`source,periodStart,periodEnd,installs,uninstalls,ratingAverage,ratingCount`;
+it is parsed in the browser and posted as the payload above.
+
 ## What the module measures itself
 
 Load time and network failures come from the device, because only the device
@@ -104,7 +138,10 @@ knows how long it waited and what it could not reach:
   start pays for the process as well as the module.
 - `network_failure` — `{ failureType, operation }`, emitted when a sync or
   download could not finish. It is the one event whose status is `failed`.
+- `first_open` — no properties at all, emitted once per install at the first
+  module entry (AN-11). The store counts downloads; this counts devices that
+  actually opened the module, and the two are never added together.
 
-Both are in the shared event catalog, so the same envelope validation, the same
-forbidden-data defence and the same idempotent ingestion apply to them as to
-every other event.
+All three are in the shared event catalog, so the same envelope validation, the
+same forbidden-data defence and the same idempotent ingestion apply to them as
+to every other event.

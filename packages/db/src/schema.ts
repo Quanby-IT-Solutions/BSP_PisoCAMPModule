@@ -354,7 +354,7 @@ export const analyticsEvents = createTable(
 				'content_view', 'feature_use', 'link_open', 'trivia_prompt_shown',
 				'trivia_prompt_answered', 'trivia_prompt_skipped', 'survey_prompt_shown',
 				'survey_declined', 'survey_submitted', 'advisory_shown', 'profile_created',
-				'module_load', 'network_failure')`
+				'module_load', 'network_failure', 'first_open')`
 		),
 		check(
 			"analytics_event_subject_pseudo_id_check",
@@ -376,6 +376,7 @@ export const analyticsEvents = createTable(
 				or (${t.eventName} = 'profile_created' and ${t.screen} = 'pisocamp_registration' and ${t.feature} = 'account' and ${t.status} = 'completed')
 				or (${t.eventName} = 'module_load' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'completed')
 				or (${t.eventName} = 'network_failure' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'failed')
+				or (${t.eventName} = 'first_open' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'completed')
 			)`
 		),
 		check(
@@ -1851,6 +1852,61 @@ export const performanceTestResults = createTable(
 )
 
 // ============================================================================
+// AN-11 ACQUISITION
+// ============================================================================
+
+/**
+ * A period of store figures, imported from an app store's own reporting
+ * (AN-001, AN-018).
+ *
+ * The module cannot see an install: the download happens before the app runs
+ * and the store is the only party that observes it. Ratings are the same — they
+ * are left in the store, not in the module. One row per store and period,
+ * replaced on re-import so a retried import cannot double an install count.
+ */
+export const storeMetricImports = createTable(
+	"store_metric_import",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		/** Which store the figures came from. */
+		source: t.text("source").notNull().$type<"google_play" | "app_store">(),
+		periodStart: t.date("period_start").notNull(),
+		periodEnd: t.date("period_end").notNull(),
+		installs: t.integer("installs").notNull(),
+		uninstalls: t.integer("uninstalls").notNull().default(0),
+		/** Null when the store reported no rating for the period. */
+		ratingAverage: t.doublePrecision("rating_average"),
+		ratingCount: t.integer("rating_count"),
+		importedBy: t.text("imported_by").references(() => users.id, { onDelete: "set null" }),
+		importedAt: t.timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+	}),
+	t => [
+		unique("store_metric_import_source_period_unique").on(
+			t.source,
+			t.periodStart,
+			t.periodEnd
+		),
+		check(
+			"store_metric_import_source_check",
+			sql`${t.source} in ('google_play', 'app_store')`
+		),
+		check("store_metric_import_range_check", sql`${t.periodStart} <= ${t.periodEnd}`),
+		check(
+			"store_metric_import_counts_check",
+			sql`${t.installs} >= 0 and ${t.uninstalls} >= 0`
+		),
+		// A rating has an average and a count or neither: an average over no
+		// ratings is not a rating, and a count with no average is half a fact.
+		check(
+			"store_metric_import_rating_check",
+			sql`(${t.ratingAverage} is null and ${t.ratingCount} is null)
+				or (${t.ratingAverage} between 1 and 5 and ${t.ratingCount} > 0)`
+		),
+		index("store_metric_import_period_idx").on(t.periodStart, t.periodEnd),
+	]
+)
+
+// ============================================================================
 // AUDIT LOG
 // ============================================================================
 
@@ -2250,6 +2306,7 @@ export const schema = Object.assign(
 		crashSnapshots,
 		apiEndpointMetrics,
 		performanceTestResults,
+		storeMetricImports,
 	},
 	relations
 )

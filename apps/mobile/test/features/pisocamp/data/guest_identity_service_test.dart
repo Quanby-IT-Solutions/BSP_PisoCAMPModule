@@ -42,6 +42,18 @@ void main() {
     },
   );
 
+  test('the first open is claimed once per install', () async {
+    final service = GuestIdentityService(SecureStorageService());
+
+    expect(await service.claimFirstOpen(), isTrue);
+    expect(await service.claimFirstOpen(), isFalse);
+
+    // A new instance reads the same storage: an install count that rose every
+    // launch would not be an install count.
+    final restarted = GuestIdentityService(SecureStorageService());
+    expect(await restarted.claimFirstOpen(), isFalse);
+  });
+
   test(
     'AuthRepository sign-out removes credentials but preserves the guest pseudo-ID',
     () async {

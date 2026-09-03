@@ -241,6 +241,8 @@ void main() {
       // reported for it too rather than swallowed.
       expect(diagnostics, <(String, String)>[
         ('module_entry', 'unexpected'),
+        // The install count and the load timing are both claimed at entry.
+        ('first_open', 'unexpected'),
         ('module_load', 'unexpected'),
       ]);
       expect(diagnostics.toString(), isNot(contains('private')));
@@ -278,6 +280,7 @@ void main() {
     expect(diagnostics, <(String, String)>[
       ('module_entry', 'enqueueFailed'),
       ('module_load', 'enqueueFailed'),
+      ('first_open', 'enqueueFailed'),
     ]);
     expect(find.text('Banknotes'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -308,6 +311,7 @@ void main() {
 
       expect(diagnostics, <(String, String)>[
         ('module_entry', 'unexpected'),
+        ('first_open', 'unexpected'),
         ('module_load', 'unexpected'),
         // The sync that could not start is itself a failure worth reporting.
         ('network_failure', 'unexpected'),

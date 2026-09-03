@@ -197,9 +197,10 @@ test.describe("AN-2 engagement dashboard", () => {
 		await expect(page.getByText("Net promoter score")).toBeVisible()
 		await expect(page.getByText("Average rating")).toBeVisible()
 		await expect(page.getByText("Withdrawn consent")).toBeVisible()
-		// The store ratings are AN-11's, and saying so beats a figure that looks
-		// consolidated and is not.
-		await expect(page.getByText("In-app answers only")).toBeVisible()
+		// Whether the "In-app answers only" notice appears now depends on
+		// whether AN-11 has imported a store rating covering this range, so it
+		// is asserted where both states can be arranged: the component test and
+		// the AN-11 backend suite.
 
 		expectClean(observed)
 	})

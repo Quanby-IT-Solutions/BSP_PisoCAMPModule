@@ -94,6 +94,11 @@ const CATALOG: Record<
 		feature: "account",
 		properties: {},
 	},
+	first_open: {
+		screen: "pisocamp_home",
+		feature: "module",
+		properties: {},
+	},
 	module_load: {
 		screen: "pisocamp_home",
 		feature: "module",

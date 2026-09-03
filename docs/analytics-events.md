@@ -8,6 +8,7 @@ The executable Zod schemas in `packages/contracts/src/modules/v1/pisocamp/analyt
 | `account_prompt_shown` | `pisocamp_home`   | `account_prompt`     | `completed` | `{}`                                               | Once when the optional-account prompt is displayed.                |
 | `account_prompt_guest` | `pisocamp_home`   | `account_prompt`     | `completed` | `{}`                                               | After guest continuation and device pseudonym persistence succeed. |
 | `content_view`         | `currency_detail` | `currency_education` | `completed` | `{ logicalId: string (1–128) }`                    | Once per opened CE-1 currency-detail route.                        |
+| `first_open`           | `pisocamp_home`   | `module`             | `completed` | `{}`                                               | Once per install, at the first module entry (AN-11).               |
 | `module_load`          | `pisocamp_home`   | `module`             | `completed` | `{ phase: cold \| warm, durationMs: 0–120000 }`     | Once per module entry, at the first frame (AN-022).                |
 | `network_failure`      | `pisocamp_home`   | `module`             | `failed`    | `{ failureType, operation }`                       | When a sync or download could not finish (AN-024).                 |
 
