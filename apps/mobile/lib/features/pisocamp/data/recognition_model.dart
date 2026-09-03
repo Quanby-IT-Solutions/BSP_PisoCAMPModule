@@ -4,14 +4,21 @@ import 'dart:typed_data';
 import 'bundle_protocol.dart';
 import 'bundle_store.dart';
 
-/// The one thing a recognition class is allowed to conclude.
+/// What a recognition class is allowed to conclude.
 ///
-/// DR-1 can only conclude a denomination. DR-2 and DR-3 add the outcomes they
-/// own; a class naming one of those is refused here rather than quietly read as
-/// a denomination, because a wrong reading of a class list is a wrong
+/// A class this build does not understand is refused rather than quietly read
+/// as a denomination, because a wrong reading of a class list is a wrong
 /// denomination spoken aloud.
 enum RecognitionClassOutcome {
-  denomination('denomination');
+  /// Circulating legal tender. The only outcome that names a denomination.
+  denomination('denomination'),
+
+  /// DR-004. A Philippine note from a series that no longer circulates.
+  demonetized('demonetized'),
+
+  /// DR-005. Not Philippine currency. Which currency is not this module's
+  /// question (section 17), and the class list is not allowed to answer it.
+  foreign('foreign');
 
   const RecognitionClassOutcome(this.wireValue);
 
@@ -26,6 +33,19 @@ enum RecognitionClassOutcome {
 }
 
 /// One class the model can emit, and what it means.
+///
+/// The shape follows the outcome, and the parser enforces it:
+///
+/// | outcome | label | denominationCode |
+/// | --- | --- | --- |
+/// | `denomination` | required, e.g. "One thousand pesos" | required, e.g. `PHP1000` |
+/// | `demonetized` | required, the series, e.g. "New Design Series" | **forbidden** |
+/// | `foreign` | **forbidden** | **forbidden** |
+///
+/// BR-007/008 in the type rather than in a screen: a demonetized class cannot
+/// carry a denomination for anything to read out by accident, and a foreign
+/// class cannot carry the name of the currency this module is not allowed to
+/// identify.
 final class RecognitionClass {
   const RecognitionClass({
     required this.classId,
@@ -38,11 +58,11 @@ final class RecognitionClass {
   final int classId;
   final RecognitionClassOutcome outcome;
 
-  /// What is shown and spoken, e.g. "One thousand pesos".
-  final String label;
+  /// What is shown and spoken. Null for a foreign note.
+  final String? label;
 
-  /// The catalogue code, e.g. `PHP1000`.
-  final String denominationCode;
+  /// The catalogue code. Only a circulating denomination has one.
+  final String? denominationCode;
 }
 
 /// Why the recognition model could not be used.
@@ -133,23 +153,42 @@ final class RecognitionModelDocument {
       if (classId is! int || classId < 0 || !seen.add(classId)) {
         throw const RecognitionModelException(RecognitionModelProblem.corrupt);
       }
-      if (outcome is! String || label is! String || denominationCode is! String) {
+      if (outcome is! String) {
         throw const RecognitionModelException(RecognitionModelProblem.corrupt);
       }
       final parsedOutcome = RecognitionClassOutcome.fromWire(outcome);
-      if (parsedOutcome == null ||
-          label.isEmpty ||
-          label.length > 64 ||
-          denominationCode.isEmpty ||
-          denominationCode.length > 32) {
+      if (parsedOutcome == null) {
+        throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+      }
+      // Each outcome carries exactly what it is entitled to carry, and a
+      // descriptor that says otherwise is refused rather than trimmed: a
+      // demonetized class with a denomination on it is a denomination waiting
+      // to be spoken about a note that is no longer legal tender.
+      final needsLabel = parsedOutcome != RecognitionClassOutcome.foreign;
+      final needsDenomination =
+          parsedOutcome == RecognitionClassOutcome.denomination;
+      if (needsLabel) {
+        if (label is! String || label.isEmpty || label.length > 64) {
+          throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+        }
+      } else if (label != null) {
+        throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+      }
+      if (needsDenomination) {
+        if (denominationCode is! String ||
+            denominationCode.isEmpty ||
+            denominationCode.length > 32) {
+          throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+        }
+      } else if (denominationCode != null) {
         throw const RecognitionModelException(RecognitionModelProblem.corrupt);
       }
       classes.add(
         RecognitionClass(
           classId: classId,
           outcome: parsedOutcome,
-          label: label,
-          denominationCode: denominationCode,
+          label: label as String?,
+          denominationCode: denominationCode as String?,
         ),
       );
     }

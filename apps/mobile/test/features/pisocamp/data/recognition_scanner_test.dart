@@ -365,6 +365,73 @@ void main() {
     });
   });
 
+  group('DR-3 notes that are not circulating legal tender', () {
+    RecognitionModelDocument mixedModel() => RecognitionModelDocument.parse(
+      utf8.encode(
+        jsonEncode(<String, Object?>{
+          'schemaVersion': 1,
+          'version': '2026.09.1',
+          'classes': <Object?>[
+            {
+              'classId': 0,
+              'outcome': 'denomination',
+              'label': 'Twenty pesos',
+              'denominationCode': 'PHP20',
+            },
+            {
+              'classId': 1,
+              'outcome': 'demonetized',
+              'label': 'New Design Series',
+            },
+            {'classId': 2, 'outcome': 'foreign'},
+          ],
+        }),
+      ),
+      _pixels(7),
+    );
+
+    Future<RecognitionScanState> conclude(int classId) async {
+      final camera = StreamController<RecognitionFrame>();
+      final scanner = RecognitionScanner(
+        modelSource: _FixedModelSource(mixedModel()),
+        engine: _ScriptedEngine(<RecognitionInference?>[
+          RecognitionInference(classId: classId, confidence: 0.97),
+        ]),
+        camera: _ScriptedCamera(camera),
+        confidenceThreshold: 0.8,
+      );
+      final states = <RecognitionScanState>[];
+      scanner.states.listen(states.add);
+      await scanner.start();
+      camera.add(_frame());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      await scanner.dispose();
+      return states.last;
+    }
+
+    test('a demonetized class never becomes a denomination', () async {
+      final state = await conclude(1);
+
+      expect(state, isA<RecognitionDemonetized>());
+      expect((state as RecognitionDemonetized).series, 'New Design Series');
+      // The same class, confidently read, must not have reached the branch
+      // that names money.
+      expect(state, isNot(isA<RecognitionRecognized>()));
+    });
+
+    test('a foreign class carries nothing that could name a currency', () async {
+      final state = await conclude(2);
+
+      expect(state, isA<RecognitionForeign>());
+    });
+
+    test('a circulating class still reads as its denomination', () async {
+      final state = await conclude(0);
+
+      expect((state as RecognitionRecognized).denominationCode, 'PHP20');
+    });
+  });
+
   group('DR-2 a note it cannot read', () {
     test('gives up after the dwell time and claims nothing', () async {
       final camera = StreamController<RecognitionFrame>();

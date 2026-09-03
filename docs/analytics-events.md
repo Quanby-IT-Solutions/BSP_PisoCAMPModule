@@ -29,9 +29,10 @@ devices could not run the experience at all than when people chose not to.
 
 `recognition_result` carries an `outcome` of `recognized` — the only outcome
 that makes a denomination claim, and only above the configured confidence
-threshold — `unrecognized` (the scan ran and could not read the note
-confidently), `unavailable` (the recognition model was missing or corrupt) or
-`permission_denied` (the camera was refused). The last two are the outcomes
+threshold — `demonetized` or `foreign` (confident readings that deliberately
+are not denominations), `unrecognized` (the scan ran and could not read the
+note confidently), `unavailable` (the recognition model was missing or corrupt)
+or `permission_denied` (the camera was refused). The last two are the outcomes
 where no scan ran, and they are the ones reported with `status: failed`; the
 contract refuses any other pairing of the two fields. Counting a feature that
 could not run as a completed scan would hide a broken model deployment, merging

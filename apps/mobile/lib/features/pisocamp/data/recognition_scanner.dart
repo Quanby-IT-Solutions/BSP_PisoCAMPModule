@@ -49,6 +49,28 @@ final class RecognitionRecognized extends RecognitionScanState {
   final int elapsedMs;
 }
 
+/// DR-004. A Philippine note from a series that no longer circulates.
+///
+/// [series] is what the approved class list calls it. There is deliberately no
+/// denomination: the class list is not allowed to carry one for this outcome,
+/// so there is none to say by accident.
+final class RecognitionDemonetized extends RecognitionScanState {
+  const RecognitionDemonetized({required this.series, required this.elapsedMs});
+
+  final String series;
+  final int elapsedMs;
+}
+
+/// DR-005. Not Philippine currency.
+///
+/// Carries nothing at all. Which currency it is is outside this module
+/// (section 17), and a state with nowhere to put the answer cannot give one.
+final class RecognitionForeign extends RecognitionScanState {
+  const RecognitionForeign({required this.elapsedMs});
+
+  final int elapsedMs;
+}
+
 /// DR-006. The scan ran and could not read the note confidently.
 ///
 /// Deliberately not a denomination and deliberately not a failure of the
@@ -217,14 +239,24 @@ final class RecognitionScanner {
         // A class the descriptor does not account for is not a denomination.
         return;
       }
-      _finish(
-        RecognitionRecognized(
-          label: match.label,
-          denominationCode: match.denominationCode,
+      // What the class says it is, never what a caller assumed. A demonetized
+      // or foreign class reaching the denomination branch is exactly the wrong
+      // claim BR-007/008 exist to prevent.
+      _finish(switch (match.outcome) {
+        RecognitionClassOutcome.denomination => RecognitionRecognized(
+          label: match.label!,
+          denominationCode: match.denominationCode!,
           confidence: inference.confidence,
           elapsedMs: _elapsedMs,
         ),
-      );
+        RecognitionClassOutcome.demonetized => RecognitionDemonetized(
+          series: match.label!,
+          elapsedMs: _elapsedMs,
+        ),
+        RecognitionClassOutcome.foreign => RecognitionForeign(
+          elapsedMs: _elapsedMs,
+        ),
+      });
     } on Object {
       // One frame the runtime could not read is not a failure of the feature;
       // the next frame gets its turn.

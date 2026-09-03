@@ -54,6 +54,26 @@ RecognitionModelDocument _model() => RecognitionModelDocument.parse(
   _pixels(),
 );
 
+RecognitionModelDocument _mixedModel() => RecognitionModelDocument.parse(
+  utf8.encode(
+    jsonEncode(<String, Object?>{
+      'schemaVersion': 1,
+      'version': '2026.09.1',
+      'classes': <Object?>[
+        {
+          'classId': 0,
+          'outcome': 'denomination',
+          'label': 'One thousand pesos',
+          'denominationCode': 'PHP1000',
+        },
+        {'classId': 1, 'outcome': 'demonetized', 'label': 'New Design Series'},
+        {'classId': 2, 'outcome': 'foreign'},
+      ],
+    }),
+  ),
+  _pixels(),
+);
+
 class _FixedModelSource implements RecognitionModelSource {
   _FixedModelSource(this.document);
 
@@ -76,16 +96,17 @@ class _MissingModelSource implements RecognitionModelSource {
 }
 
 class _ConfidentEngine implements RecognitionEngine {
-  _ConfidentEngine({this.confidence = 0.96});
+  _ConfidentEngine({this.confidence = 0.96, this.classId = 0});
 
   final double confidence;
+  final int classId;
 
   @override
   Future<void> load(RecognitionModelDocument model) async {}
 
   @override
   Future<RecognitionInference> classify(RecognitionFrame frame) async =>
-      RecognitionInference(classId: 0, confidence: confidence);
+      RecognitionInference(classId: classId, confidence: confidence);
 
   @override
   Future<void> dispose() async {}
@@ -403,6 +424,115 @@ void main() {
     expect(find.text('One thousand pesos'), findsNothing);
     expect(announcer.spoken, isEmpty);
     expect(find.text('Point the camera at the banknote'), findsOneWidget);
+  });
+
+  group('DR-3 a note that is not circulating legal tender', () {
+    Future<void> pumpFinding(WidgetTester tester, int classId) async {
+      await pumpScreen(
+        tester,
+        modelSource: _FixedModelSource(_mixedModel()),
+        engine: _ConfidentEngine(classId: classId),
+        camera: _SteadyCamera(),
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('says a demonetized note is out of circulation, in both', (
+      tester,
+    ) async {
+      await pumpFinding(tester, 1);
+
+      expect(
+        find.text('This note is no longer in circulation'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('New Design Series'), findsOneWidget);
+      expect(find.textContaining('demonetized series'), findsOneWidget);
+      // DR-004 asks for both halves: what it is, and what this reader is for.
+      expect(
+        find.textContaining('identifies circulating legal tender only'),
+        findsOneWidget,
+      );
+
+      // The same sentence aloud, and no denomination in it.
+      expect(announcer.spoken, hasLength(1));
+      expect(announcer.spoken.single, contains('New Design Series'));
+      expect(announcer.spoken.single, isNot(contains('pesos')));
+    });
+
+    testWidgets('says a foreign note is not Philippine, and stops there', (
+      tester,
+    ) async {
+      await pumpFinding(tester, 2);
+
+      expect(find.text('This is not Philippine currency'), findsOneWidget);
+      expect(announcer.spoken, hasLength(1));
+
+      // Section 17: which currency it is is outside this module, and neither
+      // the screen nor the speech is allowed to guess.
+      for (final currency in <String>[
+        'dollar',
+        'euro',
+        'yen',
+        'ringgit',
+        'USD',
+      ]) {
+        expect(
+          find.textContaining(currency, findRichText: true),
+          findsNothing,
+          reason: currency,
+        );
+        expect(announcer.spoken.single, isNot(contains(currency)));
+      }
+    });
+
+    testWidgets('keeps the disclaimer on both findings, spoken and shown', (
+      tester,
+    ) async {
+      for (final classId in <int>[1, 2]) {
+        await pumpFinding(tester, classId);
+
+        // Somebody holding an unfamiliar note is even more likely to be asking
+        // whether it is real, so the qualification travels with the answer.
+        expect(find.text(kAuthenticityDisclaimer), findsOneWidget);
+        expect(announcer.spoken.last, contains(kAuthenticityDisclaimer));
+        announcer.spoken.clear();
+      }
+    });
+
+    testWidgets('reports the finding without calling it a denomination', (
+      tester,
+    ) async {
+      for (final (classId, outcome) in <(int, String)>[
+        (1, 'demonetized'),
+        (2, 'foreign'),
+      ]) {
+        queue.events.clear();
+        await pumpFinding(tester, classId);
+
+        final event = events().single;
+        final properties = event['properties']! as Map<String, Object?>;
+        expect(properties['outcome'], outcome);
+        // A scan that ran and concluded, so it is a completed one.
+        expect(event['status'], 'completed');
+      }
+    });
+
+    testWidgets('replays and rescans like any other finding', (tester) async {
+      await pumpFinding(tester, 1);
+
+      await tester.tap(find.text('Play again'));
+      await tester.pumpAndSettle();
+      expect(announcer.spoken, hasLength(2));
+
+      await tester.tap(find.text('Scan another note'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('This note is no longer in circulation'),
+        findsOneWidget,
+      );
+    });
   });
 
   group('DR-2 a note it could not read', () {

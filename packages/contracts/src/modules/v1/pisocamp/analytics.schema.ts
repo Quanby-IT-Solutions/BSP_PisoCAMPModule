@@ -45,7 +45,9 @@ export const ANALYTICS_EVENT_NAMES = [
  * What a denomination scan concluded (DR-002, DR-007).
  *
  * `recognized` is the only outcome that carries a denomination claim, and it
- * is only reached above the configured confidence threshold. `unrecognized` is
+ * is only reached above the configured confidence threshold. `demonetized` and
+ * `foreign` are confident readings that are deliberately not denominations
+ * (DR-004, DR-005). `unrecognized` is
  * a scan that ran and could not read the note confidently — DR-006 — which is
  * a different thing from `unavailable` (a missing or corrupt recognition
  * model) and from `permission_denied` (the camera was refused). All four have
@@ -58,6 +60,8 @@ export const ANALYTICS_EVENT_NAMES = [
  */
 export const RECOGNITION_OUTCOMES = [
 	"recognized",
+	"demonetized",
+	"foreign",
 	"unrecognized",
 	"unavailable",
 	"permission_denied",

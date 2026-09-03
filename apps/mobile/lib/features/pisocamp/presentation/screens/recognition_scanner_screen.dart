@@ -28,6 +28,12 @@ enum RecognitionStage {
   /// The scan ran and could not read the note (DR-006).
   unrecognized,
 
+  /// A Philippine note from a series that no longer circulates (DR-004).
+  demonetized,
+
+  /// Not Philippine currency (DR-005).
+  foreign,
+
   /// It could not run, and the screen says why.
   unavailable,
 }
@@ -76,6 +82,7 @@ class _RecognitionScannerScreenState
   RecognitionScanner? _scanner;
   StreamSubscription<RecognitionScanState>? _states;
   RecognitionRecognized? _result;
+  String? _demonetizedSeries;
   RecognitionUnavailableReason? _reason;
   late final SpeechAnnouncer _announcer =
       widget.announcer ?? PlatformSpeechAnnouncer();
@@ -137,6 +144,17 @@ class _RecognitionScannerScreenState
         });
         _report(RecognitionOutcome.recognized, state.elapsedMs);
         unawaited(_announce(state));
+      case RecognitionDemonetized():
+        setState(() {
+          _stage = RecognitionStage.demonetized;
+          _demonetizedSeries = state.series;
+        });
+        _report(RecognitionOutcome.demonetized, state.elapsedMs);
+        unawaited(_say(_demonetizedMessage(state.series)));
+      case RecognitionForeign():
+        setState(() => _stage = RecognitionStage.foreign);
+        _report(RecognitionOutcome.foreign, state.elapsedMs);
+        unawaited(_say(kForeignNoteMessage));
       case RecognitionUnrecognized():
         setState(() => _stage = RecognitionStage.unrecognized);
         _report(RecognitionOutcome.unrecognized, state.elapsedMs);
@@ -154,13 +172,19 @@ class _RecognitionScannerScreenState
     }
   }
 
-  /// The denomination, then the disclaimer, always in that order and always
-  /// both. A reading with no disclaimer after it is the one thing this feature
-  /// must never produce.
-  Future<void> _announce(RecognitionRecognized result) async {
+  /// The finding, then the disclaimer, always in that order and always both.
+  ///
+  /// A reading with no disclaimer after it is the one thing this feature must
+  /// never produce — and that holds for a demonetized or foreign note too,
+  /// where somebody is even more likely to be asking whether what they hold is
+  /// real.
+  Future<void> _say(String finding) async {
     if (!_audioOn) return;
-    await _announcer.speak('${result.label}. $kAuthenticityDisclaimer');
+    await _announcer.speak('$finding $kAuthenticityDisclaimer');
   }
+
+  Future<void> _announce(RecognitionRecognized result) =>
+      _say('${result.label}.');
 
   void _toggleAudio() {
     setState(() => _audioOn = !_audioOn);
@@ -168,15 +192,24 @@ class _RecognitionScannerScreenState
       unawaited(_announcer.stop());
       return;
     }
-    final result = _result;
-    if (result != null) unawaited(_announce(result));
+    _replay();
   }
 
   void _replay() {
-    final result = _result;
-    if (result == null || !_audioOn) return;
-    unawaited(_announce(result));
+    if (!_audioOn) return;
+    final spoken = _spokenFinding;
+    if (spoken != null) unawaited(_say(spoken));
   }
+
+  /// Whatever this screen last concluded out loud, so muting, unmuting and
+  /// replaying all repeat the same sentence rather than only the denomination
+  /// case.
+  String? get _spokenFinding => switch (_stage) {
+    RecognitionStage.result => '${_result!.label}.',
+    RecognitionStage.demonetized => _demonetizedMessage(_demonetizedSeries!),
+    RecognitionStage.foreign => kForeignNoteMessage,
+    _ => null,
+  };
 
   /// One event per attempt.
   void _report(RecognitionOutcome outcome, int elapsedMs) {
@@ -233,8 +266,7 @@ class _RecognitionScannerScreenState
       appBar: AppBar(
         title: const Text('Identify a banknote'),
         actions: <Widget>[
-          if (_stage == RecognitionStage.result ||
-              _stage == RecognitionStage.scanning)
+          if (_spokenFinding != null || _stage == RecognitionStage.scanning)
             IconButton(
               icon: Icon(_audioOn ? Icons.volume_up : Icons.volume_off),
               tooltip: _audioOn ? 'Mute the spoken result' : 'Unmute',
@@ -258,6 +290,22 @@ class _RecognitionScannerScreenState
               onScanAgain: _scanAgain,
               onExit: _exit,
             ),
+            RecognitionStage.demonetized => _Finding(
+              headline: 'This note is no longer in circulation',
+              detail: _demonetizedMessage(_demonetizedSeries!),
+              audioOn: _audioOn,
+              onReplay: _replay,
+              onScanAgain: _scanAgain,
+              onExit: _exit,
+            ),
+            RecognitionStage.foreign => _Finding(
+              headline: 'This is not Philippine currency',
+              detail: kForeignNoteMessage,
+              audioOn: _audioOn,
+              onReplay: _replay,
+              onScanAgain: _scanAgain,
+              onExit: _exit,
+            ),
             RecognitionStage.unrecognized => _Unrecognized(
               onRetry: _scanAgain,
               onExit: _exit,
@@ -273,6 +321,22 @@ class _RecognitionScannerScreenState
     );
   }
 }
+
+/// DR-004's wording.
+///
+/// It says which series and what that means, and it says what the reader is
+/// for, because somebody holding an old note is asking a question this module
+/// does not answer: whether a bank will still take it.
+String _demonetizedMessage(String series) =>
+    'It belongs to the $series, a demonetized series that is no longer '
+    'circulating legal tender. This reader identifies circulating legal tender '
+    'only.';
+
+/// DR-005's wording. It says what the note is not, and stops there: which
+/// currency it is is outside this module (section 17).
+const String kForeignNoteMessage =
+    'This does not appear to be Philippine currency, so no denomination is '
+    'being shown.';
 
 class _Explanation extends StatelessWidget {
   const _Explanation({required this.onContinue});
@@ -472,6 +536,65 @@ class _Unrecognized extends StatelessWidget {
         SizedBox(
           height: 48,
           child: FilledButton(onPressed: onRetry, child: const Text('Retry')),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 48,
+          child: OutlinedButton(onPressed: onExit, child: const Text('Exit')),
+        ),
+      ],
+    );
+  }
+}
+
+/// A conclusion that is not a denomination: DR-004 and DR-005.
+///
+/// The same shape as a reading — a headline, the finding, the disclaimer, and
+/// the same controls — because these are answers, not errors, and somebody who
+/// gets one still needs to be able to replay it and scan the next note.
+class _Finding extends StatelessWidget {
+  const _Finding({
+    required this.headline,
+    required this.detail,
+    required this.audioOn,
+    required this.onReplay,
+    required this.onScanAgain,
+    required this.onExit,
+  });
+
+  final String headline;
+  final String detail;
+  final bool audioOn;
+  final VoidCallback onReplay;
+  final VoidCallback onScanAgain;
+  final VoidCallback onExit;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      children: <Widget>[
+        Text(headline, style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        Text(detail),
+        const SizedBox(height: 12),
+        // Still, and for the same reason: somebody holding an unfamiliar note
+        // is even more likely to be asking whether it is real.
+        const Text(kAuthenticityDisclaimer),
+        const SizedBox(height: 24),
+        SizedBox(
+          height: 48,
+          child: OutlinedButton(
+            onPressed: audioOn ? onReplay : null,
+            child: const Text('Play again'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 48,
+          child: FilledButton(
+            onPressed: onScanAgain,
+            child: const Text('Scan another note'),
+          ),
         ),
         const SizedBox(height: 12),
         SizedBox(

@@ -345,5 +345,47 @@
 			"outcome": "unrecognized",
 			"elapsedMs": 8000
 		}
+	},
+	{
+		"schemaVersion": 1,
+		"occurredAt": "2026-08-30T01:02:03.000Z",
+		"subjectPseudoId": "AbCdEfGhIjKlMnOpQrStUv",
+		"sessionId": "f6635d24-b4d1-4f63-8a06-4026fa4e8fd6",
+		"accountType": "guest",
+		"appVersion": "1.0.0+1",
+		"osName": "android",
+		"osVersion": "Android 15",
+		"deviceCategory": "phone",
+		"networkState": "online",
+		"eventId": "0190f49b-57a8-4b85-9d0e-5e274f0e4ad6",
+		"eventName": "recognition_result",
+		"screen": "recognition_scanner",
+		"feature": "recognition",
+		"status": "completed",
+		"properties": {
+			"outcome": "demonetized",
+			"elapsedMs": 900
+		}
+	},
+	{
+		"schemaVersion": 1,
+		"occurredAt": "2026-08-30T01:02:03.000Z",
+		"subjectPseudoId": "AbCdEfGhIjKlMnOpQrStUv",
+		"sessionId": "f6635d24-b4d1-4f63-8a06-4026fa4e8fd6",
+		"accountType": "guest",
+		"appVersion": "1.0.0+1",
+		"osName": "android",
+		"osVersion": "Android 15",
+		"deviceCategory": "phone",
+		"networkState": "online",
+		"eventId": "0190f49b-57a8-4b85-9d0e-5e274f0e4ad7",
+		"eventName": "recognition_result",
+		"screen": "recognition_scanner",
+		"feature": "recognition",
+		"status": "completed",
+		"properties": {
+			"outcome": "foreign",
+			"elapsedMs": 900
+		}
 	}
 ]

@@ -69,17 +69,48 @@ void main() {
             },
           ],
         },
-        // DR-3 owns these two, and until it does, a descriptor that claims
-        // them must not be read as though every class were a denomination.
         'an outcome this build cannot honour': {
           ..._descriptorMap(),
           'classes': <Object?>[
             {
               'classId': 0,
-              'outcome': 'demonetized',
-              'label': 'Old series',
+              'outcome': 'counterfeit',
+              'label': 'Fake',
               'denominationCode': 'PHP20',
             },
+          ],
+        },
+        // BR-007. A denomination on a demonetized class is a denomination
+        // waiting to be spoken about a note that is no longer legal tender.
+        'a demonetized class carrying a denomination': {
+          ..._descriptorMap(),
+          'classes': <Object?>[
+            {
+              'classId': 0,
+              'outcome': 'demonetized',
+              'label': 'New Design Series',
+              'denominationCode': 'PHP20',
+            },
+          ],
+        },
+        'a demonetized class with no series to name': {
+          ..._descriptorMap(),
+          'classes': <Object?>[
+            {'classId': 0, 'outcome': 'demonetized'},
+          ],
+        },
+        // BR-008 and section 17: naming the currency is outside this module,
+        // so the class list is not allowed to carry the answer.
+        'a foreign class naming the currency': {
+          ..._descriptorMap(),
+          'classes': <Object?>[
+            {'classId': 0, 'outcome': 'foreign', 'label': 'US dollar'},
+          ],
+        },
+        'a foreign class carrying a denomination': {
+          ..._descriptorMap(),
+          'classes': <Object?>[
+            {'classId': 0, 'outcome': 'foreign', 'denominationCode': 'USD20'},
           ],
         },
       };
@@ -97,6 +128,39 @@ void main() {
           reason: entry.key,
         );
       }
+    });
+
+    test('reads the classes DR-3 owns, and only what each may carry', () {
+      final model = RecognitionModelDocument.parse(
+        _bytes({
+          ..._descriptorMap(),
+          'classes': <Object?>[
+            {
+              'classId': 0,
+              'outcome': 'denomination',
+              'label': 'Twenty pesos',
+              'denominationCode': 'PHP20',
+            },
+            {
+              'classId': 1,
+              'outcome': 'demonetized',
+              'label': 'New Design Series',
+            },
+            {'classId': 2, 'outcome': 'foreign'},
+          ],
+        }),
+        _weights(),
+      );
+
+      expect(model.classFor(1)?.outcome, RecognitionClassOutcome.demonetized);
+      expect(model.classFor(1)?.label, 'New Design Series');
+      // Nothing to read out as a denomination, and nothing that names a
+      // foreign currency: the shapes make the wrong claim impossible rather
+      // than merely unlikely.
+      expect(model.classFor(1)?.denominationCode, isNull);
+      expect(model.classFor(2)?.outcome, RecognitionClassOutcome.foreign);
+      expect(model.classFor(2)?.label, isNull);
+      expect(model.classFor(2)?.denominationCode, isNull);
     });
 
     test('refuses a descriptor with no weights behind it', () {

@@ -125,12 +125,16 @@ enum ArStartOutcome {
 
 /// What a denomination scan concluded (DR-1).
 ///
-/// `recognized` is the only value that carries a denomination claim.
+/// `recognized` is the only value that carries a denomination claim;
+/// `demonetized` and `foreign` are confident readings that deliberately are
+/// not one.
 /// `unavailable` and `permissionDenied` are the ones where no scan ran at all,
 /// and they are reported with a failed status — a module nobody can use and a
 /// module nobody wants are not the same problem.
 enum RecognitionOutcome {
   recognized('recognized'),
+  demonetized('demonetized'),
+  foreign('foreign'),
   unrecognized('unrecognized'),
   unavailable('unavailable'),
   permissionDenied('permission_denied');
