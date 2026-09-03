@@ -19,7 +19,7 @@ import { RbacService } from "@/common/rbac/rbac.service"
 import { RbacGuard } from "@/shared/guards/rbac.guard"
 import { assertDisposablePostgres } from "@/test-support/destructive-database.guard"
 
-import { ReportsController } from "./reports.controller"
+import { ReportExportController, ReportsController } from "./reports.controller"
 
 jest.mock("@orpc/nest", () => ({ Implement: () => () => undefined }))
 jest.mock("@orpc/server", () => ({
@@ -53,21 +53,30 @@ jest.mock("better-auth/node", () => ({ fromNodeHeaders: () => ({}) }))
 jest.mock("@repo/auth", () => ({ getAuth: () => ({ api: { getSession: async () => null } }) }))
 jest.mock("@repo/contracts", () => ({
 	ADMIN_ROLE: "Admin",
-	PERMISSION_NAMES: ["reports.reports.generate", "reports.dashboards.view"],
+	PERMISSION_NAMES: [
+		"reports.reports.generate",
+		"reports.reports.export",
+		"reports.dashboards.view",
+	],
 }))
 
 const permittedId = "an8-generate-user"
 const deniedId = "an8-dashboard-only-user"
 const deactivatedId = "an8-deactivated-user"
+const generateOnlyId = "an9-generate-only-user"
 
-function contextFor(userId: string | undefined, handler: (...args: never[]) => unknown) {
+function contextFor(
+	userId: string | undefined,
+	handler: (...args: never[]) => unknown,
+	controller: unknown = ReportsController
+) {
 	const request = {
 		headers: {},
 		...(userId ? { session: { user: { id: userId } }, user: { id: userId } } : {}),
 	}
 	return {
 		getHandler: () => handler,
-		getClass: () => ReportsController,
+		getClass: () => controller,
 		switchToHttp: () => ({ getRequest: () => request }),
 	} as never
 }
@@ -102,7 +111,7 @@ describe("report generation authorization", () => {
 		`)
 		const now = new Date("2026-08-31T01:00:00.000Z")
 		await db.insert(users).values(
-			[permittedId, deniedId, deactivatedId].map(id => ({
+			[permittedId, deniedId, deactivatedId, generateOnlyId].map(id => ({
 				id,
 				name: "AN-8 fixture",
 				email: `${id}@test.local`,
@@ -115,28 +124,35 @@ describe("report generation authorization", () => {
 			.insert(permissions)
 			.values([
 				{ name: "reports.reports.generate", description: "AN-8 generation" },
+				{ name: "reports.reports.export", description: "AN-9 export" },
 				{ name: "reports.dashboards.view", description: "AN-2 dashboards" },
 			])
 			.returning()
 		const generate = inserted.find(row => row.name === "reports.reports.generate")!
+		const exportPermission = inserted.find(row => row.name === "reports.reports.export")!
 		const dashboards = inserted.find(row => row.name === "reports.dashboards.view")!
 		const insertedRoles = await db
 			.insert(roles)
 			.values([
 				{ name: "Report Generator", description: "AN-8 role" },
+				{ name: "Report Exporter", description: "AN-9 role" },
 				{ name: "Dashboard Reader", description: "Dashboards but not reports" },
 			])
 			.returning()
 		const generator = insertedRoles.find(row => row.name === "Report Generator")!
+		const exporter = insertedRoles.find(row => row.name === "Report Exporter")!
 		const reader = insertedRoles.find(row => row.name === "Dashboard Reader")!
 		await db.insert(rolePermissions).values([
 			{ roleId: generator.id, permissionId: generate.id },
+			{ roleId: exporter.id, permissionId: exportPermission.id },
 			{ roleId: reader.id, permissionId: dashboards.id },
 		])
 		await db.insert(userRoles).values([
 			{ userId: permittedId, roleId: generator.id },
+			{ userId: permittedId, roleId: exporter.id },
 			{ userId: deniedId, roleId: reader.id },
 			{ userId: deactivatedId, roleId: generator.id },
+			{ userId: generateOnlyId, roleId: generator.id },
 		])
 		await db.insert(pisoCampAccountState).values({
 			accountId: deactivatedId,
@@ -195,6 +211,37 @@ describe("report generation authorization", () => {
 
 	it("gates the run history both ways", async () => {
 		await bothWays("runs")
+	})
+
+	it("gates the AN-9 download on the export permission, both ways", async () => {
+		const download = ReportExportController.prototype.download
+
+		await expect(
+			createGuard().canActivate(contextFor(permittedId, download, ReportExportController))
+		).resolves.toBe(true)
+		// AC3: generating a report and taking a copy of it out of the building
+		// are different privileges, so the generate-only user is refused.
+		await expect(
+			createGuard().canActivate(contextFor(generateOnlyId, download, ReportExportController))
+		).rejects.toMatchObject({ status: 403 })
+
+		const rows = await db
+			.select()
+			.from(auditLog)
+			.where(
+				and(eq(auditLog.actorId, generateOnlyId), eq(auditLog.action, "permission_denied"))
+			)
+		expect(rows).toHaveLength(1)
+		expect(rows[0]).toMatchObject({
+			domain: "rbac",
+			outcome: "denied",
+			targetType: "handler",
+			targetId: "ReportExportController.download",
+			newValue: {
+				requiredPermissions: ["reports.reports.export"],
+				missingPermissions: ["reports.reports.export"],
+			},
+		})
 	})
 
 	it("refuses a deactivated holder of the permission before resolving it", async () => {

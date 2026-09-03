@@ -316,6 +316,9 @@ export type {
 export {
 	ActivitySummarySchema,
 	DEMOGRAPHIC_FILTER_KEYS,
+	ExportReportInputSchema,
+	REPORT_EXPORT_FORMATS,
+	ReportExportFormatSchema,
 	GenerateReportInputSchema,
 	ListReportDefinitionsOutputSchema,
 	ListReportRunsInputSchema,
@@ -334,6 +337,7 @@ export type {
 	GenerateReportInput,
 	ReportDefinition,
 	ReportDefinitionKey,
+	ReportExportFormat,
 	ReportFilterKey,
 	ReportFilters,
 	ReportResult,

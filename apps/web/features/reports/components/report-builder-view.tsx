@@ -18,10 +18,18 @@ import { Input } from "@/core/components/ui/input"
 import { Label } from "@/core/components/ui/label"
 import { Skeleton } from "@/core/components/ui/skeleton"
 import {
+	reportExportUrl,
 	useGenerateReportMutation,
 	useReportDefinitionsQuery,
 	useReportRunsQuery,
 } from "@/features/reports/api/reports.hooks"
+
+/** The formats §4.2-K asks for, with the words a reader recognises. */
+const EXPORT_FORMATS = [
+	{ format: "xlsx" as const, label: "Excel" },
+	{ format: "docx" as const, label: "Word" },
+	{ format: "pdf" as const, label: "PDF" },
+]
 
 /**
  * How each filter is asked for.
@@ -255,8 +263,11 @@ export function ReportBuilderView() {
 									<th scope="col" className="py-2 pr-4">
 										Generated
 									</th>
-									<th scope="col" className="py-2">
+									<th scope="col" className="py-2 pr-4">
 										Status
+									</th>
+									<th scope="col" className="py-2">
+										Export
 									</th>
 								</tr>
 							</thead>
@@ -268,7 +279,12 @@ export function ReportBuilderView() {
 											{run.from} to {run.to}
 										</td>
 										<td className="py-2 pr-4">{run.generatedAt.slice(0, 10)}</td>
-										<td className="py-2">{run.suppressed ? "Withheld" : "Complete"}</td>
+										<td className="py-2 pr-4">
+											{run.suppressed ? "Withheld" : "Complete"}
+										</td>
+										<td className="py-2">
+											<ExportLinks run={run} />
+										</td>
 									</tr>
 								))}
 							</tbody>
@@ -279,6 +295,24 @@ export function ReportBuilderView() {
 				</CardContent>
 			</Card>
 		</div>
+	)
+}
+
+/** One link per format, so a person picks the file they need and saves it. */
+function ExportLinks({ run }: { run: ReportRun }) {
+	return (
+		<span className="flex flex-wrap gap-2">
+			{EXPORT_FORMATS.map(({ format, label }) => (
+				<a
+					key={format}
+					href={reportExportUrl(run.id, format)}
+					className="text-primary inline-flex min-h-11 items-center underline underline-offset-4"
+					aria-label={`Export ${run.definitionName} for ${run.from} to ${run.to} as ${label}`}
+				>
+					{label}
+				</a>
+			))}
+		</span>
 	)
 }
 
@@ -301,6 +335,8 @@ function GeneratedReport({ run }: { run: ReportRun }) {
 						? "none"
 						: applied.map(([key, value]) => `${key} = ${String(value)}`).join(", ")}
 				</p>
+
+				<ExportLinks run={run} />
 
 				{run.suppressed ? (
 					<Alert>

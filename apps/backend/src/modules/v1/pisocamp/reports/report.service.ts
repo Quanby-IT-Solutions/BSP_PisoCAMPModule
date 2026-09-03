@@ -120,7 +120,7 @@ export class ReportService {
 			.orderBy(desc(reportRuns.generatedAt), desc(reportRuns.id))
 			.limit(input.limit)
 
-		return { runs: rows.map(row => this.toRun(row)) }
+		return { runs: rows.map(row => this.toReportRun(row)) }
 	}
 
 	/**
@@ -146,7 +146,7 @@ export class ReportService {
 		// A replay of a lost response returns the first run. Generating the same
 		// report twice under one id would put two answers behind one identifier.
 		const [existing] = await db.select().from(reportRuns).where(eq(reportRuns.id, input.id))
-		if (existing) return this.toRun(existing)
+		if (existing) return this.toReportRun(existing)
 
 		const asked = namedFilters(input.filters)
 		const demographic = asked.filter(key =>
@@ -208,11 +208,17 @@ export class ReportService {
 				tx
 			)
 
-			return this.toRun(row!)
+			return this.toReportRun(row!)
 		})
 	}
 
-	private toRun(row: typeof reportRuns.$inferSelect): ReportRun {
+	/**
+	 * One stored row as the run the contract describes.
+	 *
+	 * Public because AN-9 exports the stored run rather than re-running the
+	 * query: an export has to be the report it claims to be.
+	 */
+	toReportRun(row: typeof reportRuns.$inferSelect): ReportRun {
 		const definition = REPORT_DEFINITIONS.find(entry => entry.key === row.definitionKey)
 
 		return {

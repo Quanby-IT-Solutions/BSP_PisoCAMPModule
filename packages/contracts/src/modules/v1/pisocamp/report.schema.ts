@@ -241,6 +241,21 @@ export const ListReportRunsInputSchema = z
 	.object({ limit: z.coerce.number().int().min(1).max(100).default(20) })
 	.strict()
 
+/**
+ * The formats §4.2-K asks for.
+ *
+ * Excel, Word and a PDF reader are the three things a BSP report is opened in,
+ * so all three are first-class rather than one canonical format and two
+ * conversions of it.
+ */
+export const REPORT_EXPORT_FORMATS = ["xlsx", "docx", "pdf"] as const
+export const ReportExportFormatSchema = z.enum(REPORT_EXPORT_FORMATS)
+export type ReportExportFormat = z.infer<typeof ReportExportFormatSchema>
+
+export const ExportReportInputSchema = z
+	.object({ runId: z.uuid(), format: ReportExportFormatSchema })
+	.strict()
+
 export const ListReportRunsOutputSchema = z
 	.object({ runs: z.array(ReportRunSchema) })
 	.strict()

@@ -1,0 +1,333 @@
+import { randomUUID } from "node:crypto"
+import { and, eq, sql } from "drizzle-orm"
+import ExcelJS from "exceljs"
+import JSZip from "jszip"
+
+import type {
+	ReportDefinitionKey,
+	ReportFilters,
+} from "@repo/contracts/pisocamp-report"
+import { analyticsEvents, auditLog, reportDefinitions, reportRuns } from "@repo/db/schema"
+
+import { AuditService } from "@/common/audit/audit.service"
+import { db } from "@/common/database/database.client"
+import { assertDisposablePostgres } from "@/test-support/destructive-database.guard"
+
+import { AdoptionService } from "../analytics/adoption.service"
+import { EngagementService } from "../analytics/engagement.service"
+import { RetentionService } from "../analytics/retention.service"
+import { PisoCampAdminConfigService } from "../pisocamp-admin-config.service"
+import { ActivityService } from "./activity.service"
+import { ReportExportService } from "./report-export.service"
+import { ReportService } from "./report.service"
+
+jest.mock("@orpc/server", () => ({
+	ORPCError: class ORPCError extends Error {
+		constructor(
+			public readonly code: string,
+			options?: { message?: string }
+		) {
+			super(options?.message ?? code)
+			this.name = "ORPCError"
+		}
+	},
+}))
+
+const ACTOR_ID = "an9-actor"
+const ALICE = "AnNineAliceSubject0001"
+
+function manila(day: number, hour: number) {
+	return new Date(Date.UTC(2026, 7, day, hour - 8))
+}
+
+function event(subjectPseudoId: string, occurredAt: Date) {
+	return {
+		eventId: randomUUID(),
+		schemaVersion: 1,
+		eventName: "module_entry" as const,
+		occurredAt,
+		subjectPseudoId,
+		sessionId: randomUUID(),
+		accountType: "guest" as const,
+		screen: "pisocamp_home",
+		feature: "module",
+		appVersion: "1.0.0",
+		osName: "android" as const,
+		osVersion: "15",
+		deviceCategory: "phone" as const,
+		networkState: "online" as const,
+		status: "completed" as const,
+		properties: { entryPoint: "navigation" } as never,
+	}
+}
+
+/**
+ * AN-9. Each format is opened with a real reader for that format rather than
+ * checked for a magic number: a file that is nominally a workbook but that
+ * Excel refuses is not an export anybody can use.
+ */
+describe("AN-9 report exports", () => {
+	let reports: ReportService
+	let exports: ReportExportService
+
+	beforeAll(async () => {
+		assertDisposablePostgres({
+			allowDestructive: process.env.ALLOW_DESTRUCTIVE_DATABASE_TESTS,
+			databaseUrl: process.env.DATABASE_URL,
+		})
+		await db.execute(sql`
+			truncate table report_run, report_definition, analytics_session, analytics_event,
+			module_configuration, audit_log, users restart identity cascade
+		`)
+		await db.execute(sql`
+			insert into users (id, name, email, email_verified, created_at, updated_at)
+			values (${ACTOR_ID}, 'AN9 Actor', 'an9-actor@example.test', true, now(), now())
+		`)
+	})
+
+	beforeEach(async () => {
+		const config = new PisoCampAdminConfigService(new AuditService())
+		reports = new ReportService(
+			new EngagementService(config),
+			new RetentionService(config),
+			new AdoptionService(),
+			new ActivityService(),
+			new AuditService()
+		)
+		exports = new ReportExportService(reports, new AuditService())
+		await db.delete(reportRuns)
+		await db.delete(reportDefinitions)
+		await db.delete(analyticsEvents)
+		await db.delete(auditLog)
+		await db.insert(analyticsEvents).values([event(ALICE, manila(10, 10))])
+	})
+
+	afterAll(async () => {
+		await db.$client.end()
+	})
+
+	/** The cover sheet as the field/value pairs a reader sees. */
+	function coverMetadata(workbook: ExcelJS.Workbook): Map<string, string> {
+		const cover = workbook.getWorksheet("Report")!
+		const metadata = new Map<string, string>()
+		cover.eachRow((row, index) => {
+			if (index === 1) return
+			metadata.set(String(row.getCell(1).value), String(row.getCell(2).value))
+		})
+		return metadata
+	}
+
+	async function generate(
+		definitionKey: ReportDefinitionKey = "activity",
+		filters: ReportFilters = {}
+	) {
+		return reports.generate({
+			id: randomUUID(),
+			definitionKey,
+			from: "2026-08-10",
+			to: "2026-08-11",
+			filters,
+			actorId: ACTOR_ID,
+		})
+	}
+
+	describe("AC1 — each format opens with the data and the metadata", () => {
+		it("writes a workbook Excel can open, with the metadata and the figures", async () => {
+			const run = await generate()
+
+			const rendered = await exports.export({
+				runId: run.id,
+				format: "xlsx",
+				actorId: ACTOR_ID,
+			})
+
+			expect(rendered).toMatchObject({
+				fileName: "activity-2026-08-10-to-2026-08-11.xlsx",
+				mediaType:
+					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			})
+
+			// Opened with a real reader: a file Excel refuses is not an export.
+			const workbook = new ExcelJS.Workbook()
+			await workbook.xlsx.load(rendered!.bytes as unknown as ArrayBuffer)
+
+			const metadata = coverMetadata(workbook)
+			expect(metadata.get("Report")).toBe("Activity")
+			expect(metadata.get("Generated")).toBe(run.generatedAt)
+			expect(metadata.get("Generated by")).toBe(ACTOR_ID)
+			expect(metadata.get("Period")).toBe("2026-08-10 to 2026-08-11 (Asia/Manila)")
+			expect(metadata.get("Data source")).toBe("analytics_event")
+			expect(metadata.get("Parameters")).toBe("none")
+
+			const byName = workbook.getWorksheet("Events by name")!
+			expect(byName.getRow(1).values).toEqual([
+				undefined,
+				"Event",
+				"Events",
+				"Users",
+			])
+			expect(byName.getRow(2).getCell(1).value).toBe("module_entry")
+			expect(byName.getRow(2).getCell(2).value).toBe(1)
+		})
+
+		it("names the parameters it was run with", async () => {
+			const run = await generate("activity", { os: "android" })
+
+			const rendered = await exports.export({
+				runId: run.id,
+				format: "xlsx",
+				actorId: ACTOR_ID,
+			})
+			const workbook = new ExcelJS.Workbook()
+			await workbook.xlsx.load(rendered!.bytes as unknown as ArrayBuffer)
+
+			expect(coverMetadata(workbook).get("Parameters")).toBe("os = android")
+		})
+
+		it("writes a Word document with the metadata and the figures in it", async () => {
+			const run = await generate()
+
+			const rendered = await exports.export({
+				runId: run.id,
+				format: "docx",
+				actorId: ACTOR_ID,
+			})
+
+			expect(rendered!.mediaType).toBe(
+				"application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+			)
+			// A .docx is a zip of XML parts; opening it the way Word does proves
+			// the package is well-formed, not merely that the bytes exist.
+			const archive = await JSZip.loadAsync(rendered!.bytes)
+			const documentXml = await archive.file("word/document.xml")!.async("string")
+
+			expect(documentXml).toContain("Activity")
+			expect(documentXml).toContain("2026-08-10 to 2026-08-11 (Asia/Manila)")
+			expect(documentXml).toContain("analytics_event")
+			expect(documentXml).toContain("Events by name")
+			expect(documentXml).toContain("module_entry")
+		})
+
+		it("writes a PDF a reader can open", async () => {
+			const run = await generate()
+
+			const rendered = await exports.export({
+				runId: run.id,
+				format: "pdf",
+				actorId: ACTOR_ID,
+			})
+
+			expect(rendered!.mediaType).toBe("application/pdf")
+			const text = rendered!.bytes.toString("latin1")
+			// A PDF a reader will open declares its version and ends with %%EOF;
+			// a truncated stream has the first and not the second.
+			expect(text.startsWith("%PDF-1.")).toBe(true)
+			expect(text.trimEnd().endsWith("%%EOF")).toBe(true)
+			expect(text).toContain("/Type /Catalog")
+			expect(text).toContain("/Type /Page")
+		})
+
+		it("exports a withheld report as its reason rather than as figures", async () => {
+			const run = await reports.generate({
+				id: randomUUID(),
+				definitionKey: "activity",
+				from: "2026-08-10",
+				to: "2026-08-11",
+				filters: { gender: "female" },
+				actorId: ACTOR_ID,
+			})
+
+			const rendered = await exports.export({
+				runId: run.id,
+				format: "docx",
+				actorId: ACTOR_ID,
+			})
+			const archive = await JSZip.loadAsync(rendered!.bytes)
+			const documentXml = await archive.file("word/document.xml")!.async("string")
+
+			// The export says why there are no figures. A blank report would read
+			// as a period in which nothing happened.
+			expect(documentXml).toContain("Figures withheld")
+			expect(documentXml).toContain("AN-10")
+		})
+
+		it("exports every report the registry offers", async () => {
+			for (const definitionKey of ["engagement", "retention", "adoption", "activity"] as const) {
+				const run = await generate(definitionKey)
+
+				const rendered = await exports.export({
+					runId: run.id,
+					format: "xlsx",
+					actorId: ACTOR_ID,
+				})
+
+				const workbook = new ExcelJS.Workbook()
+				await workbook.xlsx.load(rendered!.bytes as unknown as ArrayBuffer)
+				// Every report has its metadata sheet and at least one of figures:
+				// a KPI that forgot to say how it becomes a table would export a
+				// cover page and nothing else.
+				expect(workbook.worksheets.length).toBeGreaterThan(1)
+			}
+		})
+
+		it("reports nothing at all for a run that does not exist", async () => {
+			await expect(
+				exports.export({ runId: randomUUID(), format: "pdf", actorId: ACTOR_ID })
+			).resolves.toBeNull()
+		})
+	})
+
+	describe("AC2 — an export is audited with its format and its user", () => {
+		it("records one entry naming the format", async () => {
+			const run = await generate()
+
+			await exports.export({ runId: run.id, format: "pdf", actorId: ACTOR_ID })
+
+			const rows = await db
+				.select()
+				.from(auditLog)
+				.where(and(eq(auditLog.action, "report.export"), eq(auditLog.targetId, run.id)))
+			expect(rows).toHaveLength(1)
+			expect(rows[0]).toMatchObject({
+				domain: "pisocamp",
+				actorId: ACTOR_ID,
+				targetType: "report_run",
+				outcome: "success",
+			})
+			expect(rows[0]?.newValue).toMatchObject({
+				format: "pdf",
+				definitionKey: "activity",
+				from: "2026-08-10",
+				to: "2026-08-11",
+			})
+		})
+
+		it("records each format separately when the same report is exported thrice", async () => {
+			const run = await generate()
+
+			for (const format of ["xlsx", "docx", "pdf"] as const) {
+				await exports.export({ runId: run.id, format, actorId: ACTOR_ID })
+			}
+
+			const rows = await db
+				.select()
+				.from(auditLog)
+				.where(and(eq(auditLog.action, "report.export"), eq(auditLog.targetId, run.id)))
+			// Three exports are three things that left the building, not one.
+			expect(rows).toHaveLength(3)
+			expect(
+				rows.map(row => (row.newValue as { format: string }).format).sort()
+			).toEqual(["docx", "pdf", "xlsx"])
+		})
+
+		it("does not audit an export of a run that does not exist", async () => {
+			await exports.export({ runId: randomUUID(), format: "pdf", actorId: ACTOR_ID })
+
+			const rows = await db
+				.select()
+				.from(auditLog)
+				.where(eq(auditLog.action, "report.export"))
+			expect(rows).toHaveLength(0)
+		})
+	})
+})

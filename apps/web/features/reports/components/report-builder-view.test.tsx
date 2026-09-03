@@ -12,6 +12,8 @@ vi.mock("@/features/reports/api/reports.hooks", () => ({
 	useReportDefinitionsQuery: () => useDefinitions(),
 	useReportRunsQuery: () => useRuns(),
 	useGenerateReportMutation: () => useGenerate(),
+	reportExportUrl: (runId: string, format: string) =>
+		`http://api.test/v1/admin/pisocamp/reports/runs/${runId}/export/${format}`,
 }))
 
 const definitions = [
@@ -205,6 +207,36 @@ describe("ReportBuilderView", () => {
 
 		expect(screen.getByRole("cell", { name: "2026-08-10 to 2026-08-11" })).toBeInTheDocument()
 		expect(screen.getByRole("cell", { name: "Complete" })).toBeInTheDocument()
+	})
+
+	it("offers each report as Excel, Word and a PDF", () => {
+		useRuns.mockReturnValue({ isPending: false, isError: false, data: { runs: [run] } })
+		render(<ReportBuilderView />)
+
+		for (const [label, format] of [
+			["Excel", "xlsx"],
+			["Word", "docx"],
+			["PDF", "pdf"],
+		]) {
+			const link = screen.getAllByRole("link", { name: new RegExp(`as ${label}$`) })[0]!
+			expect(link).toHaveAttribute(
+				"href",
+				`http://api.test/v1/admin/pisocamp/reports/runs/${run.id}/export/${format}`
+			)
+		}
+	})
+
+	it("names what each export link will download", () => {
+		useRuns.mockReturnValue({ isPending: false, isError: false, data: { runs: [run] } })
+		render(<ReportBuilderView />)
+
+		// "Excel" alone would be three identical links to a screen reader; the
+		// label says which report and which period each one is.
+		expect(
+			screen.getByRole("link", {
+				name: "Export Activity for 2026-08-10 to 2026-08-11 as Excel",
+			})
+		).toBeInTheDocument()
 	})
 
 	it("says plainly when nothing has been generated", () => {

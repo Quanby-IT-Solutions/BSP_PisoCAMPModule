@@ -10,7 +10,22 @@ import {
 
 import type { GenerateReportInput, ReportDefinition, ReportRun } from "@repo/contracts"
 
+import { env } from "@/env"
 import { orpc } from "@/services/orpc/client"
+
+/**
+ * Where a generated report is downloaded from, per format.
+ *
+ * A plain URL rather than a fetch: the body is a file, and letting the browser
+ * save it directly keeps the whole thing out of memory and gives the person the
+ * ordinary download they expect.
+ */
+export function reportExportUrl(runId: string, format: "xlsx" | "docx" | "pdf"): string {
+	const base = env.NEXT_PUBLIC_API_BASE_URL.replace(/\/+$/, "")
+	return `${base}/${env.NEXT_PUBLIC_API_VERSION}/admin/pisocamp/reports/runs/${encodeURIComponent(
+		runId
+	)}/export/${format}`
+}
 
 export function useReportDefinitionsQuery() {
 	const options = orpc.pisocamp.admin.reports.definitions.queryOptions({
