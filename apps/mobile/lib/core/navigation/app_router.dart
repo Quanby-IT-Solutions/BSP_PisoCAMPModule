@@ -14,7 +14,11 @@ import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_home_scre
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_preview_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_registration_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/features/pisocamp/data/ar_session.dart';
+import 'package:mobile/features/pisocamp/data/recognition_engine.dart';
+import 'package:mobile/features/pisocamp/presentation/providers/recognition_provider.dart';
+import 'package:mobile/features/pisocamp/presentation/screens/recognition_scanner_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/ar_experience_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/coin_viewer_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/currency_detail_screen.dart';
@@ -40,6 +44,10 @@ class AppRoutes {
 
   /// Present only in a BSP-approved preview build (see [kPisoCampPreviewBuild]).
   static const pisoCampPreview = '/pisocamp/preview';
+
+  /// DR-1's banknote reader. Guest content: it identifies a denomination and
+  /// says, every time, that it is not an authenticity check.
+  static const pisoCampRecognition = '/pisocamp/recognition';
 
   static String currencyDetail({
     required String kind,
@@ -165,6 +173,9 @@ String? resolveAppRedirect({
     return auth ||
             matchedLocation == AppRoutes.pisoCamp ||
             matchedLocation == AppRoutes.pisoCampRegistration ||
+            // DR-1 is a guest feature: somebody holding a note they cannot
+            // place should not be asked to sign in first.
+            matchedLocation == AppRoutes.pisoCampRecognition ||
             // Preview builds are internal by construction; the grant, not a
             // session, is what authorises the render.
             (kPisoCampPreviewBuild &&
@@ -293,6 +304,23 @@ GoRouter appRouter(Ref ref) {
                 : null,
           );
         },
+      ),
+      GoRoute(
+        path: AppRoutes.pisoCampRecognition,
+        builder: (context, state) => Consumer(
+          builder: (context, ref, _) => RecognitionScannerScreen(
+            modelSource: ref.watch(recognitionModelSourceProvider),
+            // No approved inference runtime and no camera plugin in this
+            // build: the screen says the reader is unavailable rather than
+            // opening a camera that could never conclude anything, and it
+            // never guesses at a denomination.
+            engine: const UnavailableRecognitionEngine(),
+            camera: const UnavailableCameraFrameSource(),
+            confidenceThreshold: ref.watch(
+              recognitionConfidenceThresholdProvider,
+            ),
+          ),
+        ),
       ),
       GoRoute(
         path: '/pisocamp/currency/:kind/:logicalId/ar',

@@ -96,7 +96,42 @@ describe("AN-1 analytics event catalog", () => {
 			"first_open",
 			"ar_start",
 			"ar_end",
+			"recognition_result",
 		])
+	})
+
+	it("keeps a recognition outcome and its status saying the same thing", () => {
+		const recognized = vectors.find(
+			vector => vector.eventName === "recognition_result" && vector.status === "completed"
+		)
+		const unavailable = vectors.find(
+			vector => vector.eventName === "recognition_result" && vector.status === "failed"
+		)
+		expect(recognized).toBeDefined()
+		expect(unavailable).toBeDefined()
+
+		// Either pairing swapped is a scan counted as the opposite of what it was.
+		expect(AnalyticsEventSchema.safeParse({ ...recognized, status: "failed" }).success).toBe(
+			false
+		)
+		expect(
+			AnalyticsEventSchema.safeParse({ ...unavailable, status: "completed" }).success
+		).toBe(false)
+	})
+
+	it("refuses a scan that carries the image it scanned", () => {
+		const recognized = vectors.find(vector => vector.eventName === "recognition_result")!
+		// DR-003: frames stay on the device. The catalog is the last place that
+		// can say so, and it says so for a strict shape as well as a loose one.
+		for (const properties of [
+			{ outcome: "recognized", elapsedMs: 640, frame: "/9j/4AAQSkZJRgABAQAAAQ" },
+			{ outcome: "recognized", elapsedMs: 640, image: "data:image/png;base64,AAAA" },
+		]) {
+			expect(
+				AnalyticsEventSchema.safeParse({ ...recognized, properties }).success,
+				JSON.stringify(properties)
+			).toBe(false)
+		}
 	})
 
 	it("binds a feature_use to the one screen that hosts its feature", () => {

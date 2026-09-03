@@ -354,7 +354,8 @@ export const analyticsEvents = createTable(
 				'content_view', 'feature_use', 'link_open', 'trivia_prompt_shown',
 				'trivia_prompt_answered', 'trivia_prompt_skipped', 'survey_prompt_shown',
 				'survey_declined', 'survey_submitted', 'advisory_shown', 'profile_created',
-				'module_load', 'network_failure', 'first_open', 'ar_start', 'ar_end')`
+				'module_load', 'network_failure', 'first_open', 'ar_start', 'ar_end',
+				'recognition_result')`
 		),
 		check(
 			"analytics_event_subject_pseudo_id_check",
@@ -378,6 +379,7 @@ export const analyticsEvents = createTable(
 				or (${t.eventName} = 'network_failure' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'failed')
 				or (${t.eventName} = 'first_open' and ${t.screen} = 'pisocamp_home' and ${t.feature} = 'module' and ${t.status} = 'completed')
 				or (${t.eventName} in ('ar_start', 'ar_end') and ${t.screen} = 'ar_viewer' and ${t.feature} = 'ar' and ${t.status} = 'completed')
+				or (${t.eventName} = 'recognition_result' and ${t.screen} = 'recognition_scanner' and ${t.feature} = 'recognition' and ${t.status} in ('completed', 'failed'))
 			)`
 		),
 		check(
@@ -1436,7 +1438,12 @@ export const contentBundleBlobs = createTable(
 			.text("media_type")
 			.notNull()
 			.$type<
-				"application/json" | "image/png" | "image/jpeg" | "image/webp" | "model/gltf-binary"
+				| "application/json"
+				| "application/octet-stream"
+				| "image/png"
+				| "image/jpeg"
+				| "image/webp"
+				| "model/gltf-binary"
 			>(),
 		body: bytea("body").notNull(),
 		createdAt: t.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1447,7 +1454,8 @@ export const contentBundleBlobs = createTable(
 		check("content_bundle_blob_size_check", sql`${t.byteLength} between 1 and 5242880`),
 		check(
 			"content_bundle_blob_media_type_check",
-			sql`${t.mediaType} in ('application/json', 'image/png', 'image/jpeg', 'image/webp', 'model/gltf-binary')`
+			sql`${t.mediaType} in ('application/json', 'application/octet-stream', 'image/png',
+				'image/jpeg', 'image/webp', 'model/gltf-binary')`
 		),
 		check("content_bundle_blob_body_length_check", sql`octet_length(${t.body}) = ${t.byteLength}`),
 	]
@@ -1459,13 +1467,21 @@ export const contentBundleManifestEntries = createTable(
 		bundleId: t.uuid("bundle_id").notNull(),
 		logicalId: t.text("logical_id").notNull(),
 		position: t.integer("position").notNull(),
-		kind: t.text("kind").notNull().$type<"content" | "image" | "model">(),
+		kind: t
+			.text("kind")
+			.notNull()
+			.$type<"content" | "image" | "model" | "recognition_model">(),
 		delivery: t.text("delivery").notNull().$type<"core" | "on_demand">(),
 		mediaType: t
 			.text("media_type")
 			.notNull()
 			.$type<
-				"application/json" | "image/png" | "image/jpeg" | "image/webp" | "model/gltf-binary"
+				| "application/json"
+				| "application/octet-stream"
+				| "image/png"
+				| "image/jpeg"
+				| "image/webp"
+				| "model/gltf-binary"
 			>(),
 		byteLength: t.integer("byte_length").notNull(),
 		sha256: t.text("sha256").notNull(),
@@ -1502,13 +1518,14 @@ export const contentBundleManifestEntries = createTable(
 		check("content_bundle_manifest_entry_position_check", sql`${t.position} between 0 and 1999`),
 		check(
 			"content_bundle_manifest_entry_kind_check",
-			sql`${t.kind} in ('content', 'image', 'model')`
+			sql`${t.kind} in ('content', 'image', 'model', 'recognition_model')`
 		),
 		check(
 			"content_bundle_manifest_entry_kind_media_type_check",
 			sql`(${t.kind} = 'content' and ${t.mediaType} = 'application/json')
 				or (${t.kind} = 'image' and ${t.mediaType} in ('image/png', 'image/jpeg', 'image/webp'))
-				or (${t.kind} = 'model' and ${t.mediaType} = 'model/gltf-binary')`
+				or (${t.kind} = 'model' and ${t.mediaType} = 'model/gltf-binary')
+				or (${t.kind} = 'recognition_model' and ${t.mediaType} in ('application/json', 'application/octet-stream'))`
 		),
 		check(
 			"content_bundle_manifest_entry_delivery_check",
@@ -1516,7 +1533,8 @@ export const contentBundleManifestEntries = createTable(
 		),
 		check(
 			"content_bundle_manifest_entry_media_type_check",
-			sql`${t.mediaType} in ('application/json', 'image/png', 'image/jpeg', 'image/webp', 'model/gltf-binary')`
+			sql`${t.mediaType} in ('application/json', 'application/octet-stream', 'image/png',
+				'image/jpeg', 'image/webp', 'model/gltf-binary')`
 		),
 		check("content_bundle_manifest_entry_size_check", sql`${t.byteLength} between 1 and 5242880`),
 		check(

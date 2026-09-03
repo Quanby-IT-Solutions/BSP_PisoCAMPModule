@@ -60,6 +60,31 @@ const SHAPES: Record<string, Shape> = {
 		feature: "3d_coin",
 		properties: { logicalId: "content.one" },
 	},
+	ar_started: {
+		eventName: "ar_start",
+		screen: "ar_viewer",
+		feature: "ar",
+		properties: { logicalId: "content.one", outcome: "started" },
+	},
+	ar_unsupported: {
+		eventName: "ar_start",
+		screen: "ar_viewer",
+		feature: "ar",
+		properties: { logicalId: "content.one", outcome: "unsupported" },
+	},
+	recognition_recognized: {
+		eventName: "recognition_result",
+		screen: "recognition_scanner",
+		feature: "recognition",
+		properties: { outcome: "recognized", elapsedMs: 640 },
+	},
+	recognition_unavailable: {
+		eventName: "recognition_result",
+		screen: "recognition_scanner",
+		feature: "recognition",
+		status: "failed",
+		properties: { outcome: "unavailable", elapsedMs: 0 },
+	},
 	link_open_external: {
 		eventName: "link_open",
 		screen: "currency_detail",
@@ -85,7 +110,7 @@ function event(subjectPseudoId: string, occurredAt: Date, shape: keyof typeof SH
 		osVersion: "15",
 		deviceCategory: "phone" as const,
 		networkState: "online" as const,
-		status: "completed" as const,
+		status: ("status" in kind ? kind.status : "completed") as never,
 		properties: kind.properties as never,
 	}
 }
@@ -248,6 +273,24 @@ describe("AN-3 adoption and feature usage", () => {
 			expect(usage.get("3d_coin")).toMatchObject({ uses: 1, users: 1 })
 			expect(usage.get("external_link")).toMatchObject({ uses: 1, users: 1 })
 			expect(usage.get("internal_link")).toMatchObject({ uses: 0, users: 0 })
+		})
+
+		it("counts an attempt that could not run as nobody using the feature", async () => {
+			await db.insert(analyticsEvents).values([
+				event(ALICE, manila(10, 10, 0), "ar_started"),
+				event(BOB, manila(10, 10, 1), "ar_unsupported"),
+				event(ALICE, manila(10, 10, 2), "recognition_recognized"),
+				event(BOB, manila(10, 10, 3), "recognition_unavailable"),
+			])
+
+			const summary = await adoption.summary(range)
+			const usage = new Map(summary.features.map(entry => [entry.feature, entry]))
+
+			// A phone that cannot open augmented reality, and a reader that was
+			// never downloaded, are not somebody using either feature. What broke
+			// is AN-7's question; this report answers AN-013's.
+			expect(usage.get("ar")).toMatchObject({ uses: 1, users: 1 })
+			expect(usage.get("recognition")).toMatchObject({ uses: 1, users: 1 })
 		})
 
 		it("counts uses and users separately", async () => {

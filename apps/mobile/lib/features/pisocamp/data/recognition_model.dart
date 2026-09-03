@@ -1,0 +1,223 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'bundle_protocol.dart';
+import 'bundle_store.dart';
+
+/// The one thing a recognition class is allowed to conclude.
+///
+/// DR-1 can only conclude a denomination. DR-2 and DR-3 add the outcomes they
+/// own; a class naming one of those is refused here rather than quietly read as
+/// a denomination, because a wrong reading of a class list is a wrong
+/// denomination spoken aloud.
+enum RecognitionClassOutcome {
+  denomination('denomination');
+
+  const RecognitionClassOutcome(this.wireValue);
+
+  final String wireValue;
+
+  static RecognitionClassOutcome? fromWire(String value) {
+    for (final outcome in values) {
+      if (outcome.wireValue == value) return outcome;
+    }
+    return null;
+  }
+}
+
+/// One class the model can emit, and what it means.
+final class RecognitionClass {
+  const RecognitionClass({
+    required this.classId,
+    required this.outcome,
+    required this.label,
+    required this.denominationCode,
+  });
+
+  /// The index the model returns.
+  final int classId;
+  final RecognitionClassOutcome outcome;
+
+  /// What is shown and spoken, e.g. "One thousand pesos".
+  final String label;
+
+  /// The catalogue code, e.g. `PHP1000`.
+  final String denominationCode;
+}
+
+/// Why the recognition model could not be used.
+enum RecognitionModelProblem {
+  /// No model in the synced bundle.
+  missing,
+
+  /// The bundle has one, but it does not read as a model.
+  corrupt,
+}
+
+final class RecognitionModelException implements Exception {
+  const RecognitionModelException(this.problem);
+
+  final RecognitionModelProblem problem;
+
+  @override
+  String toString() => 'RecognitionModelException(${problem.name})';
+}
+
+/// An approved, versioned recognition model and the classes it emits.
+///
+/// The device reports [version] so DR-4 can tell which model produced a
+/// figure. The weights themselves are [weights]; this object is what says how
+/// to read the numbers that come out of them.
+final class RecognitionModelDocument {
+  const RecognitionModelDocument({
+    required this.version,
+    required this.classes,
+    required this.weights,
+  });
+
+  final String version;
+  final List<RecognitionClass> classes;
+  final Uint8List weights;
+
+  RecognitionClass? classFor(int classId) {
+    for (final candidate in classes) {
+      if (candidate.classId == classId) return candidate;
+    }
+    return null;
+  }
+
+  /// Reads a descriptor exactly, refusing anything it does not fully
+  /// understand.
+  ///
+  /// Strict on purpose. A descriptor with an unexpected shape is a model this
+  /// build was not written for, and guessing at it is how a device ends up
+  /// announcing the wrong note.
+  static RecognitionModelDocument parse(
+    List<int> descriptorBytes,
+    Uint8List weights,
+  ) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(descriptorBytes));
+    } on Object {
+      throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+    }
+    if (decoded is! Map<String, Object?>) {
+      throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+    }
+    if (decoded['schemaVersion'] != 1) {
+      throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+    }
+    final version = decoded['version'];
+    if (version is! String || version.isEmpty || version.length > 64) {
+      throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+    }
+    final rawClasses = decoded['classes'];
+    if (rawClasses is! List || rawClasses.isEmpty) {
+      throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+    }
+    if (weights.isEmpty) {
+      throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+    }
+
+    final classes = <RecognitionClass>[];
+    final seen = <int>{};
+    for (final raw in rawClasses) {
+      if (raw is! Map<String, Object?>) {
+        throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+      }
+      final classId = raw['classId'];
+      final outcome = raw['outcome'];
+      final label = raw['label'];
+      final denominationCode = raw['denominationCode'];
+      if (classId is! int || classId < 0 || !seen.add(classId)) {
+        throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+      }
+      if (outcome is! String || label is! String || denominationCode is! String) {
+        throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+      }
+      final parsedOutcome = RecognitionClassOutcome.fromWire(outcome);
+      if (parsedOutcome == null ||
+          label.isEmpty ||
+          label.length > 64 ||
+          denominationCode.isEmpty ||
+          denominationCode.length > 32) {
+        throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+      }
+      classes.add(
+        RecognitionClass(
+          classId: classId,
+          outcome: parsedOutcome,
+          label: label,
+          denominationCode: denominationCode,
+        ),
+      );
+    }
+    return RecognitionModelDocument(
+      version: version,
+      classes: classes,
+      weights: weights,
+    );
+  }
+}
+
+/// Where the recognition model comes from.
+///
+/// A port because DR-4 owns publishing it. DR-1 only has to load whatever the
+/// synced bundle holds and refuse to guess when it holds nothing usable.
+abstract interface class RecognitionModelSource {
+  Future<RecognitionModelDocument> load();
+}
+
+/// The logical ids DR-4's bundle delivery writes.
+const kRecognitionDescriptorLogicalId = 'recognition-model.active';
+const kRecognitionWeightsLogicalId = 'recognition-model.weights';
+
+/// Reads the model out of the active bundle snapshot (CE-1).
+///
+/// Both entries are read through [ActiveCurrencyCatalog], so each is checked
+/// against the signed manifest's digest before it is used: a tampered or
+/// half-written model reads as corrupt, not as a model.
+final class BundleRecognitionModelSource implements RecognitionModelSource {
+  const BundleRecognitionModelSource(this.catalog);
+
+  final ActiveCurrencyCatalogReader catalog;
+
+  @override
+  Future<RecognitionModelDocument> load() async {
+    final descriptor = _entry(kRecognitionDescriptorLogicalId);
+    final weights = _entry(kRecognitionWeightsLogicalId);
+    if (descriptor == null || weights == null) {
+      throw const RecognitionModelException(RecognitionModelProblem.missing);
+    }
+    try {
+      return RecognitionModelDocument.parse(
+        await catalog.readBytes(descriptor),
+        await catalog.readBytes(weights),
+      );
+    } on RecognitionModelException {
+      rethrow;
+    } on Object {
+      // A digest mismatch, a truncated object, an unreadable file: from here
+      // they are the same thing — a model that cannot be trusted to name a
+      // banknote.
+      throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+    }
+  }
+
+  BundleManifestEntry? _entry(String logicalId) {
+    for (final entry in catalog.entries) {
+      if (entry.logicalId == logicalId) return entry;
+    }
+    return null;
+  }
+}
+
+/// The source a build with no synced model uses.
+final class MissingRecognitionModelSource implements RecognitionModelSource {
+  const MissingRecognitionModelSource();
+
+  @override
+  Future<RecognitionModelDocument> load() async =>
+      throw const RecognitionModelException(RecognitionModelProblem.missing);
+}

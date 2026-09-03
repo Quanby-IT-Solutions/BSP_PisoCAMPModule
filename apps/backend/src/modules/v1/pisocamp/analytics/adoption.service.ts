@@ -36,6 +36,12 @@ const FEATURE_SQL = sql`
 		when e.event_name in ('survey_prompt_shown', 'survey_declined', 'survey_submitted')
 			then 'survey'
 		when e.event_name = 'advisory_shown' then 'advisory'
+		-- AR-1 and DR-1 report an attempt whether or not it could run, and only
+		-- the ones that ran are uses of the feature: a phone that cannot open
+		-- augmented reality, or a reader that was never downloaded, is not
+		-- somebody using either. What broke is AN-7's question, not AN-013's.
+		when e.event_name = 'ar_start' and e.properties->>'outcome' = 'started' then 'ar'
+		when e.event_name = 'recognition_result' and e.status = 'completed' then 'recognition'
 		when e.event_name = 'link_open' and e.properties->>'linkType' = 'external'
 			then 'external_link'
 		when e.event_name = 'link_open' then 'internal_link'

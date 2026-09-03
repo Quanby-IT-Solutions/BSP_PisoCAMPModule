@@ -38,7 +38,39 @@ export const ANALYTICS_EVENT_NAMES = [
 	"first_open",
 	"ar_start",
 	"ar_end",
+	"recognition_result",
 ] as const
+
+/**
+ * What a denomination scan concluded (DR-002, DR-007).
+ *
+ * `recognized` is the only outcome that carries a denomination claim, and it
+ * is only reached above the configured confidence threshold. `unavailable`
+ * says the feature could not run at all — a missing or corrupt recognition
+ * model — and `permission_denied` that the camera was refused. Both are
+ * different things from a scan that ran and found nothing, and all three have
+ * to stay distinguishable: a module nobody can use and a module nobody wants
+ * are not the same problem.
+ *
+ * DR-2 and DR-3 add the outcomes they own; each is a claim this module is not
+ * yet entitled to make, so none of them is listed in advance.
+ */
+export const RECOGNITION_OUTCOMES = ["recognized", "unavailable", "permission_denied"] as const
+
+export type RecognitionOutcome = (typeof RECOGNITION_OUTCOMES)[number]
+
+/**
+ * The outcomes where no scan ran at all, and which are therefore reported with
+ * `status: failed`.
+ *
+ * A scan that ran and concluded something is a completed scan whatever it
+ * concluded — which is what keeps the outcomes DR-2 and DR-3 add on the
+ * completed side without revisiting this rule.
+ */
+export const RECOGNITION_FAILED_OUTCOMES: readonly RecognitionOutcome[] = [
+	"unavailable",
+	"permission_denied",
+]
 
 /**
  * The ways a request can fail on a device, as AN-024 asks them to be counted.
@@ -265,6 +297,25 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 			.strict(),
 	}).strict(),
 	AnalyticsCommonSchema.extend({
+		eventName: z.literal("recognition_result"),
+		screen: z.literal("recognition_scanner"),
+		feature: z.literal("recognition"),
+		// `failed` belongs to the outcomes where no scan ran, and the refinement
+		// below holds the two fields together: a scan that ran and concluded is a
+		// completed scan whatever it concluded.
+		status: z.enum(["completed", "failed"]),
+		properties: z
+			.object({
+				outcome: z.enum(RECOGNITION_OUTCOMES),
+				// How long the attempt took, which is the number DR-4's harness
+				// reports as p50/p95. Nothing about the note itself is carried:
+				// what somebody is holding is not this module's business, and no
+				// acceptance criterion asks for it.
+				elapsedMs: z.number().int().min(0).max(120_000),
+			})
+			.strict(),
+	}).strict(),
+	AnalyticsCommonSchema.extend({
 		eventName: z.literal("first_open"),
 		screen: z.literal("pisocamp_home"),
 		feature: z.literal("module"),
@@ -399,6 +450,20 @@ function inspectForbiddenPropertyKeys(
 export const AnalyticsEventSchema = AnalyticsEventCatalogSchema.superRefine((event, ctx) => {
 	inspectForbiddenValues(event, [], ctx)
 	inspectForbiddenPropertyKeys(event.properties, ["properties"], ctx)
+
+	// A scan reported as failed that names an outcome, or an unavailable feature
+	// reported as a completion, would both be counted wrongly by anything that
+	// reads status. The two fields say the same thing or the event is refused.
+	if (event.eventName === "recognition_result") {
+		const ranNothing = RECOGNITION_FAILED_OUTCOMES.includes(event.properties.outcome)
+		if (ranNothing !== (event.status === "failed")) {
+			ctx.addIssue({
+				code: "custom",
+				message: "Recognition status must be failed when no scan ran and completed otherwise",
+				path: ["status"],
+			})
+		}
+	}
 
 	if (textEncoder.encode(JSON.stringify(event)).byteLength > EVENT_MAX_BYTES) {
 		ctx.addIssue({

@@ -53,15 +53,21 @@ const KIND_MEDIA_TYPES = {
 	content: ["application/json"],
 	image: ["image/png", "image/jpeg", "image/webp"],
 	model: ["model/gltf-binary"],
+	// DR-1's recognition model travels as two entries: the descriptor that says
+	// what the classes mean, and the weights themselves. A separate kind from
+	// `model`, which is CE-2's glTF geometry — a device that confused the two
+	// would hand a neural network to a 3D renderer.
+	recognition_model: ["application/json", "application/octet-stream"],
 } as const satisfies Record<string, readonly string[]>
 
 export const PisoCampBundleManifestEntrySchema = z
 	.object({
 		logicalId: z.string().min(1).max(160).regex(LOGICAL_ID_PATTERN),
-		kind: z.enum(["content", "image", "model"]),
+		kind: z.enum(["content", "image", "model", "recognition_model"]),
 		delivery: z.enum(["core", "on_demand"]),
 		mediaType: z.enum([
 			"application/json",
+			"application/octet-stream",
 			"image/png",
 			"image/jpeg",
 			"image/webp",

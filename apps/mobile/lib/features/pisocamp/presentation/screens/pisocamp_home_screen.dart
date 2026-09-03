@@ -569,6 +569,24 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
+                  AppCard(
+                    child: ListTile(
+                      leading: const Icon(Icons.center_focus_strong_outlined),
+                      title: const Text('Identify a banknote'),
+                      // Says what it does and what it does not, before anybody
+                      // opens it: somebody worried about a note is exactly the
+                      // person who must not read this as a genuineness check.
+                      subtitle: const Text(
+                        'Read a denomination with the camera. This does not '
+                        'verify authenticity.',
+                      ),
+                      minTileHeight: 64,
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () =>
+                          context.push(AppRoutes.pisoCampRecognition),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   if (!authenticated &&
                       !authLoading &&
                       result.accountPromptEnabled)

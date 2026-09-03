@@ -37,7 +37,20 @@ final class BundleStoreFaults {
   final void Function(int attempt)? afterEntityDeleteFailure;
 }
 
-final class ActiveCurrencyCatalog {
+/// The part of an active snapshot a reader needs: what is in it, and the bytes
+/// of one entry.
+///
+/// Narrow on purpose. A caller that only reads one resource has no business
+/// holding a whole store, and this is the seam that lets one be tested without
+/// a bundle on disk.
+abstract interface class ActiveCurrencyCatalogReader {
+  List<BundleManifestEntry> get entries;
+
+  /// Throws if the bytes do not match the signed manifest's digest.
+  Future<Uint8List> readBytes(BundleManifestEntry entry);
+}
+
+final class ActiveCurrencyCatalog implements ActiveCurrencyCatalogReader {
   ActiveCurrencyCatalog._({
     required this.manifest,
     required this.manifestDigest,
@@ -49,8 +62,11 @@ final class ActiveCurrencyCatalog {
   final Directory _objectDirectory;
 
   String get version => manifest.bundleVersion;
+
+  @override
   List<BundleManifestEntry> get entries => manifest.entries;
 
+  @override
   Future<Uint8List> readBytes(BundleManifestEntry entry) async {
     if (!entries.any(
       (candidate) =>

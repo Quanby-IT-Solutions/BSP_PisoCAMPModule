@@ -105,6 +105,10 @@ final class CurrencySeedBaseline {
       BundleEntryKind.model =>
         assetPath ==
             'assets/pisocamp/bundle/seed/source/neutral-coin-education.glb',
+      // The packaged seed ships no recognition model: DR-1's classifier arrives
+      // with a synced bundle or not at all, and naming a packaged path for it
+      // would be an entry point for a file this build never approved.
+      BundleEntryKind.recognitionModel => false,
     };
   }
 }

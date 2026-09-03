@@ -121,6 +121,11 @@ const CATALOG: Record<
 		// The one event that exists because something did not work.
 		status: "failed",
 	},
+	recognition_result: {
+		screen: "recognition_scanner",
+		feature: "recognition",
+		properties: { outcome: "recognized", elapsedMs: 640 },
+	},
 }
 
 /**
@@ -173,6 +178,21 @@ describe("the analytics catalog the database accepts", () => {
 
 		const stored = await db.select({ eventName: analyticsEvents.eventName }).from(analyticsEvents)
 		expect(stored.map(row => row.eventName).sort()).toEqual([...ANALYTICS_EVENT_NAMES].sort())
+	})
+
+	it("accepts a recognition scan that could not run", async () => {
+		// The catalog row above covers the completed reading; the feature being
+		// unavailable is the same event with the other status, and the database
+		// has to hold both or a broken model deployment cannot be reported.
+		await db.execute(sql`
+			insert into analytics_event (event_id, schema_version, event_name, occurred_at,
+				subject_pseudo_id, session_id, account_type, screen, feature, app_version,
+				os_name, os_version, device_category, network_state, status, properties)
+			values (gen_random_uuid(), 1, 'recognition_result', now(), 'AbCdEfGhIjKlMnOpQrSt_-',
+				'8c479891-9c42-4550-b5a7-2ab6059c8a91', 'guest', 'recognition_scanner',
+				'recognition', '1.0.0', 'android', '15', 'phone', 'online', 'failed',
+				'{"outcome":"unavailable","elapsedMs":0}'::jsonb)
+		`)
 	})
 
 	it("still refuses a name that is not in the catalog", async () => {

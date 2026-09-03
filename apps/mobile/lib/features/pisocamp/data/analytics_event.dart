@@ -123,6 +123,23 @@ enum ArStartOutcome {
   final String wireValue;
 }
 
+/// What a denomination scan concluded (DR-1).
+///
+/// `recognized` is the only value that carries a denomination claim.
+/// `unavailable` and `permissionDenied` are the ones where no scan ran at all,
+/// and they are reported with a failed status — a module nobody can use and a
+/// module nobody wants are not the same problem.
+enum RecognitionOutcome {
+  recognized('recognized'),
+  unavailable('unavailable'),
+  permissionDenied('permission_denied');
+
+  const RecognitionOutcome(this.wireValue);
+  final String wireValue;
+
+  bool get ranNothing => this != RecognitionOutcome.recognized;
+}
+
 enum AnalyticsAccountType {
   guest('guest'),
   registered('registered');
@@ -370,6 +387,38 @@ final class ArEndIntent extends AnalyticsIntent {
   Map<String, Object?> get properties => <String, Object?>{
     'logicalId': logicalId,
     'durationMs': durationMs,
+  };
+}
+
+final class RecognitionResultIntent extends AnalyticsIntent {
+  const RecognitionResultIntent({
+    required this.outcome,
+    required this.elapsedMs,
+  });
+
+  final RecognitionOutcome outcome;
+
+  /// How long the attempt took. Capped by the contract at two minutes.
+  final int elapsedMs;
+
+  @override
+  String get eventName => 'recognition_result';
+
+  @override
+  String get screen => 'recognition_scanner';
+
+  @override
+  String get feature => 'recognition';
+
+  /// Derived rather than passed in: the status and the outcome have to say the
+  /// same thing, and the server refuses the event if they do not.
+  @override
+  String get status => outcome.ranNothing ? 'failed' : 'completed';
+
+  @override
+  Map<String, Object?> get properties => <String, Object?>{
+    'outcome': outcome.wireValue,
+    'elapsedMs': elapsedMs,
   };
 }
 
@@ -732,8 +781,8 @@ final class AnalyticsEvent {
       feature: _requiredString(json, 'feature'),
       properties: properties,
     );
-    // Each event declares its own status, and only `network_failure` reports
-    // anything but a completion.
+    // Each event declares its own status. Only `network_failure` and a
+    // recognition scan that never ran report anything but a completion.
     _requireLiteral(json, 'status', intent.status);
 
     final event = AnalyticsEvent._(
@@ -952,6 +1001,20 @@ AnalyticsIntent _parseIntent({
       return ArEndIntent(
         logicalId: _requiredBoundedString(properties, 'logicalId', 128),
         durationMs: _requiredBoundedInt(properties, 'durationMs', 3600000),
+      );
+    case 'recognition_result':
+      _requireExactKeys(properties, const <String>{'outcome', 'elapsedMs'});
+      if (screen != 'recognition_scanner' || feature != 'recognition') {
+        throw const AnalyticsValidationException(
+          AnalyticsValidationReason.invalidCatalog,
+        );
+      }
+      return RecognitionResultIntent(
+        outcome: _parseWire(
+          RecognitionOutcome.values,
+          _requiredString(properties, 'outcome'),
+        ),
+        elapsedMs: _requiredBoundedInt(properties, 'elapsedMs', 120000),
       );
     case 'first_open':
       _requireExactKeys(properties, const <String>{});
@@ -1270,6 +1333,7 @@ T _parseWire<T extends Enum>(List<T> values, String wireValue) {
       AnalyticsNetworkFailureType value => value.wireValue,
       AnalyticsNetworkOperation value => value.wireValue,
       ArStartOutcome value => value.wireValue,
+      RecognitionOutcome value => value.wireValue,
       _ => null,
     };
     if (actual == wireValue) return value;

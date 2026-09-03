@@ -47,7 +47,12 @@ final class BundleConfigurationException implements Exception {
   String toString() => 'BundleConfigurationException: $message';
 }
 
-enum BundleEntryKind { content, image, model }
+/// How a client is to read an entry's bytes.
+///
+/// `model` is CE-2's glTF geometry; `recognitionModel` is DR-1's classifier and
+/// its class descriptor. Two kinds rather than one, because a device that
+/// confused them would hand a neural network to a 3D renderer.
+enum BundleEntryKind { content, image, model, recognitionModel }
 
 enum BundleEntryDelivery { core, onDemand }
 
@@ -499,6 +504,19 @@ final class BundleManifestEntry {
       );
       return;
     }
+    if (kind == BundleEntryKind.recognitionModel) {
+      // The descriptor has to be readable JSON; the weights are opaque, and
+      // their digest — already checked above — is the whole guarantee there is
+      // to give about them.
+      if (mediaType == 'application/json') {
+        decodeStrictJsonObject(
+          bytes,
+          maximumBytes: byteLength,
+          context: 'recognition model descriptor',
+        );
+      }
+      return;
+    }
     if (kind == BundleEntryKind.model) {
       if (!_isBinaryGltf(bytes)) {
         throw const BundleValidationException(
@@ -566,6 +584,7 @@ final class BundleManifestEntry {
       'content' => BundleEntryKind.content,
       'image' => BundleEntryKind.image,
       'model' => BundleEntryKind.model,
+      'recognition_model' => BundleEntryKind.recognitionModel,
       _ => throw const BundleValidationException(
         'Bundle manifest entry kind is unsupported.',
       ),
@@ -616,6 +635,10 @@ final class BundleManifestEntry {
       BundleEntryKind.content: {'application/json'},
       BundleEntryKind.image: {'image/png', 'image/jpeg', 'image/webp'},
       BundleEntryKind.model: {'model/gltf-binary'},
+      BundleEntryKind.recognitionModel: {
+        'application/json',
+        'application/octet-stream',
+      },
     };
     if (!(mediaTypesByKind[kind] ?? const <String>{}).contains(mediaType)) {
       throw const BundleValidationException(

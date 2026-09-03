@@ -70,6 +70,12 @@ dependencies:
   sensors_plus: ^7.1.0
   url_launcher: ^6.3.2
 
+  # DR-1 spoken denomination and authenticity disclaimer. The platform's own
+  # speech engine: the module ships no recorded audio and needs none, and a
+  # device that has no engine falls back to the on-screen text, which the
+  # criteria require to stand on its own anyway.
+  flutter_tts: ^4.2.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

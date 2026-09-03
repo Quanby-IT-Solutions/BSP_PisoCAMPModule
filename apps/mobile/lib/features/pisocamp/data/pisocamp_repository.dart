@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/services/api/api_client.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:mobile/features/pisocamp/data/recognition_scanner.dart';
 import 'package:mobile/features/pisocamp/data/survey_triggers.dart';
 
 part 'pisocamp_repository.g.dart';
@@ -64,6 +65,8 @@ class PisoCampHomeLoadResult {
     this.surveyTriggers = const [],
     this.exitAdvisoryIntervalHours = _defaultExitAdvisoryIntervalHours,
     this.leaderboardEnabled = false,
+    this.recognitionConfidenceThreshold =
+        kDefaultRecognitionConfidenceThreshold,
   });
 
   final PisoCampHome home;
@@ -80,6 +83,11 @@ class PisoCampHomeLoadResult {
 
   /// GM-4. False until BSP turns the leaderboard on.
   final bool leaderboardEnabled;
+
+  /// DR-1. How sure the on-device model must be before it names a note. The
+  /// contract's default stands until configuration is read, so an offline
+  /// device is no less careful than an online one.
+  final double recognitionConfidenceThreshold;
 }
 
 /// The contract's default, repeated here for the offline first emission.
@@ -112,6 +120,7 @@ class PisoCampRepository {
         surveyTriggers: config.surveyTriggers,
         exitAdvisoryIntervalHours: config.exitAdvisoryIntervalHours,
         leaderboardEnabled: config.leaderboardEnabled,
+        recognitionConfidenceThreshold: config.recognitionConfidenceThreshold,
       );
     } on Object {
       // The first emission is already the safe offline fallback.
@@ -156,8 +165,22 @@ class PisoCampRepository {
       leaderboardEnabled: data['leaderboard_enabled'] is bool
           ? data['leaderboard_enabled'] as bool
           : false,
+      // SA-3 owns the value; DR-1 only reads it. Anything outside the
+      // contract's range is treated as absent rather than obeyed: a threshold
+      // of zero would make the scanner name notes on a coin flip.
+      recognitionConfidenceThreshold: _readThreshold(
+        data['recognition_confidence_threshold'],
+      ),
     );
   }
+}
+
+double _readThreshold(Object? value) {
+  final threshold = value is num ? value.toDouble() : null;
+  if (threshold == null || threshold < 0.5 || threshold > 1) {
+    return kDefaultRecognitionConfidenceThreshold;
+  }
+  return threshold;
 }
 
 class _PublicConfig {
@@ -167,6 +190,8 @@ class _PublicConfig {
     this.surveyTriggers = const [],
     this.exitAdvisoryIntervalHours = _defaultExitAdvisoryIntervalHours,
     this.leaderboardEnabled = false,
+    this.recognitionConfidenceThreshold =
+        kDefaultRecognitionConfidenceThreshold,
   });
   final bool moduleEnabled;
   final bool accountPromptEnabled;
@@ -179,6 +204,9 @@ class _PublicConfig {
 
   /// GM-4's flag.
   final bool leaderboardEnabled;
+
+  /// DR-1's confidence threshold.
+  final double recognitionConfidenceThreshold;
 }
 
 @riverpod
