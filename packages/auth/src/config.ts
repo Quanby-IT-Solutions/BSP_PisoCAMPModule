@@ -96,7 +96,11 @@ export const AUTH_BASE_PATH = "/auth"
  *
  * @returns Better Auth instance
  */
-export function createAuth(database: DBClient = createDBClient()): ReturnType<typeof betterAuth> {
+// The return type is inferred rather than annotated: since better-auth 1.7
+// the instance is generic over the exact options object it was given, and
+// `ReturnType<typeof betterAuth>` names the default-options instance, which
+// this one is not.
+export function createAuth(database: DBClient = createDBClient()) {
 	// LG-1 / RF3: throws in production when SMTP_HOST is unset, rather than
 	// falling back to a transport that prints reset links and delivers nothing.
 	const transporter = createTransport({
@@ -384,7 +388,7 @@ export function createAuth(database: DBClient = createDBClient()): ReturnType<ty
  *
  * Lazy initialization to ensure environment variables are loaded before creating the instance.
  */
-let _auth: ReturnType<typeof betterAuth> | null = null
+let _auth: ReturnType<typeof createAuth> | null = null
 
 /**
  * Clear the cached auth instance. Call this when configuration changes.
@@ -393,7 +397,7 @@ export function clearAuthCache(): void {
 	_auth = null
 }
 
-export function getAuth(database?: DBClient): ReturnType<typeof betterAuth> {
+export function getAuth(database?: DBClient): ReturnType<typeof createAuth> {
 	if (!_auth) {
 		_auth = createAuth(database)
 	}
