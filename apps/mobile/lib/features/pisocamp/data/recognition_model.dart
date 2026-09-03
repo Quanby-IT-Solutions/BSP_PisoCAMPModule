@@ -83,6 +83,21 @@ final class RecognitionModelException implements Exception {
   String toString() => 'RecognitionModelException(${problem.name})';
 }
 
+/// The confidence a reading needs, and how long the module keeps trying.
+///
+/// Carried with the model rather than read from configuration: DR-4 approves a
+/// threshold against one particular set of weights, and applying it to another
+/// is how a recogniser starts naming notes it should have refused.
+final class RecognitionModelThresholds {
+  const RecognitionModelThresholds({
+    required this.confidence,
+    required this.dwellSeconds,
+  });
+
+  final double confidence;
+  final int dwellSeconds;
+}
+
 /// An approved, versioned recognition model and the classes it emits.
 ///
 /// The device reports [version] so DR-4 can tell which model produced a
@@ -91,11 +106,17 @@ final class RecognitionModelException implements Exception {
 final class RecognitionModelDocument {
   const RecognitionModelDocument({
     required this.version,
+    required this.thresholds,
     required this.classes,
     required this.weights,
   });
 
   final String version;
+
+  /// Null for a descriptor published before DR-4 carried them, in which case
+  /// the device falls back to configuration.
+  final RecognitionModelThresholds? thresholds;
+
   final List<RecognitionClass> classes;
   final Uint8List weights;
 
@@ -132,6 +153,7 @@ final class RecognitionModelDocument {
     if (version is! String || version.isEmpty || version.length > 64) {
       throw const RecognitionModelException(RecognitionModelProblem.corrupt);
     }
+    final thresholds = _parseThresholds(decoded['thresholds']);
     final rawClasses = decoded['classes'];
     if (rawClasses is! List || rawClasses.isEmpty) {
       throw const RecognitionModelException(RecognitionModelProblem.corrupt);
@@ -194,10 +216,37 @@ final class RecognitionModelDocument {
     }
     return RecognitionModelDocument(
       version: version,
+      thresholds: thresholds,
       classes: classes,
       weights: weights,
     );
   }
+}
+
+/// Reads the thresholds a descriptor carries, refusing values outside the
+/// approved range rather than obeying them.
+///
+/// A confidence of zero would make the scanner name notes on a coin flip, and a
+/// descriptor is not a place to accept one from.
+RecognitionModelThresholds? _parseThresholds(Object? raw) {
+  if (raw == null) return null;
+  if (raw is! Map<String, Object?>) {
+    throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+  }
+  final confidence = raw['confidence'];
+  final dwellSeconds = raw['dwellSeconds'];
+  if (confidence is! num ||
+      confidence < 0.5 ||
+      confidence > 1 ||
+      dwellSeconds is! int ||
+      dwellSeconds < 1 ||
+      dwellSeconds > 60) {
+    throw const RecognitionModelException(RecognitionModelProblem.corrupt);
+  }
+  return RecognitionModelThresholds(
+    confidence: confidence.toDouble(),
+    dwellSeconds: dwellSeconds,
+  );
 }
 
 /// Where the recognition model comes from.

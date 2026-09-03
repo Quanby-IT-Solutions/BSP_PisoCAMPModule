@@ -11,7 +11,7 @@ The executable Zod schemas in `packages/contracts/src/modules/v1/pisocamp/analyt
 | `first_open`           | `pisocamp_home`   | `module`             | `completed` | `{}`                                               | Once per install, at the first module entry (AN-11).               |
 | `ar_start`             | `ar_viewer`       | `ar`                 | `completed` | `{ logicalId, outcome }`                           | When an AR session starts, or cannot (AR-1).                       |
 | `ar_end`               | `ar_viewer`       | `ar`                 | `completed` | `{ logicalId, durationMs: 0–3600000 }`             | When an AR session ends (AR-1).                                    |
-| `recognition_result`   | `recognition_scanner` | `recognition`    | `completed` or `failed` | `{ outcome, elapsedMs: 0–120000 }`                 | When a denomination scan concludes, or cannot run (DR-1).          |
+| `recognition_result`   | `recognition_scanner` | `recognition`    | `completed` or `failed` | `{ outcome, elapsedMs: 0–120000, modelVersion? }`  | When a denomination scan concludes, or cannot run (DR-1).          |
 | `module_load`          | `pisocamp_home`   | `module`             | `completed` | `{ phase: cold \| warm, durationMs: 0–120000 }`     | Once per module entry, at the first frame (AN-022).                |
 | `network_failure`      | `pisocamp_home`   | `module`             | `failed`    | `{ failureType, operation }`                       | When a sync or download could not finish (AN-024).                 |
 
@@ -43,7 +43,9 @@ the model's real failure rate behind broken installs.
 It carries no denomination, no confidence and nothing derived from the frame.
 What somebody is holding is not this module's business, and DR-003 requires
 that frames never leave the device. `elapsedMs` is the attempt's duration,
-which is what DR-4's harness reports as p50/p95.
+which is what DR-4's harness reports as p50/p95, and `modelVersion` names the
+recognition model that produced the reading — absent when none was loaded,
+because a scan that never ran was not run by anything.
 
 ## Common envelope
 

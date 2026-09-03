@@ -15,6 +15,7 @@ import {
 	pisoCampDataSubjectContract,
 } from "./data-subject.contract.js"
 import { pisoCampReportContract } from "./report.contract.js"
+import { pisoCampRecognitionContract } from "./recognition.contract.js"
 import { pisoCampRoleContract } from "./role.contract.js"
 import { pisoCampSurveyTriggerContract } from "./survey-trigger.contract.js"
 import { pisoCampTriviaContract } from "./trivia.contract.js"
@@ -55,6 +56,7 @@ export const pisoCampContract = {
 		audit: pisoCampAuditContract,
 		notifications: pisoCampNotificationContract,
 		dataSubject: pisoCampAdminDataSubjectContract,
+		recognition: pisoCampRecognitionContract,
 		config: {
 			get: oc
 				.route({

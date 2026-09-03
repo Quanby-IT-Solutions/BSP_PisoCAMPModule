@@ -365,6 +365,117 @@ void main() {
     });
   });
 
+  group('DR-4 the thresholds approved with the model', () {
+    RecognitionModelDocument modelWith({
+      required double confidence,
+      required int dwellSeconds,
+    }) => RecognitionModelDocument.parse(
+      utf8.encode(
+        jsonEncode(<String, Object?>{
+          'schemaVersion': 1,
+          'version': '2026.09.7',
+          'thresholds': {'confidence': confidence, 'dwellSeconds': dwellSeconds},
+          'classes': <Object?>[
+            {
+              'classId': 0,
+              'outcome': 'denomination',
+              'label': 'Twenty pesos',
+              'denominationCode': 'PHP20',
+            },
+          ],
+        }),
+      ),
+      _pixels(7),
+    );
+
+    test('applies the model figure over the configured one', () async {
+      final camera = StreamController<RecognitionFrame>();
+      final scanner = RecognitionScanner(
+        modelSource: _FixedModelSource(
+          modelWith(confidence: 0.95, dwellSeconds: 30),
+        ),
+        engine: _ScriptedEngine(<RecognitionInference?>[
+          // Above the configured bar, below the one approved for these weights.
+          const RecognitionInference(classId: 0, confidence: 0.9),
+        ]),
+        camera: _ScriptedCamera(camera),
+        confidenceThreshold: 0.8,
+      );
+      final states = <RecognitionScanState>[];
+      scanner.states.listen(states.add);
+      await scanner.start();
+      camera.add(_frame());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      // A confidence tuned against one set of weights says nothing about
+      // another, and the stricter approved figure is the one that governs.
+      expect(states.whereType<RecognitionRecognized>(), isEmpty);
+      expect(scanner.appliedConfidenceThreshold, 0.95);
+      await scanner.dispose();
+    });
+
+    test('reports which model produced the reading', () async {
+      final camera = StreamController<RecognitionFrame>();
+      final scanner = RecognitionScanner(
+        modelSource: _FixedModelSource(
+          modelWith(confidence: 0.8, dwellSeconds: 30),
+        ),
+        engine: _ScriptedEngine(<RecognitionInference?>[
+          const RecognitionInference(classId: 0, confidence: 0.97),
+        ]),
+        camera: _ScriptedCamera(camera),
+        confidenceThreshold: 0.8,
+      );
+      scanner.states.listen((_) {});
+      await scanner.start();
+      camera.add(_frame());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(scanner.modelVersion, '2026.09.7');
+      await scanner.dispose();
+    });
+
+    test('uses the model dwell rather than the built-in one', () async {
+      final camera = StreamController<RecognitionFrame>();
+      final scanner = RecognitionScanner(
+        modelSource: _FixedModelSource(
+          // One second, against a default dwell of eight.
+          modelWith(confidence: 0.9, dwellSeconds: 1),
+        ),
+        engine: _ScriptedEngine(<RecognitionInference?>[]),
+        camera: _ScriptedCamera(camera),
+        confidenceThreshold: 0.8,
+      );
+      final states = <RecognitionScanState>[];
+      scanner.states.listen(states.add);
+      await scanner.start();
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+
+      expect(states.last, isA<RecognitionUnrecognized>());
+    });
+
+    test('falls back to configuration when a model carries no thresholds', () async {
+      final camera = StreamController<RecognitionFrame>();
+      final scanner = RecognitionScanner(
+        modelSource: _FixedModelSource(model),
+        engine: _ScriptedEngine(<RecognitionInference?>[
+          const RecognitionInference(classId: 0, confidence: 0.85),
+        ]),
+        camera: _ScriptedCamera(camera),
+        confidenceThreshold: 0.8,
+      );
+      final states = <RecognitionScanState>[];
+      scanner.states.listen(states.add);
+      await scanner.start();
+      camera.add(_frame());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(scanner.appliedConfidenceThreshold, 0.8);
+      expect(states.last, isA<RecognitionRecognized>());
+      await scanner.dispose();
+    });
+  });
+
   group('DR-3 notes that are not circulating legal tender', () {
     RecognitionModelDocument mixedModel() => RecognitionModelDocument.parse(
       utf8.encode(

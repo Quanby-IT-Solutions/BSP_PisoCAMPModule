@@ -218,6 +218,9 @@ class _RecognitionScannerScreenState
     final intent = RecognitionResultIntent(
       outcome: outcome,
       elapsedMs: elapsedMs,
+      // Whichever model was loaded, so a figure can be traced back to the
+      // weights that produced it. Absent when none ever loaded.
+      modelVersion: _scanner?.modelVersion,
     );
     final sdk = _analytics ?? _readAnalytics(intent);
     if (sdk != null) emitAnalytics(sdk, intent);

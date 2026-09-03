@@ -36,8 +36,9 @@ const SAFE_BUNDLE_ERROR_CODES = new Set([
 
 export interface ClaimedBundleRequest {
 	id: string
-	itemId: string
-	publishedVersionId: string
+	/** Null for a rebuild no content version caused, such as DR-4's model. */
+	itemId: string | null
+	publishedVersionId: string | null
 	attemptCount: number
 }
 
@@ -336,6 +337,10 @@ export class BundleRepository {
 		if (completed.length !== claims.length) throw new BundleLeaseLostError()
 
 		for (const claim of claims) {
+			// A rebuild no content item caused has no item to clear the pending
+			// flag on. Skipped rather than guarded further down, because a null
+			// here would otherwise match every row with a null published version.
+			if (!claim.itemId || !claim.publishedVersionId) continue
 			await database
 				.update(contentItems)
 				.set({ bundlePending: false })

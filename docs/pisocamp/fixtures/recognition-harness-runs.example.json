@@ -1,0 +1,21 @@
+{
+  "modelVersion": "2026.09.1",
+  "descriptor": {
+    "schemaVersion": 1,
+    "version": "2026.09.1",
+    "thresholds": {"confidence": 0.8, "dwellSeconds": 8},
+    "classes": [
+      {"classId": 0, "outcome": "denomination", "label": "Twenty pesos", "denominationCode": "PHP20"},
+      {"classId": 1, "outcome": "denomination", "label": "Fifty pesos", "denominationCode": "PHP50"},
+      {"classId": 2, "outcome": "demonetized", "label": "New Design Series"},
+      {"classId": 3, "outcome": "foreign"}
+    ]
+  },
+  "results": [
+    {"sampleId": "s1", "classId": 0, "confidence": 0.95, "elapsedMs": 400, "device": "pixel-7"},
+    {"sampleId": "s2", "classId": 1, "confidence": 0.72, "elapsedMs": 900, "device": "pixel-7"},
+    {"sampleId": "s3", "classId": 2, "confidence": 0.91, "elapsedMs": 500, "device": "pixel-7"},
+    {"sampleId": "s4", "classId": 3, "confidence": 0.88, "elapsedMs": 700, "device": "iphone-13"},
+    {"sampleId": "s5", "classId": 1, "confidence": 0.93, "elapsedMs": 1200, "device": "iphone-13"}
+  ]
+}

@@ -6,6 +6,7 @@ import { env } from "@/config/env.config"
 
 import { ContentWorkflowService } from "../content/content-workflow.service"
 import { ContentModule } from "../content/content.module"
+import { readActiveRecognitionModel } from "../recognition/active-recognition-model"
 import { BundleBuilder, type BundleBuilderConfig } from "./bundle-builder"
 import { PostgresBundleObjectStore } from "./bundle-object-store"
 import { BundleRepository } from "./bundle-repository"
@@ -59,7 +60,18 @@ const BUNDLE_BUILDER_CONFIG = Symbol("PISOCAMP_BUNDLE_BUILDER_CONFIG")
 				signer: BundleSigner | null,
 				workflow: ContentWorkflowService,
 				config: BundleBuilderConfig
-			) => new BundleBuilder(repository, objectStore, signer, workflow, config),
+			) =>
+				new BundleBuilder(
+					repository,
+					objectStore,
+					signer,
+					workflow,
+					config,
+					() => new Date(),
+					// DR-4: whatever model is live when the bundle is built travels
+					// in it, so publishing one reaches devices on their next sync.
+					readActiveRecognitionModel
+				),
 		},
 		{
 			provide: BundleWorker,

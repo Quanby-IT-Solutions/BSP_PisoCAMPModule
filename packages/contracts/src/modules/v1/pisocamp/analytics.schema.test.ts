@@ -136,6 +136,33 @@ describe("AN-1 analytics event catalog", () => {
 		).toBe(false)
 	})
 
+	it("names the model a reading came from, and refuses a made-up one", () => {
+		const recognized = vectors.find(
+			vector =>
+				vector.eventName === "recognition_result" &&
+				(vector.properties as { outcome?: string }).outcome === "recognized"
+		)!
+		// DR-4: a figure has to be traceable to the weights that produced it.
+		expect((recognized.properties as { modelVersion?: string }).modelVersion).toBe("2026.09.1")
+
+		for (const modelVersion of ["", " ", "../etc", "x".repeat(65)]) {
+			expect(
+				AnalyticsEventSchema.safeParse({
+					...recognized,
+					properties: { ...recognized.properties, modelVersion },
+				}).success,
+				modelVersion
+			).toBe(false)
+		}
+
+		// And a scan that never ran names none, because there is none to name.
+		const unavailable = vectors.find(
+			vector => vector.eventName === "recognition_result" && vector.status === "failed"
+		)!
+		expect((unavailable.properties as { modelVersion?: string }).modelVersion).toBeUndefined()
+		expect(AnalyticsEventSchema.safeParse(unavailable).success).toBe(true)
+	})
+
 	it("refuses a scan that carries the image it scanned", () => {
 		const recognized = vectors.find(vector => vector.eventName === "recognition_result")!
 		// DR-003: frames stay on the device. The catalog is the last place that

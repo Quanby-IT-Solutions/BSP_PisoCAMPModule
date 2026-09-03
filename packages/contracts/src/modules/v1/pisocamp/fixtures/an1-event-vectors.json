@@ -301,7 +301,8 @@
 		"status": "completed",
 		"properties": {
 			"outcome": "recognized",
-			"elapsedMs": 640
+			"elapsedMs": 640,
+			"modelVersion": "2026.09.1"
 		}
 	},
 	{

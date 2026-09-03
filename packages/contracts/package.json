@@ -89,6 +89,10 @@
 			"types": "./dist/modules/v1/pisocamp/role.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/role.schema.js"
 		},
+		"./pisocamp-recognition": {
+			"types": "./dist/modules/v1/pisocamp/recognition.schema.d.ts",
+			"default": "./dist/modules/v1/pisocamp/recognition.schema.js"
+		},
 		"./pisocamp-report": {
 			"types": "./dist/modules/v1/pisocamp/report.schema.d.ts",
 			"default": "./dist/modules/v1/pisocamp/report.schema.js"

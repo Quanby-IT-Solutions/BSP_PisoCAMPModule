@@ -16,6 +16,9 @@ type BundleMediaType = PisoCampBundleManifestEntry["mediaType"]
 const MAX_BUNDLE_OBJECT_BYTES = 5_242_880
 const BUNDLE_MEDIA_TYPES = new Set<BundleMediaType>([
 	"application/json",
+	// DR-4's recognition weights. Opaque bytes: the digest is the whole
+	// guarantee, which is why they are stored the same way as everything else.
+	"application/octet-stream",
 	"image/png",
 	"image/jpeg",
 	"image/webp",

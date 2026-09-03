@@ -322,6 +322,16 @@ const AnalyticsEventCatalogSchema = z.discriminatedUnion("eventName", [
 				// what somebody is holding is not this module's business, and no
 				// acceptance criterion asks for it.
 				elapsedMs: z.number().int().min(0).max(120_000),
+				// DR-4: which model produced this. Optional because a scan that
+				// never ran was not run by anything, and naming a version there
+				// would be a claim about weights the device does not have.
+				modelVersion: z
+					.string()
+					.trim()
+					.min(1)
+					.max(64)
+					.regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+					.optional(),
 			})
 			.strict(),
 	}).strict(),

@@ -1,0 +1,9 @@
+{
+  "samples": [
+    {"id": "s1", "expectedOutcome": "denomination", "expectedClassId": 0, "variant": "daylight"},
+    {"id": "s2", "expectedOutcome": "denomination", "expectedClassId": 1, "variant": "dim"},
+    {"id": "s3", "expectedOutcome": "demonetized", "expectedClassId": 2, "variant": "daylight"},
+    {"id": "s4", "expectedOutcome": "foreign", "expectedClassId": 3, "variant": "worn"},
+    {"id": "s5", "expectedOutcome": "denomination", "expectedClassId": 0, "variant": "worn"}
+  ]
+}

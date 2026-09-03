@@ -406,12 +406,17 @@ final class RecognitionResultIntent extends AnalyticsIntent {
   const RecognitionResultIntent({
     required this.outcome,
     required this.elapsedMs,
+    this.modelVersion,
   });
 
   final RecognitionOutcome outcome;
 
   /// How long the attempt took. Capped by the contract at two minutes.
   final int elapsedMs;
+
+  /// Which model produced this, so DR-4 can say which weights a figure came
+  /// from. Absent when no model was ever loaded.
+  final String? modelVersion;
 
   @override
   String get eventName => 'recognition_result';
@@ -431,6 +436,7 @@ final class RecognitionResultIntent extends AnalyticsIntent {
   Map<String, Object?> get properties => <String, Object?>{
     'outcome': outcome.wireValue,
     'elapsedMs': elapsedMs,
+    if (modelVersion != null) 'modelVersion': modelVersion,
   };
 }
 
@@ -1015,7 +1021,11 @@ AnalyticsIntent _parseIntent({
         durationMs: _requiredBoundedInt(properties, 'durationMs', 3600000),
       );
     case 'recognition_result':
-      _requireExactKeys(properties, const <String>{'outcome', 'elapsedMs'});
+      _requireKeys(
+        properties,
+        required: const <String>{'outcome', 'elapsedMs'},
+        optional: const <String>{'modelVersion'},
+      );
       if (screen != 'recognition_scanner' || feature != 'recognition') {
         throw const AnalyticsValidationException(
           AnalyticsValidationReason.invalidCatalog,
@@ -1027,6 +1037,9 @@ AnalyticsIntent _parseIntent({
           _requiredString(properties, 'outcome'),
         ),
         elapsedMs: _requiredBoundedInt(properties, 'elapsedMs', 120000),
+        modelVersion: properties.containsKey('modelVersion')
+            ? _requiredBoundedString(properties, 'modelVersion', 64)
+            : null,
       );
     case 'first_open':
       _requireExactKeys(properties, const <String>{});
@@ -1159,6 +1172,22 @@ String _requiredSurveyPurpose(Map<String, Object?> properties) {
     );
   }
   return purpose;
+}
+
+/// Like [_requireExactKeys], but for an event where one property is allowed to
+/// be absent. Anything not named in either set is still refused: an unexpected
+/// key is a device sending something this catalog never agreed to carry.
+void _requireKeys(
+  Map<String, Object?> value, {
+  required Set<String> required,
+  required Set<String> optional,
+}) {
+  final keys = value.keys.toSet();
+  if (!keys.containsAll(required) || !required.union(optional).containsAll(keys)) {
+    throw const AnalyticsValidationException(
+      AnalyticsValidationReason.invalidShape,
+    );
+  }
 }
 
 void _requireExactKeys(Map<String, Object?> value, Set<String> expected) {

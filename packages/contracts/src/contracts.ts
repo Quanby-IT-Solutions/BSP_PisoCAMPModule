@@ -283,6 +283,29 @@ export type {
 } from "./modules/v1/pisocamp/preview.schema.js"
 
 // CE-1 signed offline bundle protocol
+export { pisoCampRecognitionContract } from "./modules/v1/pisocamp/recognition.contract.js"
+export {
+	ListRecognitionModelsOutputSchema,
+	PublishRecognitionModelInputSchema,
+	PublishRecognitionModelOutputSchema,
+	RECOGNITION_MODEL_MAX_BYTES,
+	RecognitionModelClassListSchema,
+	RecognitionModelClassSchema,
+	RecognitionModelDescriptorSchema,
+	RecognitionModelSummarySchema,
+	RecognitionModelVersionSchema,
+	RecognitionThresholdsSchema,
+	UpdateRecognitionThresholdsInputSchema,
+} from "./modules/v1/pisocamp/recognition.schema.js"
+export type {
+	PublishRecognitionModelInput,
+	RecognitionModelClass,
+	RecognitionModelDescriptor,
+	RecognitionModelSummary,
+	RecognitionThresholds,
+	UpdateRecognitionThresholdsInput,
+} from "./modules/v1/pisocamp/recognition.schema.js"
+
 export { pisoCampBundleContract } from "./modules/v1/pisocamp/bundle.contract.js"
 export {
 	PisoCampBundleEnvelopeSchema,

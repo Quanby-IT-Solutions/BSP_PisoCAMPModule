@@ -1,5 +1,13 @@
 import { defineRelations, sql } from "drizzle-orm"
-import { bytea, check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core"
+import {
+	bytea,
+	check,
+	foreignKey,
+	index,
+	primaryKey,
+	unique,
+	uniqueIndex,
+} from "drizzle-orm/pg-core"
 
 import type {
 	AnalyticsEvent,
@@ -1564,12 +1572,80 @@ export const contentBundleChannels = createTable(
 	t => [check("content_bundle_channel_primary_check", sql`${t.id} = 'primary'`)]
 )
 
+/**
+ * DR-4. A published recognition model, its class list and its thresholds.
+ *
+ * The weights live in the bundle object store, addressed by digest like every
+ * other bundle object, so the model a device verifies is the model this row
+ * describes. The thresholds are here rather than in module configuration
+ * because they are approved **with** a model: a confidence tuned against one
+ * set of weights says nothing about another.
+ */
+export const recognitionModels = createTable(
+	"recognition_model",
+	t => ({
+		id: t.uuid("id").primaryKey().defaultRandom(),
+		version: t.text("version").notNull(),
+		status: t.text("status").notNull().default("active").$type<"active" | "retired">(),
+		classes: t.jsonb("classes").notNull(),
+		confidenceThreshold: t.doublePrecision("confidence_threshold").notNull(),
+		dwellSeconds: t.integer("dwell_seconds").notNull(),
+		weightsSha256: t.text("weights_sha256").notNull(),
+		weightsByteLength: t.integer("weights_byte_length").notNull(),
+		publishedBy: t.text("published_by").notNull(),
+		publishedAt: t.timestamp("published_at", { withTimezone: true }).notNull().defaultNow(),
+		retiredAt: t.timestamp("retired_at", { withTimezone: true }),
+	}),
+	t => [
+		foreignKey({
+			columns: [t.publishedBy],
+			foreignColumns: [users.id],
+			name: "recognition_model_published_by_users_id_fkey",
+		}).onDelete("restrict"),
+		unique("recognition_model_version_unique").on(t.version),
+		// One live model, enforced by the database. Two would mean the bundle
+		// had to choose, and whichever it chose would be a coin toss over which
+		// weights every device runs.
+		uniqueIndex("recognition_model_single_active_idx")
+			.on(t.status)
+			.where(sql`${t.status} = 'active'`),
+		check(
+			"recognition_model_version_check",
+			sql`${t.version} ~ '^[A-Za-z0-9][A-Za-z0-9._-]*$' and char_length(${t.version}) between 1 and 64`
+		),
+		check("recognition_model_status_check", sql`${t.status} in ('active', 'retired')`),
+		check(
+			"recognition_model_threshold_check",
+			sql`${t.confidenceThreshold} between 0.5 and 1`
+		),
+		check("recognition_model_dwell_check", sql`${t.dwellSeconds} between 1 and 60`),
+		check("recognition_model_weights_digest_check", sql`${t.weightsSha256} ~ '^[a-f0-9]{64}$'`),
+		check(
+			"recognition_model_weights_size_check",
+			sql`${t.weightsByteLength} between 1 and 5242880`
+		),
+		check(
+			"recognition_model_classes_check",
+			sql`jsonb_typeof(${t.classes}) = 'array' and jsonb_array_length(${t.classes}) between 1 and 512`
+		),
+		check(
+			"recognition_model_retired_check",
+			sql`(${t.status} = 'retired') = (${t.retiredAt} is not null)`
+		),
+		index("recognition_model_status_idx").on(t.status, t.publishedAt),
+	]
+)
+
 export const contentBundleRebuildRequests = createTable(
 	"content_bundle_rebuild_request",
 	t => ({
 		id: t.uuid("id").primaryKey().defaultRandom(),
-		itemId: t.uuid("item_id").notNull(),
-		publishedVersionId: t.uuid("published_version_id").notNull(),
+		// Null for a rebuild that no content version caused. DR-4 publishes a
+		// recognition model into the same bundle, and it is not a content item.
+		itemId: t.uuid("item_id"),
+		publishedVersionId: t.uuid("published_version_id"),
+		/** What made this rebuild due. */
+		reason: t.text("reason").notNull().default("content").$type<"content" | "recognition_model">(),
 		state: t
 			.text("state")
 			.notNull()
@@ -1597,6 +1673,17 @@ export const contentBundleRebuildRequests = createTable(
 			name: "content_bundle_rebuild_request_processed_bundle_fkey",
 		}).onDelete("restrict"),
 		unique("content_bundle_rebuild_request_published_version_unique").on(t.publishedVersionId),
+		check(
+			"content_bundle_rebuild_request_reason_check",
+			sql`${t.reason} in ('content', 'recognition_model')`
+		),
+		check(
+			// A content rebuild names the version that caused it; anything else
+			// names neither. A half-identified request is one nobody can trace.
+			"content_bundle_rebuild_request_origin_check",
+			sql`(${t.reason} = 'content') = (${t.itemId} is not null)
+				and (${t.itemId} is null) = (${t.publishedVersionId} is null)`
+		),
 		check(
 			"content_bundle_rebuild_request_state_check",
 			sql`${t.state} in ('pending', 'processing', 'completed', 'failed')`

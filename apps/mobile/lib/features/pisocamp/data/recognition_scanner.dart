@@ -49,6 +49,13 @@ final class RecognitionRecognized extends RecognitionScanState {
   final int elapsedMs;
 }
 
+/// Which model produced whatever the scan concluded (DR-4).
+///
+/// Null when none was ever loaded: a scan that never ran was not run by
+/// anything, and naming a version there would be a claim about weights the
+/// device does not have.
+typedef RecognitionModelVersion = String?;
+
 /// DR-004. A Philippine note from a series that no longer circulates.
 ///
 /// [series] is what the approved class list calls it. There is deliberately no
@@ -136,6 +143,13 @@ final class RecognitionScanner {
   final _states = StreamController<RecognitionScanState>();
   StreamSubscription<RecognitionFrame>? _frames;
   Timer? _dwellTimer;
+
+  /// The model this scan is running, once one has loaded.
+  RecognitionModelVersion modelVersion;
+
+  /// What the scan actually applied, which is the model's own threshold when it
+  /// carries one and the configured value otherwise.
+  double? appliedConfidenceThreshold;
   DateTime? _startedAt;
   var _busy = false;
   var _finished = false;
@@ -194,11 +208,21 @@ final class RecognitionScanner {
       return;
     }
 
+    modelVersion = model.version;
+    // The model's own thresholds win over the configured ones: they were
+    // approved against these weights, and the configured value is what a device
+    // uses before any model reaches it.
+    final approved = model.thresholds;
+    appliedConfidenceThreshold = approved?.confidence ?? _confidenceThreshold;
+    final dwell = approved == null
+        ? _dwell
+        : Duration(seconds: approved.dwellSeconds);
+
     _emit(const RecognitionScanning());
     // A timer rather than a frame count, so a camera that stops delivering
     // frames ends the same way as one that delivers unreadable ones: somebody
     // is not left holding a note at a screen that will never answer.
-    _dwellTimer = Timer(_dwell, _giveUp);
+    _dwellTimer = Timer(dwell, _giveUp);
     _frames = _camera.frames().listen(
       (frame) => _onFrame(frame, model),
       onError: _onCameraError,
@@ -229,7 +253,8 @@ final class RecognitionScanner {
     try {
       final inference = await _engine.classify(frame);
       if (_finished) return;
-      if (inference.confidence < _confidenceThreshold) {
+      if (inference.confidence <
+          (appliedConfidenceThreshold ?? _confidenceThreshold)) {
         // Below the threshold nothing is said and nothing is shown. The dwell
         // timer decides when a run of these becomes "cannot read this note".
         return;

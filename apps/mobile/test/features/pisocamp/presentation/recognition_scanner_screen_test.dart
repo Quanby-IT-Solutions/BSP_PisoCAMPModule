@@ -381,9 +381,15 @@ void main() {
     expect(event['status'], 'completed');
     final properties = event['properties']! as Map<String, Object?>;
     expect(properties['outcome'], 'recognized');
+    // DR-4: which weights produced it, so a figure can be traced back.
+    expect(properties['modelVersion'], '2026.09.1');
     // The whole property set: no denomination, no confidence, nothing from the
     // frame. What somebody is holding is not the module's business.
-    expect(properties.keys.toSet(), <String>{'outcome', 'elapsedMs'});
+    expect(properties.keys.toSet(), <String>{
+      'outcome',
+      'elapsedMs',
+      'modelVersion',
+    });
   });
 
   testWidgets('scanning again starts a fresh attempt and reports it', (

@@ -1,4 +1,4 @@
-import { createPrivateKey, createPublicKey, randomUUID, verify } from "node:crypto"
+import { createHash, createPrivateKey, createPublicKey, randomUUID, verify } from "node:crypto"
 import { and, count, eq, sql } from "drizzle-orm"
 
 import {
@@ -9,6 +9,7 @@ import {
 	contentBundles,
 	contentItems,
 	contentVersions,
+	recognitionModels,
 	relatedLinks,
 	users,
 } from "@repo/db/schema"
@@ -23,6 +24,7 @@ import {
 import fixture from "../../../../../../../packages/contracts/src/modules/v1/pisocamp/fixtures/ce1-ed25519-vector.json"
 import type { ContentDatabase } from "../content/content-mapping"
 import { ContentWorkflowService } from "../content/content-workflow.service"
+import { readActiveRecognitionModel } from "../recognition/active-recognition-model"
 import { BundleBuilder } from "./bundle-builder"
 import { PostgresBundleObjectStore } from "./bundle-object-store"
 import { BundleRepository } from "./bundle-repository"
@@ -259,11 +261,30 @@ describePostgres("BundleBuilder PostgreSQL integration", () => {
 		await db.execute(sql`select 1`)
 	})
 
+	/**
+	 * PostgreSQL's clock, not this process's.
+	 *
+	 * Lease expiry and retry availability are both computed by the database, and
+	 * a container running tens of milliseconds ahead of the host made two of
+	 * these tests fail at random. Comparing a database timestamp against
+	 * `Date.now()` was the bug.
+	 */
+	async function databaseNow(): Promise<Date> {
+		const result = await db.execute<{ now: Date }>(sql`select statement_timestamp() as now`)
+		// The driver returns either the rows or a result object wrapping them,
+		// depending on the query path taken.
+		const rows = (
+			Array.isArray(result) ? result : (result as { rows: { now: Date }[] }).rows
+		) as { now: Date }[]
+		return new Date(rows[0]!.now)
+	}
+
 	beforeEach(async () => {
 		await removePromotionFault()
 		await db.execute(sql`
-			truncate table content_bundle_manifest_entry, content_bundle_rebuild_request,
-				content_bundle_channel, content_bundle_blob, content_bundle, related_link,
+			truncate table recognition_model, content_bundle_manifest_entry,
+				content_bundle_rebuild_request, content_bundle_channel,
+				content_bundle_blob, content_bundle, related_link,
 				content_item, content_version, users restart identity cascade
 		`)
 		await db.insert(users).values({
@@ -277,6 +298,86 @@ describePostgres("BundleBuilder PostgreSQL integration", () => {
 	afterAll(async () => {
 		await removePromotionFault()
 		await db.$client.end()
+	})
+
+	/**
+	 * DR-4 AC1. The model reaches devices, or it reaches nobody.
+	 *
+	 * The renderer's own spec proves what the two entries look like; this proves
+	 * they survive a real build — signed, reconciled and promoted — because a
+	 * model that never enters a manifest is a model no phone will ever run.
+	 */
+	it("carries the live recognition model into the signed manifest", async () => {
+		const weights = Buffer.from(new Uint8Array(128).fill(7))
+		const weightsSha256 = createHash("sha256").update(weights).digest("hex")
+		await objectStore.putVerified(db, {
+			bytes: weights,
+			mediaType: "application/octet-stream",
+			sha256: weightsSha256,
+		})
+		await db.insert(recognitionModels).values({
+			id: randomUUID(),
+			version: "2026.09.4",
+			status: "active",
+			classes: [
+				{
+					classId: 0,
+					outcome: "denomination",
+					label: "Twenty pesos",
+					denominationCode: "PHP20",
+				},
+			],
+			confidenceThreshold: 0.87,
+			dwellSeconds: 9,
+			weightsSha256,
+			weightsByteLength: weights.byteLength,
+			publishedBy: ACTOR_ID,
+		})
+		await db.insert(contentBundleRebuildRequests).values({
+			id: randomUUID(),
+			itemId: null,
+			publishedVersionId: null,
+			reason: "recognition_model",
+			state: "pending",
+		})
+
+		const builder = new BundleBuilder(
+			repository,
+			objectStore,
+			signer,
+			workflow,
+			{ owner: "dr4-model-owner", leaseSeconds: 120, batchSize: 5 },
+			() => new Date(),
+			readActiveRecognitionModel
+		)
+		const result = await builder.buildNextBundle("dr4")
+		expect(result.outcome).toBe("built")
+
+		const entries = await db
+			.select()
+			.from(contentBundleManifestEntries)
+			.orderBy(contentBundleManifestEntries.logicalId)
+		const byLogicalId = new Map(entries.map(entry => [entry.logicalId, entry]))
+
+		expect(byLogicalId.get("recognition-model.weights")).toMatchObject({
+			kind: "recognition_model",
+			mediaType: "application/octet-stream",
+			sha256: weightsSha256,
+			byteLength: weights.byteLength,
+		})
+
+		const descriptor = byLogicalId.get("recognition-model.active")
+		expect(descriptor).toMatchObject({
+			kind: "recognition_model",
+			mediaType: "application/json",
+		})
+		// And the bytes a device will actually read, fetched by digest exactly
+		// as the device fetches them.
+		const stored = await objectStore.readPublicByDigest(descriptor!.sha256)
+		expect(JSON.parse(stored!.bytes.toString("utf8"))).toMatchObject({
+			version: "2026.09.4",
+			thresholds: { confidence: 0.87, dwellSeconds: 9 },
+		})
 	})
 
 	it("bootstraps an empty signed bundle and takes the unchanged no-version path", async () => {
@@ -600,9 +701,8 @@ describePostgres("BundleBuilder PostgreSQL integration", () => {
 		expect(failed).toHaveLength(1)
 		const [request] = await db.select().from(contentBundleRebuildRequests)
 		expect(request).toMatchObject({ state: "failed", lastError: "signing_failed" })
-		await new Promise(resolve =>
-			setTimeout(resolve, Math.max(0, request!.availableAt.getTime() - Date.now() + 100))
-		)
+		const waitFor = request!.availableAt.getTime() - (await databaseNow()).getTime() + 100
+		await new Promise(resolve => setTimeout(resolve, Math.max(0, waitFor)))
 		const retried = await build("ce1-builder-retry").buildNextBundle("manual")
 		expect(retried.outcome).toBe("built")
 		expect(BigInt(retried.bundleVersion!)).toBeGreaterThan(failed[0]!.version)
@@ -727,7 +827,9 @@ describePostgres("BundleBuilder PostgreSQL integration", () => {
 			state: "processing",
 			leaseOwner: "ce1-builder-lease-loss",
 		})
-		expect(expired!.leaseExpiresAt!.getTime()).toBeLessThanOrEqual(Date.now())
+		expect(expired!.leaseExpiresAt!.getTime()).toBeLessThanOrEqual(
+			(await databaseNow()).getTime()
+		)
 		expect(
 			await db.select().from(contentBundles).where(eq(contentBundles.state, "building"))
 		).toEqual([])

@@ -163,6 +163,52 @@ void main() {
       expect(model.classFor(2)?.denominationCode, isNull);
     });
 
+    test('reads the thresholds approved with the model', () {
+      final model = RecognitionModelDocument.parse(
+        _bytes({
+          ..._descriptorMap(),
+          'thresholds': {'confidence': 0.91, 'dwellSeconds': 12},
+        }),
+        _weights(),
+      );
+
+      expect(model.thresholds?.confidence, 0.91);
+      expect(model.thresholds?.dwellSeconds, 12);
+    });
+
+    test('treats a descriptor with no thresholds as one that carries none', () {
+      // Published before DR-4 carried them. The device falls back to
+      // configuration rather than refusing a model it can otherwise run.
+      final model = RecognitionModelDocument.parse(
+        _bytes(_descriptorMap()),
+        _weights(),
+      );
+
+      expect(model.thresholds, isNull);
+    });
+
+    test('refuses thresholds outside the approved range', () {
+      for (final thresholds in <Object?>[
+        {'confidence': 0, 'dwellSeconds': 8},
+        {'confidence': 1.5, 'dwellSeconds': 8},
+        {'confidence': 0.9, 'dwellSeconds': 0},
+        {'confidence': 0.9, 'dwellSeconds': 600},
+        {'confidence': 0.9},
+        'nonsense',
+      ]) {
+        // A confidence of zero would have the scanner naming notes on a coin
+        // flip, and a descriptor is not a place to accept one from.
+        expect(
+          () => RecognitionModelDocument.parse(
+            _bytes({..._descriptorMap(), 'thresholds': thresholds}),
+            _weights(),
+          ),
+          throwsA(isA<RecognitionModelException>()),
+          reason: '$thresholds',
+        );
+      }
+    });
+
     test('refuses a descriptor with no weights behind it', () {
       // A descriptor without a model is a class list that can never be
       // produced: reading it as usable would leave the scanner waiting forever.

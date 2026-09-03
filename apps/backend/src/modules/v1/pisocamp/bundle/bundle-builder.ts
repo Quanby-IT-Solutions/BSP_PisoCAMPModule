@@ -9,7 +9,12 @@ import {
 
 import type { ContentWorkflowService } from "../content/content-workflow.service"
 import { PostgresBundleObjectStore } from "./bundle-object-store"
-import { renderPublishedContentResources } from "./bundle-renderer"
+import {
+	RECOGNITION_WEIGHTS_LOGICAL_ID,
+	renderPublishedContentResources,
+	renderRecognitionModelResources,
+	type ActiveRecognitionModel,
+} from "./bundle-renderer"
 import { BundleLeaseLostError, BundleRepository } from "./bundle-repository"
 import type { BundleSigner } from "./bundle-signer"
 
@@ -39,7 +44,15 @@ export class BundleBuilder {
 		private readonly signer: BundleSigner | null,
 		private readonly workflow: ContentWorkflowService,
 		private readonly config: BundleBuilderConfig,
-		private readonly clock: () => Date = () => new Date()
+		private readonly clock: () => Date = () => new Date(),
+		/**
+		 * DR-4's live model, or null when none is published.
+		 *
+		 * Injected rather than imported so the bundle keeps depending on nothing
+		 * but what it is asked to carry.
+		 */
+		private readonly activeRecognitionModel: () => Promise<ActiveRecognitionModel | null> = async () =>
+			null
 	) {}
 
 	async buildNextBundle(
@@ -76,7 +89,11 @@ export class BundleBuilder {
 						`bundle_content_excluded reason=${exclusion.reason} item=${exclusion.itemId} version=${exclusion.versionId}`
 					)
 				}
-				const resources = renderPublishedContentResources(candidates)
+				const model = await this.activeRecognitionModel()
+				const resources = [
+					...renderPublishedContentResources(candidates),
+					...(model ? renderRecognitionModelResources(model) : []),
+				]
 				const entries: PisoCampBundleManifestEntry[] = resources.map(resource => ({
 					logicalId: resource.logicalId,
 					kind: resource.kind,
@@ -85,8 +102,14 @@ export class BundleBuilder {
 					byteLength: resource.byteLength,
 					sha256: resource.sha256,
 					downloadPath: `/pisocamp/bundle/resources/${resource.sha256}`,
-					contentItemId: resource.contentItemId,
-					contentVersionId: resource.contentVersionId,
+					// Omitted rather than null for a resource no content version owns:
+					// the manifest's ownership pair is present together or not at all.
+					...(resource.contentItemId && resource.contentVersionId
+						? {
+								contentItemId: resource.contentItemId,
+								contentVersionId: resource.contentVersionId,
+							}
+						: {}),
 				}))
 
 				if (lockedCurrent) {
@@ -110,6 +133,10 @@ export class BundleBuilder {
 				}
 				const bundle = await this.repository.createBuildingBundle(transaction, now)
 				for (const resource of resources) {
+					// The weights are already stored under their digest; putting them
+					// again would mean carrying megabytes through every build for a
+					// row that is already there.
+					if (resource.logicalId === RECOGNITION_WEIGHTS_LOGICAL_ID) continue
 					await this.objectStore.putVerified(transaction, resource)
 				}
 
