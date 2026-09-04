@@ -24,7 +24,7 @@ const expectedDenominationCodes = {
 } as const
 
 describe("CM-1 frozen content vocabulary and currency catalog", () => {
-	it("uses the exact seven content types and seven lifecycle states", () => {
+	it("uses the exact eight content types and seven lifecycle states", () => {
 		expect(CONTENT_TYPES).toEqual([
 			"banknote",
 			"coin",
@@ -33,6 +33,9 @@ describe("CM-1 frozen content vocabulary and currency catalog", () => {
 			"link",
 			"trivia_question",
 			"survey",
+			// AR-2. Listed here on purpose: this is the drift test that says out
+			// loud when the vocabulary changes.
+			"ar_experience",
 		])
 		expect(CONTENT_STATUSES).toEqual([
 			"draft",

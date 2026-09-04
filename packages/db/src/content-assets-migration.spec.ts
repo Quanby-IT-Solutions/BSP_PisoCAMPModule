@@ -102,9 +102,6 @@ async function expectAccepted(
 }
 
 beforeAll(async () => {
-	if (!destructiveOptIn) {
-		throw new Error("RUN_CM2_TASK2_DB_MIGRATION_TESTS=true is required")
-	}
 	await assertDisposablePostgres({
 		allowDestructive: process.env.ALLOW_DESTRUCTIVE_DATABASE_TESTS,
 		databaseUrl: migrationDatabaseUrl,
@@ -134,7 +131,21 @@ afterAll(async () => {
 	}
 })
 
-describe.sequential("single additive CM-2 content-assets migration", () => {
+/**
+ * Opt-in, because this creates and drops a database of its own.
+ *
+ * Skipped rather than failed when the opt-in is absent: throwing in `beforeAll`
+ * made `pnpm test` fail for everybody who had not set an environment variable
+ * nothing sets, which meant the whole package's suite — and every push through
+ * the pre-push hook — failed on a suite that was only ever meant to be
+ * deliberate. Run it with:
+ *
+ *   RUN_CM2_TASK2_DB_MIGRATION_TESTS=true ALLOW_DESTRUCTIVE_DATABASE_TESTS=true \
+ *     CM2_TASK2_DATABASE_URL=... pnpm --filter @repo/db test
+ */
+const describeMigration = destructiveOptIn ? describe.sequential : describe.skip
+
+describeMigration("single additive CM-2 content-assets migration", () => {
 	it("keeps exactly one named CM-2 migration after AN-1", async () => {
 		const directories = (await readdir(migrationsFolder, { withFileTypes: true })).filter(
 			entry => entry.isDirectory() && entry.name > previousMigrationName

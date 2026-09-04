@@ -1,1 +1,17 @@
+# The backend and @repo/db suites truncate live PostgreSQL tables, so they are
+# fail-closed: they need an explicit opt-in and a disposable, loopback, clearly
+# named test database. Configure yours once in .env.test — git-ignored — rather
+# than exporting variables for every push:
+#
+#   ALLOW_DESTRUCTIVE_DATABASE_TESTS=true
+#   DATABASE_URL=postgres://postgres:password@127.0.0.1:5432/pisocamp_test
+#
+# Without it the suites refuse to run rather than guessing at a database, and
+# this push stops. That is the guard doing its job, not a broken hook.
+if [ -f .env.test ]; then
+	set -a
+	. ./.env.test
+	set +a
+fi
+
 turbo test --filter='!@repo/mobile'
