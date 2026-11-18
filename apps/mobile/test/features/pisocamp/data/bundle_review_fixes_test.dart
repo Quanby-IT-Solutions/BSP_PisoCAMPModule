@@ -410,6 +410,12 @@ void main() {
         await heldPartHandle?.close();
       }
     },
+    // Windows-only: both cases make cleanup fail by holding an open handle
+    // on the .part file. Windows refuses to unlink an open file, which is
+    // what drives the delete-retry path under test. POSIX unlinks it
+    // happily, so the failure never occurs, `afterEntityDeleteFailure`
+    // never fires, and the expectation can never be met on macOS or Linux.
+    skip: !Platform.isWindows,
   );
 
   test(
@@ -488,6 +494,12 @@ void main() {
       expect(await part.exists(), isFalse);
       expect(await journal.exists(), isFalse);
     },
+    // Windows-only: both cases make cleanup fail by holding an open handle
+    // on the .part file. Windows refuses to unlink an open file, which is
+    // what drives the delete-retry path under test. POSIX unlinks it
+    // happily, so the failure never occurs, `afterEntityDeleteFailure`
+    // never fires, and the expectation can never be met on macOS or Linux.
+    skip: !Platform.isWindows,
   );
 
   test(

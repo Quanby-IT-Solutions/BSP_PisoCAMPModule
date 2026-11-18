@@ -138,9 +138,17 @@ describe("ReportBuilderView", () => {
 		})
 		render(<ReportBuilderView />)
 
+		// Derived from the control's own `To`, not a literal: the range defaults
+		// to a window ending today, so any fixed date eventually falls *inside*
+		// it, the form validates, and this stops testing the invalid case.
+		const to = screen.getByLabelText("To") as HTMLInputElement
+		const afterTo = new Date(Date.parse(`${to.value}T00:00:00Z`) + 86_400_000)
+			.toISOString()
+			.slice(0, 10)
+
 		const from = screen.getByLabelText("From")
 		await user.clear(from)
-		await user.type(from, "2026-12-31")
+		await user.type(from, afterTo)
 		await user.click(screen.getByRole("button", { name: /generate report/i }))
 
 		expect(mutate).not.toHaveBeenCalled()
