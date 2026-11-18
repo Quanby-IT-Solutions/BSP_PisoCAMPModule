@@ -300,7 +300,18 @@ void main() {
     final part = File(
       '${downloads.path}${Platform.pathSeparator}${resource.digest}.part',
     );
+    // Bounded rather than open-ended. The server paces this resource in slow
+    // chunks on purpose, so the wait is genuinely long; left unbounded, a real
+    // stall surfaces as a bare TimeoutException naming the test but not the
+    // step, which is what makes it look like flakiness rather than a hang.
+    final partWatch = Stopwatch()..start();
     while (!await part.exists() || await part.length() == 0) {
+      if (partWatch.elapsed > const Duration(seconds: 60)) {
+        fail(
+          'the download never produced a non-empty .part, so there was '
+          'nothing to cancel mid-stream',
+        );
+      }
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
     final cancellationWatch = Stopwatch()..start();
@@ -335,7 +346,13 @@ void main() {
       );
     }
     expect((await value.readActive()).version, '0');
-  });
+  },
+      // The default 30s budget is the test package's, not a considered one for
+      // this case: the resource is streamed in deliberately slow chunks, and
+      // under full-suite parallel load the wait above alone can exceed it. The
+      // test then fails as a timeout with no assertion named, which reads as
+      // flakiness. It completes in ~2s when its file is run alone.
+      timeout: const Timeout(Duration(minutes: 2)));
 
   test(
     'pre-journal cancellation leaves a valid pair or removes both files',

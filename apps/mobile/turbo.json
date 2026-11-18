@@ -14,6 +14,9 @@
 			"cache": false
 		},
 		"test": {
+			"outputs": []
+		},
+		"test:cov": {
 			"outputs": ["coverage/**"]
 		},
 		"lint": {
