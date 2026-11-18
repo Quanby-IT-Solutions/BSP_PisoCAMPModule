@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
-/** HY-2 — F-41, F-52, F-61, F-62. Checked-in artefacts that mislead. */
+/** HY-2 — F-41, F-52, F-53, F-61. Checked-in artefacts that mislead. */
 
-const root = join(__dirname, "../../../..")
+const root = join(__dirname, "../..")
 const read = (p: string) => readFileSync(join(root, p), "utf8")
 
 describe("no working credentials in example files (F-41, F-61)", () => {
@@ -30,25 +30,6 @@ describe("dead weight is gone (F-52)", () => {
 		expect(existsSync(join(root, "Dockerfile"))).toBe(false)
 		expect(existsSync(join(root, "apps/backend/Dockerfile"))).toBe(true)
 		expect(existsSync(join(root, "apps/web/Dockerfile"))).toBe(true)
-	})
-})
-
-describe("submit form is real (F-62)", () => {
-	const page = read("apps/web/app/(site)/submit-ticket/page.tsx")
-
-	it("calls the ticket endpoint instead of faking success", () => {
-		expect(page).toContain("useSubmitTicketMutation")
-		// The trap being removed: a timeout, then an unconditional success message.
-		expect(page).not.toContain("setTimeout(resolve, 800)")
-		expect(page).not.toContain("Replace the placeholder handler")
-	})
-
-	it("reports failure to assistive tech as an alert, not a status", () => {
-		expect(page).toContain('role="alert"')
-	})
-
-	it("does not read the form off a released synthetic event", () => {
-		expect(page).not.toContain("event.currentTarget.reset()")
 	})
 })
 

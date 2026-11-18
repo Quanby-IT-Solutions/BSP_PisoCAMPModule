@@ -20,7 +20,7 @@ beforeEach(() => {
 /** Register a paused mutation carrying `variables` on a real QueryClient. */
 function pausedMutation(client: QueryClient, variables: object) {
 	const cache = client.getMutationCache()
-	const mutation = cache.build(client, { mutationKey: ["todos", "create"] })
+	const mutation = cache.build(client, { mutationKey: ["surveys", "create"] })
 	// Drive the real state machine into the paused shape the persister stores.
 	mutation.state = { ...mutation.state, isPaused: true, variables } as typeof mutation.state
 	return mutation

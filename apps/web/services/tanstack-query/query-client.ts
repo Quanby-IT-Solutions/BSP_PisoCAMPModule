@@ -46,7 +46,7 @@ export const NON_PERSISTED_QUERY_ROOTS = ["session", "rbac", "pisocamp"] as cons
 /**
  * The string labels in a query key's first segment. Handles both plain keys
  * (`["session"]`, `["rbac","users"]`) and oRPC's nested path segment
- * (`[["orpc","example","todo","list"], { type, input }]`).
+ * (`[["orpc","pisocamp","config"], { type, input }]`).
  */
 function queryKeyLabels(queryKey: readonly unknown[]): string[] {
 	const [first] = queryKey

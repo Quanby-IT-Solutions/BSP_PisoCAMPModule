@@ -35,7 +35,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 		} catch {
 			// ignore non-JSON error bodies
 		}
-		// Throw a status-carrying ApiError (matching the todo mutations) so the
+		// Throw a status-carrying ApiError (matching the other mutations) so the
 		// shared 429 detection can classify rate limits and read Retry-After.
 		const retryAfterHeader =
 			response.headers.get("retry-after") ?? response.headers.get("x-retry-after")

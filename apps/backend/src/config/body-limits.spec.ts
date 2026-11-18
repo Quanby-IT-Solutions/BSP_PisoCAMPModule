@@ -74,9 +74,9 @@ describe("request body limits", () => {
 	})
 
 	it("accepts the largest legitimate payload", async () => {
-		// The biggest field this app accepts is a support ticket's `concern`,
-		// capped at 5000 characters by the contract. Even as 4-byte UTF-8 that is
-		// ~20kb, so a 5000-character concern must pass with room to spare.
+		// A representative long free-text field: 5000 characters. Even as 4-byte
+		// UTF-8 that is ~20kb, so it must pass the 100 KiB limit with room to
+		// spare.
 		const response = await request(appWithLimits())
 			.post("/echo")
 			.send({
@@ -98,7 +98,7 @@ describe("request body limits", () => {
 	it("still accepts an ordinary small body", async () => {
 		const response = await request(appWithLimits())
 			.post("/echo")
-			.send({ title: "an ordinary todo" })
+			.send({ title: "an ordinary body" })
 
 		expect(response.status).toBe(200)
 	})

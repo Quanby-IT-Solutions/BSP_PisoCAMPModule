@@ -3,9 +3,7 @@
 import Link from "next/link"
 import {
 	ArrowRight01Icon,
-	CheckmarkBadge01Icon,
 	SecurityCheckIcon,
-	Task01Icon,
 	UserGroupIcon,
 	UserMultipleIcon,
 } from "@hugeicons/core-free-icons"
@@ -19,20 +17,11 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/core/components/ui/card"
-import {
-	Empty,
-	EmptyDescription,
-	EmptyHeader,
-	EmptyMedia,
-	EmptyTitle,
-} from "@/core/components/ui/empty"
 import { Skeleton } from "@/core/components/ui/skeleton"
-import { cn } from "@/core/lib/utils"
 import { useIsQueryLoading } from "@/services/tanstack-query/use-query-loading"
 import { ModuleEntryTodayTile } from "@/features/analytics/components/module-entry-today-tile"
 import { canAccess, type AccessProfile } from "@/features/dashboard/lib/access"
 import { getAccessibleNavItems } from "@/features/dashboard/lib/nav-items"
-import { useTodosQuery } from "@/features/todos/api/todos.hooks"
 import { useRolesQuery, useUsersQuery } from "@/features/user-management/api/rbac.hooks"
 
 interface DashboardOverviewProps {
@@ -47,12 +36,10 @@ export function DashboardOverview({ user, access }: DashboardOverviewProps) {
 	const canViewAnalytics = canAccess(access, {
 		requiredPermission: "reports.dashboards.view",
 	})
-	const canReadPosts = canAccess(access, { requiredPermission: "posts:read" })
 	const canReadUsers = canAccess(access, {
 		requiredPermission: ["users:read", "users:manage"],
 	})
 
-	const todos = useTodosQuery()
 	const users = useUsersQuery()
 	const roles = useRolesQuery()
 
@@ -61,7 +48,6 @@ export function DashboardOverview({ user, access }: DashboardOverviewProps) {
 	const isQueryLoading = useIsQueryLoading()
 
 	const firstName = user.name?.trim().split(/\s+/)[0] || "there"
-	const completedTodos = todos.data?.filter(todo => todo.completed).length ?? 0
 	const quickActions = getAccessibleNavItems(access).filter(item => item.href !== "/dashboard")
 
 	return (
@@ -94,16 +80,6 @@ export function DashboardOverview({ user, access }: DashboardOverviewProps) {
 					hint="Granted on your account"
 				/>
 				{canViewAnalytics ? <ModuleEntryTodayTile /> : null}
-				{canReadPosts ? (
-					<StatCard
-						icon={Task01Icon}
-						label="Total todos"
-						value={todos.data?.length}
-						hint={`${completedTodos} completed`}
-						isLoading={isQueryLoading(todos)}
-						isError={todos.isError}
-					/>
-				) : null}
 				{canReadUsers ? (
 					<StatCard
 						icon={UserGroupIcon}
@@ -160,21 +136,6 @@ export function DashboardOverview({ user, access }: DashboardOverviewProps) {
 						)}
 					</CardContent>
 				</Card>
-
-				<Card>
-					<CardHeader>
-						<CardTitle>Recent todos</CardTitle>
-						<CardDescription>Your latest items.</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<RecentTodos
-							enabled={canReadPosts}
-							isLoading={isQueryLoading(todos)}
-							isError={todos.isError}
-							todos={todos.data}
-						/>
-					</CardContent>
-				</Card>
 			</div>
 		</div>
 	)
@@ -214,67 +175,3 @@ function StatCard({ icon, label, value, hint, isLoading, isError }: StatCardProp
 	)
 }
 
-interface RecentTodosProps {
-	enabled: boolean
-	isLoading: boolean
-	isError: boolean
-	todos:
-		| {
-				id: number | string
-				title: string
-				completed: boolean
-		  }[]
-		| undefined
-}
-
-function RecentTodos({ enabled, isLoading, isError, todos }: RecentTodosProps) {
-	if (!enabled) {
-		return <p className="text-muted-foreground text-sm">You do not have access to posts.</p>
-	}
-
-	if (isLoading) {
-		return (
-			<div className="flex flex-col gap-2">
-				<Skeleton className="h-5 w-full" />
-				<Skeleton className="h-5 w-4/5" />
-				<Skeleton className="h-5 w-3/5" />
-			</div>
-		)
-	}
-
-	if (isError) {
-		return <p className="text-destructive text-sm">Failed to load todos.</p>
-	}
-
-	if (!todos || todos.length === 0) {
-		return (
-			<Empty className="border-0 p-0 text-left">
-				<EmptyHeader className="items-start">
-					<EmptyMedia variant="icon">
-						<HugeiconsIcon icon={CheckmarkBadge01Icon} strokeWidth={2} />
-					</EmptyMedia>
-					<EmptyTitle>No todos yet</EmptyTitle>
-					<EmptyDescription>Create one from the Todos page.</EmptyDescription>
-				</EmptyHeader>
-			</Empty>
-		)
-	}
-
-	return (
-		<ul className="flex flex-col gap-2">
-			{todos.slice(0, 5).map(todo => (
-				<li key={todo.id} className="flex items-center gap-2 text-sm">
-					<span
-						className={cn(
-							"size-2 shrink-0 rounded-full",
-							todo.completed ? "bg-emerald-500" : "bg-muted-foreground/40"
-						)}
-					/>
-					<span className={cn("truncate", todo.completed && "text-muted-foreground line-through")}>
-						{todo.title}
-					</span>
-				</li>
-			))}
-		</ul>
-	)
-}

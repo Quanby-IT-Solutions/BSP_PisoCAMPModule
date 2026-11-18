@@ -3,7 +3,7 @@ import "dotenv/config"
 
 import { randomBytes, scryptSync } from "node:crypto"
 import { readFile } from "node:fs/promises"
-import { and, eq, inArray, or } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
 
@@ -29,8 +29,6 @@ import {
 	rolePermissions,
 	roles,
 	schema,
-	tickets,
-	todos,
 	userRoles,
 	users,
 } from "./schema.js"
@@ -124,75 +122,7 @@ async function seedDatabase() {
 		},
 	]
 
-	const seedTodos: Array<typeof todos.$inferInsert> = [
-		{
-			title: "Review onboarding checklist",
-			completed: true,
-			authorId: "seed-user-admin",
-			createdAt: now,
-			updatedAt: now,
-		},
-		{
-			title: "Verify backend health endpoint",
-			completed: false,
-			authorId: "seed-user-admin",
-			createdAt: now,
-			updatedAt: now,
-		},
-		{
-			title: "Connect mobile app to local API",
-			completed: false,
-			authorId: "seed-user-alex",
-			createdAt: now,
-			updatedAt: now,
-		},
-		{
-			title: "Draft release notes for staging",
-			completed: false,
-			authorId: "seed-user-sam",
-			createdAt: now,
-			updatedAt: now,
-		},
-	]
-
-	const seedTickets: Array<typeof tickets.$inferInsert> = [
-		{
-			name: "Admin User",
-			email: "admin@turbo-template.local",
-			subject: "Initial admin setup check",
-			priority: "high" as const,
-			concern: "Please verify seeded admin data appears correctly across the dashboard.",
-			status: "in_progress" as const,
-			authorId: "seed-user-admin",
-			createdAt: now,
-			updatedAt: now,
-		},
-		{
-			name: "Alex Johnson",
-			email: "alex@turbo-template.local",
-			subject: "Mobile API connectivity",
-			priority: "medium" as const,
-			concern: "Android emulator needs a stable local API URL during development.",
-			status: "received" as const,
-			authorId: "seed-user-alex",
-			createdAt: now,
-			updatedAt: now,
-		},
-		{
-			name: "Guest Reporter",
-			email: "guest@turbo-template.local",
-			subject: "Public feedback sample",
-			priority: "low" as const,
-			concern: "This anonymous ticket exists to test support workflows without a linked account.",
-			status: "received" as const,
-			authorId: null,
-			createdAt: now,
-			updatedAt: now,
-		},
-	]
-
 	const seededUserIds = seedUsers.map(user => user.id)
-	const seededTicketEmails = seedTickets.map(ticket => ticket.email)
 	const seedCredentialAccounts: Array<typeof accounts.$inferInsert> = seedUsers.map(user => ({
 		providerId: "credential",
 		accountId: user.id,
@@ -363,16 +293,6 @@ async function seedDatabase() {
 				await tx.insert(moduleConfiguration).values({ key, value }).onConflictDoNothing()
 			}
 
-			await tx.delete(todos).where(inArray(todos.authorId, seededUserIds))
-
-			await tx
-				.delete(tickets)
-				.where(
-					or(inArray(tickets.email, seededTicketEmails), inArray(tickets.authorId, seededUserIds))
-				)
-
-			await tx.insert(todos).values(seedTodos)
-			await tx.insert(tickets).values(seedTickets)
 		})
 
 		// The password is printed ONLY when this run generated it AND actually
@@ -385,7 +305,7 @@ async function seedDatabase() {
 				: "Seed password taken from SEED_ADMIN_PASSWORD (not printed)."
 
 		console.log(
-			`Seeded ${seedUsers.length} users, ${seedCredentialAccounts.length} credential accounts, ${seedTodos.length} todos, and ${seedTickets.length} tickets.\n` +
+			`Seeded ${seedUsers.length} users and ${seedCredentialAccounts.length} credential accounts.\n` +
 				`RBAC: ${seedRoles.length} roles, ${seedPermissions.length} permissions, ${rolePermissionCount} role-permission mappings, ${userRoleCount} user-role assignments.\n${
 					credentialNote
 				}`

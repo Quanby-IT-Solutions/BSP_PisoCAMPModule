@@ -11,7 +11,7 @@ import { env } from "@/env"
  * user's IP and session duration to a third party every 15 seconds. ED-1's CSP
  * then made that actively harmful rather than merely leaky: `connect-src` does
  * not allow gstatic, so the probe throws, the app concludes it is offline, and
- * `networkMode: "online"` pauses **every** mutation indefinitely — todos never
+ * `networkMode: "online"` pauses **every** mutation indefinitely — writes never
  * send, sign-out hangs on "Logging out…". The failure is timing-dependent
  * because the state starts optimistic and only flips once the first probe
  * fails, which is what made it look like flakiness.

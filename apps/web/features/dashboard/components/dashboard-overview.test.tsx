@@ -17,10 +17,6 @@ vi.mock("@/features/analytics/components/module-entry-today-tile", () => ({
 	ModuleEntryTodayTile: moduleEntryTodayTile,
 }))
 
-vi.mock("@/features/todos/api/todos.hooks", () => ({
-	useTodosQuery: () => ({ data: [], isError: false, isLoading: false, fetchStatus: "idle" }),
-}))
-
 vi.mock("@/features/user-management/api/rbac.hooks", () => ({
 	useUsersQuery: () => ({ data: [], isError: false, isLoading: false, fetchStatus: "idle" }),
 	useRolesQuery: () => ({ data: [], isError: false, isLoading: false, fetchStatus: "idle" }),
@@ -48,7 +44,6 @@ describe("DashboardOverview analytics permission boundary", () => {
 		expect(screen.getByRole("heading", { name: "Welcome back, Ada" })).toBeVisible()
 		expect(screen.getByText("Your permissions")).toBeVisible()
 		expect(screen.getByText("Quick actions")).toBeVisible()
-		expect(screen.getByText("Recent todos")).toBeVisible()
 	})
 
 	it("mounts exactly one query-owning tile when reports.dashboards.view is granted", () => {
@@ -60,6 +55,5 @@ describe("DashboardOverview analytics permission boundary", () => {
 		expect(screen.getByRole("heading", { name: "Welcome back, Ada" })).toBeVisible()
 		expect(screen.getByText("Your permissions")).toBeVisible()
 		expect(screen.getByText("Quick actions")).toBeVisible()
-		expect(screen.getByText("Recent todos")).toBeVisible()
 	})
 })

@@ -8,7 +8,7 @@ import {
 } from "./query-client"
 
 // WC-1 / F-04: `session` and `rbac` (the full user directory, emails included)
-// must never be written to IndexedDB, while offline-first roots like todos must
+// must never be written to IndexedDB, while offline-first roots must
 // still persist or the PWA loses its offline reads.
 
 interface QueryState {
@@ -52,13 +52,18 @@ describe("shouldPersistQuery", () => {
 		expect(shouldPersistQuery(query(["rbac", "users"], pending))).toBe(false)
 	})
 
+	// `surveys` stands in for an offline-first root rather than naming a
+	// shipping one: with the template demo gone, every oRPC root the web app
+	// queries today sits under `pisocamp`, which is denied on purpose. These
+	// two cases pin the predicate's positive branch so a future offline-first
+	// root is not quietly swept into the deny list by a widened check.
 	it("still persists offline-first application data", () => {
-		expect(shouldPersistQuery(query(orpcKey("example", "todo", "list")))).toBe(true)
-		expect(shouldPersistQuery(query(["todos"]))).toBe(true)
+		expect(shouldPersistQuery(query(orpcKey("surveys", "list")))).toBe(true)
+		expect(shouldPersistQuery(query(["surveys"]))).toBe(true)
 	})
 
 	it("keeps persisting pending queries so offline reads survive a reload", () => {
-		expect(shouldPersistQuery(query(orpcKey("example", "todo", "list"), pending))).toBe(true)
+		expect(shouldPersistQuery(query(orpcKey("surveys", "list"), pending))).toBe(true)
 	})
 
 	it("tolerates an empty or non-string key without persisting by accident", () => {
@@ -91,10 +96,10 @@ describe("shouldDehydrateMutation", () => {
 		).toBe(false)
 	})
 
-	it("keeps persisting offline todo mutations", () => {
+	it("keeps persisting offline mutations", () => {
 		expect(
 			shouldDehydrateMutation({
-				options: { mutationKey: ["todos", "create"] },
+				options: { mutationKey: ["surveys", "create"] },
 				state: { isPaused: true },
 			})
 		).toBe(true)

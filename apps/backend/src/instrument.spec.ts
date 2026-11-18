@@ -436,7 +436,7 @@ describe("instrument (Sentry bootstrap)", () => {
 
 		it("samples everything else at the configured rate", () => {
 			expect(
-				sampler()({ name: "GET /api/v1/tickets", inheritOrSampleWith: fallback => fallback })
+				sampler()({ name: "GET /api/v1/pisocamp/config", inheritOrSampleWith: fallback => fallback })
 			).toBe(0.5)
 		})
 	})

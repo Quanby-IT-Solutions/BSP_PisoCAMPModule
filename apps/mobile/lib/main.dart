@@ -183,7 +183,7 @@ Future<void> _handleNotificationAction(ReceivedAction receivedAction) async {
 
   // TODO: Add navigation logic here once a global navigator key is available.
   // Example:
-  // if (screen == 'todos') {
-  //   navigatorKey.currentState?.pushNamed('/todos');
+  // if (screen == 'pisocamp') {
+  //   navigatorKey.currentState?.pushNamed('/pisocamp');
   // }
 }

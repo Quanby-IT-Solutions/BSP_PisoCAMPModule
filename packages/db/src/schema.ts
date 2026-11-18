@@ -96,47 +96,6 @@ export const verifications = createTable(
 )
 
 // ============================================================================
-// TODOs
-// ============================================================================
-
-export const todos = createTable("todos", t => ({
-	id: t.serial("id").primaryKey(),
-	title: t.text("title").notNull(),
-	completed: t.boolean("completed").notNull().default(false),
-	authorId: t
-		.text("author_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	createdAt: t.timestamp("created_at").notNull().defaultNow(),
-	updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}))
-
-// ============================================================================
-// TICKETS
-// ============================================================================
-
-export const tickets = createTable("tickets", t => ({
-	id: t.serial("id").primaryKey(),
-	name: t.text("name").notNull(),
-	email: t.text("email").notNull(),
-	subject: t.text("subject").notNull(),
-	priority: t
-		.text("priority")
-		.notNull()
-		.default("medium")
-		.$type<"low" | "medium" | "high" | "urgent">(),
-	concern: t.text("concern").notNull(),
-	status: t
-		.text("status")
-		.notNull()
-		.default("received")
-		.$type<"received" | "in_progress" | "resolved" | "closed">(),
-	authorId: t.text("author_id").references(() => users.id, { onDelete: "set null" }),
-	createdAt: t.timestamp("created_at").notNull().defaultNow(),
-	updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}))
-
-// ============================================================================
 // IDEMPOTENCY KEYS
 // ============================================================================
 
@@ -2290,8 +2249,6 @@ export const relations = defineRelations(
 		users,
 		sessions,
 		accounts,
-		todos,
-		tickets,
 		idempotencyKeys,
 		roles,
 		permissions,
@@ -2352,18 +2309,6 @@ export const relations = defineRelations(
 		accounts: {
 			user: r.one.users({
 				from: r.accounts.userId,
-				to: r.users.id,
-			}),
-		},
-		todos: {
-			author: r.one.users({
-				from: r.todos.authorId,
-				to: r.users.id,
-			}),
-		},
-		tickets: {
-			author: r.one.users({
-				from: r.tickets.authorId,
 				to: r.users.id,
 			}),
 		},
@@ -2599,8 +2544,6 @@ export const schema = Object.assign(
 		sessions,
 		accounts,
 		verifications,
-		todos,
-		tickets,
 		idempotencyKeys,
 		roles,
 		permissions,

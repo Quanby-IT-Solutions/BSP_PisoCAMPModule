@@ -14,7 +14,7 @@ import { useOnlineStatus } from "@/features/pwa/lib/use-online-status"
  * visible on every route.
  *
  * - Offline: persistent red badge until the connection returns.
- * - Offline with queued writes: red badge showing how many todo changes wait.
+ * - Offline with queued writes: red badge showing how many changes wait.
  * - Reconnecting: green "Syncing N changes" badge while the queued writes replay.
  * - Reconnected: green "Back online" badge shown briefly, then auto-hides.
  * - Steady online: renders nothing. Normal online actions do NOT show a badge —
@@ -29,15 +29,15 @@ export function NetworkStatusIndicator() {
 	const prevSyncingCount = React.useRef<number>(0)
 	const [phase, setPhase] = React.useState<"idle" | "syncing" | "reconnected">("idle")
 
-	// Paused todo mutations waiting for connectivity (offline-queued writes).
+	// Paused mutations waiting for connectivity (offline-queued writes).
 	const pausedFlags = useMutationState({
-		filters: { mutationKey: ["todos"], status: "pending" },
+		filters: { status: "pending" },
 		select: mutation => mutation.state.isPaused,
 	})
 	const queuedCount = pausedFlags.filter(Boolean).length
 
-	// Todo mutations actively executing right now.
-	const syncingCount = useIsMutating({ mutationKey: ["todos"] })
+	// Mutations actively executing right now.
+	const syncingCount = useIsMutating()
 
 	React.useEffect(() => {
 		if (!isOnline) {
