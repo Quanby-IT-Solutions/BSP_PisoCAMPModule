@@ -2,8 +2,9 @@
 
 import * as React from "react"
 import type { Route } from "next"
+import Image from "next/image"
 import Link from "next/link"
-import { GitbookFreeIcons } from "@hugeicons/core-free-icons"
+import type { GitbookFreeIcons } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { Button, buttonVariants, type ButtonVariants } from "@/core/components/ui/button"
@@ -20,11 +21,27 @@ export interface LogoIconProps extends Omit<
 
 export const LogoIcon = React.memo(
 	({ icon, strokeWidth = 2, className, ref, ...props }: LogoIconProps) => {
-		const iconToUse = icon || GitbookFreeIcons
+		// The BSP seal is the mark. An `icon` override still renders a glyph, so
+		// callers that want something else are unaffected; the default is the
+		// real artwork rather than a stand-in.
+		if (!icon) {
+			return (
+				<Image
+					src="/bsp-logo.png"
+					alt=""
+					aria-hidden
+					width={24}
+					height={24}
+					className={cn("size-6 shrink-0 object-contain", className)}
+					priority
+				/>
+			)
+		}
+
 		return (
 			<HugeiconsIcon
 				ref={ref}
-				icon={iconToUse}
+				icon={icon}
 				strokeWidth={strokeWidth}
 				className={cn("text-primary", className)}
 				{...props}
@@ -46,7 +63,7 @@ export interface LogoProps {
 }
 
 export function Logo({
-	text = "Turbo Template",
+	text = "Piso CAMP",
 	href,
 	size = "lg",
 	variant = "link",

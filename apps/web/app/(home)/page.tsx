@@ -21,11 +21,11 @@ export default async function Home() {
 					)}
 				</p>
 				<h1 className="text-6xl font-bold tracking-tight text-black md:text-7xl dark:text-zinc-50">
-					TURBO TEMPLATE.
+					PISO CAMP.
 				</h1>
 				<p className="max-w-2xl text-lg leading-8 text-zinc-600 md:text-2xl dark:text-zinc-400">
-					A full-stack monorepo template with Next.js, NestJS, and Flutter. Built for rapid
-					development with shared packages, type-safe APIs, and modern tooling.
+					The Bangko Sentral ng Pilipinas currency education module. Sign in to author and
+					approve content, configure the module, and read how it is being used.
 				</p>
 			</div>
 

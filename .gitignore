@@ -157,10 +157,10 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /AGENTS.md.bak
 /CLAUDE.md
 /CLAUDE.md.bak
+# END Ruler Generated Files
 
 # Next.js 16 regenerates these on every `next dev` in apps/web (agentRules is
 # on by default). Checked in they would churn on every run; left untracked
 # they sit in `git status` forever.
 /apps/web/AGENTS.md
 /apps/web/CLAUDE.md
-# END Ruler Generated Files

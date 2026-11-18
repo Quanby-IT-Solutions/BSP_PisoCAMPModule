@@ -3,7 +3,10 @@
 // Reads a source asset and renders every icon size the manifest and layout
 // reference. Run with: `pnpm --filter @repo/web pwa:icons`.
 //
-// TODO: Replace pwa-source.svg with real brand artwork before shipping.
+// The source is the BSP seal (`pwa-source.png`), the same artwork the Flutter
+// app generates its launcher icon from. A PNG is preferred over the SVG
+// because that is the form the seal exists in; the SVG path is kept as a
+// fallback so an adopter swapping in vector artwork needs no code change.
 
 import { existsSync } from "node:fs"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
@@ -15,10 +18,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const ICONS_DIR = path.resolve(__dirname, "../public/icons")
 const PUBLIC_DIR = path.resolve(__dirname, "../public")
+const SOURCE_PNG = path.join(ICONS_DIR, "pwa-source.png")
 const SOURCE_SVG = path.join(ICONS_DIR, "pwa-source.svg")
 const APP_CONFIG_TS = path.resolve(__dirname, "../core/lib/app-config.ts")
 
-const FALLBACK_THEME_COLOR = "#4f46e5"
+const FALLBACK_THEME_COLOR = "#1B3665"
 
 /**
  * Extract APP_THEME_COLOR from `core/lib/app-config.ts` by reading it as raw
@@ -49,15 +53,20 @@ async function readThemeColor() {
 let THEME_COLOR = FALLBACK_THEME_COLOR
 
 /**
- * Resolve the source image buffer. Prefers the committed SVG; falls back to a
- * solid-indigo square if the SVG is missing so the script never hard-fails.
+ * Resolve the source image buffer. Prefers the committed PNG, then the SVG;
+ * falls back to a solid brand-colour square if neither exists so the script
+ * never hard-fails.
  */
 async function getSourceBuffer() {
+	if (existsSync(SOURCE_PNG)) {
+		return readFile(SOURCE_PNG)
+	}
+
 	if (existsSync(SOURCE_SVG)) {
 		return readFile(SOURCE_SVG)
 	}
 
-	console.warn(`[pwa:icons] ${SOURCE_SVG} not found, using solid-indigo fallback`)
+	console.warn(`[pwa:icons] no pwa-source.png or .svg found, using solid-colour fallback`)
 
 	return sharp({
 		create: {

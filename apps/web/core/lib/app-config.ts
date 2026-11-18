@@ -10,25 +10,28 @@
 /**
  * Full application name shown in the manifest and install prompts.
  */
-// TODO: Replace with your app name before shipping
-export const APP_NAME = "Turbo Template"
+export const APP_NAME = "Piso CAMP"
 
 /**
  * Short application name used where space is constrained (home screen label).
  */
-// TODO: Replace with your app short name before shipping
-export const APP_SHORT_NAME = "Turbo"
+export const APP_SHORT_NAME = "Piso CAMP"
 
 /**
  * Human-readable description of the app for the manifest and metadata.
  */
-// TODO: Replace with your app description before shipping
-export const APP_DESCRIPTION = "Turborepo monorepo template with Next.js, NestJS, and Flutter"
+export const APP_DESCRIPTION =
+	"Administration console for Piso CAMP, the Bangko Sentral ng Pilipinas currency education module"
 
 /**
- * Fixed brand theme color for the manifest and generated icon backgrounds (indigo).
+ * Fixed brand theme color for the manifest and generated icon backgrounds.
+ *
+ * BSP navy, measured from the seal rather than picked by eye: it is the single
+ * most common pixel value in the artwork, and white on it is 11.9:1. The
+ * Flutter app seeds its theme from the same value, so an install prompt and a
+ * launcher icon agree across the two clients.
  */
-export const APP_THEME_COLOR = "#4f46e5"
+export const APP_THEME_COLOR = "#1B3665"
 
 /**
  * Manifest background color shown behind the splash screen.
