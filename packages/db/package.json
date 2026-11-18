@@ -49,6 +49,7 @@
 		"generate": "pnpm build && drizzle-kit generate",
 		"migrate": "pnpm build && drizzle-kit migrate",
 		"seed": "pnpm --filter @repo/contracts build && pnpm push && tsx src/seed.ts",
+		"seed:personas": "tsx src/seed-personas.ts",
 		"seed:bundle": "tsx src/pisocamp-seed-bundle.ts generate",
 		"seed:bundle:validate": "tsx src/pisocamp-seed-bundle.ts validate",
 		"test": "vitest run",
