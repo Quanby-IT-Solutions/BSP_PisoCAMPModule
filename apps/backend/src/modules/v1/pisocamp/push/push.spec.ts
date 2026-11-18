@@ -28,7 +28,20 @@ const CARA = "sa5-cara"
 
 const ALICE_DEVICE = "Sa5AliceDeviceId000001"
 
-const RANGE = { from: "2026-09-01", to: "2026-09-30" }
+/**
+ * The window the rate tests read, derived from the clock rather than pinned to
+ * a month. `service.send()` stamps `sent_at` with `now()`, so a fixed range
+ * stops containing the rows these tests create the moment that month passes,
+ * and every rate reads back as zero. Yesterday through today so a run near
+ * Manila midnight cannot straddle out of its own range.
+ */
+function manilaDay(daysAgo = 0) {
+	return new Date(Date.now() + 8 * 3_600_000 - daysAgo * 86_400_000)
+		.toISOString()
+		.slice(0, 10)
+}
+
+const RANGE = { from: manilaDay(1), to: manilaDay(0) }
 
 /** Manila is UTC+8, so 08:00 UTC is 16:00 local on the same day. */
 function manila(day: number, hour = 10) {

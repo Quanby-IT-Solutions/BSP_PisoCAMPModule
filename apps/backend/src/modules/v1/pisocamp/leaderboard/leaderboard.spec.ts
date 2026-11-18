@@ -267,7 +267,7 @@ describe("GM-4 leaderboard", () => {
 			await answer(ALICE, manila(2026, 9, 1), 10)
 			await service.rebuild("weekly", manila(2026, 9, 1))
 
-			const board = await service.forAccount(ALICE, "weekly")
+			const board = await service.forAccount(ALICE, "weekly", manila(2026, 9, 1))
 
 			const shown = JSON.stringify(board)
 			expect(shown).not.toContain("@example.test")
@@ -320,7 +320,7 @@ describe("GM-4 leaderboard", () => {
 				leaderboardAlias: "Piso Champion",
 			})
 
-			const board = await service.forAccount(ALICE, "weekly")
+			const board = await service.forAccount(ALICE, "weekly", manila(2026, 9, 1))
 
 			expect(board.top[0]?.alias).toBe("Piso Champion")
 		})
@@ -329,7 +329,7 @@ describe("GM-4 leaderboard", () => {
 			await answer(ALICE, manila(2026, 9, 1), 10)
 			await service.rebuild("weekly", manila(2026, 9, 1))
 
-			const board = await service.forAccount(ALICE, "weekly")
+			const board = await service.forAccount(ALICE, "weekly", manila(2026, 9, 1))
 
 			// A board that only shows the leaders tells everybody else nothing
 			// about themselves.
@@ -340,7 +340,7 @@ describe("GM-4 leaderboard", () => {
 			await answer(ALICE, manila(2026, 9, 1), 10)
 			await service.rebuild("weekly", manila(2026, 9, 1))
 
-			const board = await service.forAccount(BOB, "weekly")
+			const board = await service.forAccount(BOB, "weekly", manila(2026, 9, 1))
 
 			expect(board.you).toBeNull()
 			expect(board.top).toHaveLength(1)

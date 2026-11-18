@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { daysBefore } from "./analytics-range-card"
 import { EngagementDashboard } from "./engagement-dashboard"
 
 const useEngagement = vi.fn()
@@ -94,9 +95,16 @@ describe("EngagementDashboard", () => {
 		render(<EngagementDashboard />)
 		const callsBefore = useEngagement.mock.calls.length
 
+		// Derived from the control's own `To`, not a literal: the range defaults
+		// to the last 29 days of real time, so any fixed date eventually falls
+		// *inside* the range, the form validates, and this stops testing the
+		// invalid case at all.
+		const to = screen.getByLabelText("To") as HTMLInputElement
+		const afterTo = daysBefore(to.value, -1)
+
 		const from = screen.getByLabelText("From")
 		await user.clear(from)
-		await user.type(from, "2026-09-30")
+		await user.type(from, afterTo)
 		await user.click(screen.getByRole("button", { name: /apply range/i }))
 
 		expect(screen.getByRole("alert")).toHaveTextContent(
@@ -104,7 +112,7 @@ describe("EngagementDashboard", () => {
 		)
 		// The last call still carries the range that was actually applied.
 		const lastInput = useEngagement.mock.calls.at(-1)?.[0] as { from: string }
-		expect(lastInput.from).not.toBe("2026-09-30")
+		expect(lastInput.from).not.toBe(afterTo)
 		expect(useEngagement.mock.calls.length).toBeGreaterThanOrEqual(callsBefore)
 	})
 

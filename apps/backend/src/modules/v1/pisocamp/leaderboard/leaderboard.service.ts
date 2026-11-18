@@ -139,13 +139,17 @@ export class PisoCampLeaderboardService {
 	 * Refuses outright when the leaderboard is switched off: a disabled feature
 	 * that still answered would be a feature, and the flag would be decoration.
 	 */
-	async forAccount(accountId: string, period: LeaderboardPeriod): Promise<Leaderboard> {
+	async forAccount(
+		accountId: string,
+		period: LeaderboardPeriod,
+		at = new Date()
+	): Promise<Leaderboard> {
 		const config = await this.adminConfig.get()
 		if (!config.leaderboard_enabled) {
 			throw new ORPCError("NOT_FOUND", { message: "The leaderboard is not available" })
 		}
 
-		const periodStart = this.periodStart(period, new Date())
+		const periodStart = this.periodStart(period, at)
 		const rows = await db
 			.select({
 				accountId: leaderboardEntries.accountId,

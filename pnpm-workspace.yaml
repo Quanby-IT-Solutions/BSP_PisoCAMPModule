@@ -191,9 +191,15 @@ overrides:
   tmp@<=0.2.3: '>=0.2.4'
   turbo@<=2.9.13: '>=2.9.14'
   turbo@>=1.1.0 <2.9.14: '>=2.9.14'
-  undici@>=7.0.0 <7.28.0: '>=7.28.0'
-  undici@>=7.0.0 <7.29.0: '>=7.29.0'
-  undici@>=7.23.0 <7.28.0: '>=7.28.0'
+  # Scoped to the 7 line on purpose, same trap as uuid below: the generated
+  # rules ended in a bare '>=', which resolves to undici 8. jsdom is the only
+  # consumer, it depends on ^7.24.5, and undici 8 deleted
+  # lib/handler/wrap-handler.js — so every jsdom environment failed to load and
+  # the whole @repo/web suite collected zero tests. 7.29.0 is the patched
+  # version the advisory asks for and is inside jsdom's range.
+  undici@>=7.0.0 <7.28.0: '>=7.28.0 <8'
+  undici@>=7.0.0 <7.29.0: '>=7.29.0 <8'
+  undici@>=7.23.0 <7.28.0: '>=7.28.0 <8'
   # Scoped to the 11 line on purpose: the generated rule matched uuid 8 as
   # well, and >=11.1.1 resolves to 14.x, which is ESM-only. exceljs is CommonJS
   # and requires uuid@^8, so the blanket rule broke the report export outright.
