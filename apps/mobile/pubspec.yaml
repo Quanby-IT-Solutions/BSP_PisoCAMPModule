@@ -75,6 +75,8 @@ dependencies:
   # device that has no engine falls back to the on-screen text, which the
   # criteria require to stand on its own anyway.
   flutter_tts: ^4.2.5
+  flutter_sceneview: 4.32.0
+  permission_handler: ^12.0.0
 
 dev_dependencies:
   flutter_test:
@@ -90,6 +92,43 @@ dev_dependencies:
   custom_lint: ^0.8.0
   riverpod_lint: ^3.0.3
 
+  # Branding generators. Both are build-time only: they read the
+  # full-resolution seal from assets/branding/ and write native Android
+  # resources, which are then committed. Neither ships in the app.
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.6
+
+# Android launcher icon, generated from the BSP seal.
+#
+# The adaptive icon is the fiddly part: Android masks it to a circle or
+# squircle and only the inner ~66% is guaranteed to survive the crop. The seal
+# fills its canvas edge to edge, so without an inset its gold rim is shaved
+# off. The inset shrinks the mark into the safe zone and the navy fills behind.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/branding/bsp-logo-source.png"
+  adaptive_icon_background: "#1B3665"
+  adaptive_icon_foreground: "assets/branding/bsp-logo-source.png"
+  adaptive_icon_foreground_inset: 18
+  min_sdk_android: 21
+
+# Launch screen. `android_12` is not optional decoration: from Android 12 the
+# platform draws the splash itself via the SplashScreen API and ignores the
+# legacy launch_background drawable entirely, so without this block the app
+# would show a bare white window on any modern device — including the API 37
+# emulator this is developed against.
+flutter_native_splash:
+  color: "#1B3665"
+  image: assets/branding/bsp-logo-splash.png
+  android: true
+  ios: false
+  web: false
+  android_12:
+    color: "#1B3665"
+    image: assets/branding/bsp-logo-splash.png
+    icon_background_color: "#1B3665"
+
 flutter:
   uses-material-design: true
 
@@ -97,6 +136,12 @@ flutter:
   # inside the APK in cleartext and is readable by unzipping it, so config
   # arrives via --dart-define instead (see ApiConstants).
   assets:
+    # The BSP seal. Only the 1x path is declared: Flutter resolves the 2.0x and
+    # 3.0x variants beside it automatically. `assets/branding/` is deliberately
+    # NOT declared — it holds the full-resolution source used at build time by
+    # the launcher-icon and splash generators, and bundling it would ship a
+    # ~1 MB image the app never reads.
+    - assets/images/bsp-logo.png
     - assets/pisocamp/home.json
     - assets/pisocamp/bundle/seed/manifest.envelope.json
     - assets/pisocamp/bundle/seed/resource-index.json

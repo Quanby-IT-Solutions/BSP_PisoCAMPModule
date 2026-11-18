@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_styles.dart';
 import 'package:mobile/features/pisocamp/data/consent_local_store.dart';
 import 'package:mobile/features/pisocamp/data/consent_repository.dart';
 import 'package:mobile/features/pisocamp/data/consent_service.dart';
@@ -62,7 +63,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       if (!mounted) return;
       // Unknown is said out loud rather than shown as "off": somebody would
       // otherwise think they had already opted out.
-      setState(() => _pushProblem = 'Could not check whether you are opted in.');
+      setState(
+        () => _pushProblem = 'Could not check whether you are opted in.',
+      );
     }
   }
 
@@ -162,7 +165,10 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       appBar: AppBar(title: const Text('Privacy')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.pageGutter,
+            vertical: AppSpacing.s16,
+          ),
           children: <Widget>[
             Text(
               'What you have agreed to',
@@ -186,7 +192,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.s16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -236,7 +242,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.s16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[

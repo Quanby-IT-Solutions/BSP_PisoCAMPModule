@@ -531,6 +531,29 @@ final class CurrencyCatalogView {
     });
   }
 
+  /// The same verified bytes, unparsed.
+  ///
+  /// AR-001's renderer loads a model from a path, so those bytes have to reach
+  /// a file; [readModel] hands back a parsed mesh, which is the wrong shape for
+  /// that. This deliberately reuses the one resource lookup and the one digest
+  /// check rather than opening a second way into the bundle — two read paths
+  /// are two chances for one of them to stop being verified.
+  Future<Uint8List> readModelBytes(CurrencyContentDocument document) {
+    final digest = document.modelSha256;
+    if (digest == null || !document.hasModel) {
+      return Future.error(
+        const CoinModelException(CoinModelFailure.unavailable),
+      );
+    }
+    final resource = _models[digest];
+    if (resource == null || resource.mediaType != 'model/gltf-binary') {
+      return Future.error(
+        const CoinModelException(CoinModelFailure.missingResource),
+      );
+    }
+    return resource.read();
+  }
+
   Future<VerifiedCurrencyImage?> _readImage(
     _VerifiedBundleResource resource,
   ) async {

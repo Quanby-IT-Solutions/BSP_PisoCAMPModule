@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/shared/widgets/inset_list_card.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/network/connectivity_provider.dart';
@@ -193,10 +194,14 @@ void main() {
       await tester.pumpWidget(listSubject(sync: sync, connected: true));
       await tester.pumpAndSettle();
 
+      // Connected, so a paused sync must NOT claim the device is offline —
+      // the pause is the update service being unreachable, and telling
+      // somebody on a working connection that they are offline sends them to
+      // check a network that is fine.
       const transitions = [
         (
           BundleSyncState(phase: BundleSyncPhase.paused),
-          'Offline \u2014 showing saved content',
+          'Update unavailable right now \u2014 showing saved content',
         ),
         (
           BundleSyncState(phase: BundleSyncPhase.failed),
@@ -494,7 +499,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final entryPoint = find.widgetWithText(OutlinedButton, 'View in 3D');
+    // The entry point is a row in the detail's grouped "Ways to explore"
+    // card rather than a standalone button; what the test is for is that
+    // it exists, clears the tap target and reaches the viewer.
+    final entryPoint = find.widgetWithText(InsetListRow, 'View in 3D');
     expect(entryPoint, findsOneWidget);
     expect(tester.getSize(entryPoint).height, greaterThanOrEqualTo(48));
 
@@ -891,15 +899,37 @@ void main() {
     );
     expect(tester.takeException(), isNull);
 
+    // Reachable at 320px with doubled text: the series further down the list
+    // can still be scrolled to, which is what the narrow-and-scaled case is
+    // really asserting.
     await tester.scrollUntilVisible(
       find.text('Enhanced New Generation Currency Banknotes'),
       300,
     );
+    await tester.pumpAndSettle();
+
+    final scrollable = find.byType(Scrollable).first;
+    final offset = tester.widget<Scrollable>(scrollable).controller?.offset;
+    expect(offset, isNotNull);
+    expect(offset, greaterThan(0));
+
     await tester.binding.setSurfaceSize(const Size(568, 320));
     await tester.pump();
+
+    // Rotation keeps the position rather than a particular row.
+    //
+    // This used to assert that one heading was still findable, which is a
+    // proxy for scroll position that only holds while row heights stay
+    // exactly as they were — a shorter viewport materialises fewer rows, so
+    // legitimate layout changes broke it without the retained state ever
+    // being wrong. The offset is the thing the ticket actually requires, and
+    // is what the sibling audit asserts.
     expect(
-      find.text('Enhanced New Generation Currency Banknotes'),
-      findsOneWidget,
+      tester
+          .widget<Scrollable>(find.byType(Scrollable).first)
+          .controller
+          ?.offset,
+      offset,
     );
     expect(tester.takeException(), isNull);
   });

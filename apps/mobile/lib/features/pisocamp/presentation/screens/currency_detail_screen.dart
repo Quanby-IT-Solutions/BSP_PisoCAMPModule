@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mobile/core/theme/app_styles.dart';
+import 'package:mobile/shared/widgets/inset_list_card.dart';
 import 'package:mobile/core/navigation/app_router.dart';
 import 'package:mobile/features/pisocamp/data/analytics_event.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
@@ -228,121 +230,178 @@ class _DetailBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final document = detail.document;
     final features = detail.catalog.securityFeaturesFor(document);
+
+    // The interactive entry points, gathered into one grouped card instead of
+    // left as a stack of identical full-width buttons. Four buttons of equal
+    // weight say nothing about which is worth opening, and none of them says
+    // what happens after the tap; a row carries a subtitle that does.
+    final explore = <Widget>[
+      if (document.hasModel) ...[
+        _ViewInThreeDimensions(document: document, catalog: detail.catalog),
+        _PlaceInYourRoom(document: document),
+      ],
+      if (document.hasTactileMap)
+        _FeelTactileFeatures(document: document, catalog: detail.catalog),
+      if (document.hasTiltEffect)
+        _TiltDynamicFeature(document: document, catalog: detail.catalog),
+    ];
+
     return SafeArea(
       child: SingleChildScrollView(
         key: PageStorageKey<String>('currency-detail-${document.logicalId}'),
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        // Vertical only. Prose takes the 24pt page gutter and the grouped
+        // cards take the 16pt card gutter, so a card overhangs the text
+        // column on both sides rather than lining up with it — which is the
+        // whole of what makes it read as a plane under the copy.
+        padding: const EdgeInsets.only(
+          top: AppSpacing.s12,
+          bottom: AppSpacing.s32,
+        ),
         child: SelectionArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Semantics(
-                header: true,
-                child: Text(
-                  document.title,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                document.summary,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 16),
-              if (document.imageSha256 != null && document.imageAlt != null)
-                if (detail.catalog.loadedImage(document) case final image?)
-                  _CurrencyImage(
-                    image: image,
-                    alt: document.imageAlt!,
-                    features: features,
-                  )
-                else
-                  FutureBuilder<VerifiedCurrencyImage?>(
-                    future: detail.image,
-                    builder: (context, snapshot) {
-                      final image = snapshot.data;
-                      return image == null
-                          ? const SizedBox.shrink()
-                          : _CurrencyImage(
-                              image: image,
-                              alt: document.imageAlt!,
-                              features: features,
-                            );
-                    },
-                  ),
-              if (document.hasModel) ...[
-                const SizedBox(height: 16),
-                _ViewInThreeDimensions(
-                  document: document,
-                  catalog: detail.catalog,
-                ),
-                const SizedBox(height: 16),
-                _PlaceInYourRoom(document: document),
-              ],
-              if (document.hasTactileMap) ...[
-                const SizedBox(height: 16),
-                _FeelTactileFeatures(
-                  document: document,
-                  catalog: detail.catalog,
-                ),
-              ],
-              if (document.hasTiltEffect) ...[
-                const SizedBox(height: 16),
-                _TiltDynamicFeature(
-                  document: document,
-                  catalog: detail.catalog,
-                ),
-              ],
-              const SizedBox(height: 16),
-              Text(document.body),
-              if (features.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                Semantics(
-                  header: true,
-                  child: Text(
-                    'Security features',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                for (final feature in features)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            feature.title,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(feature.summary),
-                          const SizedBox(height: 8),
-                          Text(feature.body),
-                        ],
+              _Gutter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        document.title,
+                        style: Theme.of(context).textTheme.headlineSmall,
                       ),
                     ),
+                    const SizedBox(height: AppSpacing.s8),
+                    Text(
+                      document.summary,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s16),
+              if (document.imageSha256 != null && document.imageAlt != null)
+                if (detail.catalog.loadedImage(document) case final image?)
+                  _Gutter(
+                    child: _CurrencyImage(
+                      image: image,
+                      alt: document.imageAlt!,
+                      features: features,
+                    ),
+                  )
+                else
+                  _Gutter(
+                    child: FutureBuilder<VerifiedCurrencyImage?>(
+                      future: detail.image,
+                      builder: (context, snapshot) {
+                        final image = snapshot.data;
+                        return image == null
+                            ? const SizedBox.shrink()
+                            : _CurrencyImage(
+                                image: image,
+                                alt: document.imageAlt!,
+                                features: features,
+                              );
+                      },
+                    ),
                   ),
+              if (explore.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.s24),
+                const _Gutter(child: _SectionHeading('Ways to explore')),
+                const SizedBox(height: AppSpacing.s8),
+                InsetListCard(children: explore),
+              ],
+              const SizedBox(height: AppSpacing.s24),
+              _Gutter(child: Text(document.body)),
+              if (features.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.s24),
+                const _Gutter(child: _SectionHeading('Security features')),
+                const SizedBox(height: AppSpacing.s8),
+                InsetListCard(
+                  children: <Widget>[
+                    for (final feature in features)
+                      _SecurityFeature(feature: feature),
+                  ],
+                ),
               ],
               if (document.relatedLinks.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                Semantics(
-                  header: true,
-                  child: Text(
-                    'Related information',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
+                const SizedBox(height: AppSpacing.s24),
+                const _Gutter(child: _SectionHeading('Related information')),
                 for (final link in document.relatedLinks)
-                  _RelatedInformation(
-                    link: link,
-                    catalog: detail.catalog,
-                    logicalId: document.logicalId,
+                  _Gutter(
+                    child: _RelatedInformation(
+                      link: link,
+                      catalog: detail.catalog,
+                      logicalId: document.logicalId,
+                    ),
                   ),
               ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Page copy sits on the 24pt gutter. Grouped cards deliberately do not.
+class _Gutter extends StatelessWidget {
+  const _Gutter({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageGutter),
+      child: child,
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      header: true,
+      child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+    );
+  }
+}
+
+/// One security feature, as a band inside the grouped card.
+///
+/// Not a row: a feature carries a title, a summary and a body, which is more
+/// than [InsetListRow]'s one-line subtitle is shaped for.
+class _SecurityFeature extends StatelessWidget {
+  const _SecurityFeature({required this.feature});
+
+  final CurrencyContentDocument feature;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.s16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(feature.title, style: theme.textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.s8),
+          Text(feature.summary),
+          const SizedBox(height: AppSpacing.s8),
+          Text(
+            feature.body,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -358,18 +417,16 @@ class _ViewInThreeDimensions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
-      child: OutlinedButton.icon(
-        onPressed: () => context.push(
-          AppRoutes.currencyModel(
-            kind: CurrencyRouteKind.coins.pathSegment,
-            logicalId: document.logicalId,
-          ),
-          extra: catalog,
+    return InsetListRow(
+      leading: const RowBadge(child: Icon(Icons.threed_rotation)),
+      title: 'View in 3D',
+      subtitle: 'Turn the coin and look at any face',
+      onTap: () => context.push(
+        AppRoutes.currencyModel(
+          kind: CurrencyRouteKind.coins.pathSegment,
+          logicalId: document.logicalId,
         ),
-        icon: const Icon(Icons.threed_rotation),
-        label: const Text('View in 3D'),
+        extra: catalog,
       ),
     );
   }
@@ -388,17 +445,15 @@ class _PlaceInYourRoom extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
-      child: OutlinedButton.icon(
-        onPressed: () => context.push(
-          AppRoutes.currencyAr(
-            kind: CurrencyRouteKind.coins.pathSegment,
-            logicalId: document.logicalId,
-          ),
+    return InsetListRow(
+      leading: const RowBadge(child: Icon(Icons.view_in_ar)),
+      title: 'Place in your room',
+      subtitle: 'See it at life size through the camera',
+      onTap: () => context.push(
+        AppRoutes.currencyAr(
+          kind: CurrencyRouteKind.coins.pathSegment,
+          logicalId: document.logicalId,
         ),
-        icon: const Icon(Icons.view_in_ar),
-        label: const Text('Place in your room'),
       ),
     );
   }
@@ -414,18 +469,16 @@ class _FeelTactileFeatures extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
-      child: OutlinedButton.icon(
-        onPressed: () => context.push(
-          AppRoutes.currencyTactile(
-            kind: CurrencyRouteKind.banknotes.pathSegment,
-            logicalId: document.logicalId,
-          ),
-          extra: catalog,
+    return InsetListRow(
+      leading: const RowBadge(child: Icon(Icons.vibration)),
+      title: 'Feel The Tactile Features',
+      subtitle: 'Vibration marks the raised areas as you trace them',
+      onTap: () => context.push(
+        AppRoutes.currencyTactile(
+          kind: CurrencyRouteKind.banknotes.pathSegment,
+          logicalId: document.logicalId,
         ),
-        icon: const Icon(Icons.vibration),
-        label: const Text('Feel The Tactile Features'),
+        extra: catalog,
       ),
     );
   }
@@ -441,18 +494,16 @@ class _TiltDynamicFeature extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
-      child: OutlinedButton.icon(
-        onPressed: () => context.push(
-          AppRoutes.currencyTilt(
-            kind: CurrencyRouteKind.banknotes.pathSegment,
-            logicalId: document.logicalId,
-          ),
-          extra: catalog,
+    return InsetListRow(
+      leading: const RowBadge(child: Icon(Icons.screen_rotation)),
+      title: 'Tilt To See The Dynamic Feature',
+      subtitle: 'Watch the ink change colour as the note moves',
+      onTap: () => context.push(
+        AppRoutes.currencyTilt(
+          kind: CurrencyRouteKind.banknotes.pathSegment,
+          logicalId: document.logicalId,
         ),
-        icon: const Icon(Icons.screen_rotation),
-        label: const Text('Tilt To See The Dynamic Feature'),
+        extra: catalog,
       ),
     );
   }

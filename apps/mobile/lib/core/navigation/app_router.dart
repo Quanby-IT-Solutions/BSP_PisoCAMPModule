@@ -15,7 +15,8 @@ import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_preview_s
 import 'package:mobile/features/pisocamp/presentation/screens/pisocamp_registration_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mobile/features/pisocamp/data/ar_session.dart';
+import 'package:mobile/features/pisocamp/data/coin_model.dart';
+import 'package:mobile/features/pisocamp/data/ar_runtime.dart';
 import 'package:mobile/features/pisocamp/data/recognition_engine.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/recognition_provider.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/recognition_scanner_screen.dart';
@@ -134,9 +135,9 @@ String? resolvePisoCampIncomingLink(String location) {
   // currency kind. Without that restriction any in-app location — '/' most of
   // all — could be reinterpreted as a link and hijacked, because a bare path
   // does not say which scheme it arrived under.
-  final first = Uri.parse(location).pathSegments
-      .where((segment) => segment.isNotEmpty)
-      .firstOrNull;
+  final first = Uri.parse(
+    location,
+  ).pathSegments.where((segment) => segment.isNotEmpty).firstOrNull;
   if (first != null && CurrencyRouteKind.fromPathSegment(first) != null) {
     candidates.add('$kPisoCampLinkScheme://$kPisoCampLinkPathPrefix$location');
   }
@@ -332,13 +333,31 @@ GoRouter appRouter(Ref ref) {
           if (kind == null || !isValidCurrencyLogicalId(logicalId)) {
             return const _SafeNotFoundScreen();
           }
-          return ArExperienceScreen(
-            kind: kind,
-            logicalId: logicalId,
-            // A build with no approved AR runtime answers "not here", and the
-            // screen offers CE-2's viewer rather than a blank camera.
-            probe: const UnavailableArCapabilityProbe(),
-            sessions: const UnavailableArSessionFactory(),
+          // The runtime is real now, but nothing below assumes it will work:
+          // the probe still answers for phones without ARCore and for builds
+          // assembled without the native half, and the screen still offers
+          // CE-2's viewer when it does. What changed is only that a supported
+          // phone now has somewhere to go.
+          return Consumer(
+            builder: (context, ref, _) => ArExperienceScreen(
+              kind: kind,
+              logicalId: logicalId,
+              probe: const SceneViewArCapabilityProbe(),
+              sessions: SceneViewArSessionFactory(
+                loadModelBytes: (id) async {
+                  final catalog = await ref.read(
+                    currencyCatalogViewProvider.future,
+                  );
+                  final document = catalog.resolve(kind, id);
+                  if (document == null) {
+                    throw const CoinModelException(
+                      CoinModelFailure.unavailable,
+                    );
+                  }
+                  return catalog.readModelBytes(document);
+                },
+              ),
+            ),
           );
         },
       ),

@@ -1,5 +1,6 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/flex_theme_config.dart';
 
 /// Singleton service wrapping [AwesomeNotifications] for local push
 /// notification management.
@@ -24,7 +25,10 @@ class NotificationService {
           channelKey: 'basic_channel',
           channelName: 'Basic notifications',
           channelDescription: 'Default notification channel',
-          defaultColor: const Color(0xFF9D50DD),
+          // BSP navy. Android tints the notification icon and accents with
+          // this, and it is read at channel-creation time outside any widget
+          // tree, so it cannot come from `Theme.of(context)`.
+          defaultColor: FlexThemeConfig.bspNavy,
           ledColor: Colors.white,
           importance: NotificationImportance.High,
         ),

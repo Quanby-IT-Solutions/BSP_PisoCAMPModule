@@ -34,6 +34,10 @@ import 'package:mobile/services/api/api_client.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/leaderboard_screen.dart';
 import 'package:mobile/features/pisocamp/presentation/screens/privacy_settings_screen.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
+import 'package:mobile/shared/widgets/bsp_logo.dart';
+import 'package:mobile/shared/widgets/hero_panel.dart';
+import 'package:mobile/shared/widgets/inset_list_card.dart';
+import 'package:mobile/core/theme/app_styles.dart';
 
 class PisoCampHomeScreen extends ConsumerStatefulWidget {
   const PisoCampHomeScreen({super.key});
@@ -162,10 +166,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _recordTechnical(
-        const ModuleLoadIntent(
-          phase: ModuleLoadPhase.cold,
-          durationMs: 0,
-        ),
+        const ModuleLoadIntent(phase: ModuleLoadPhase.cold, durationMs: 0),
         (analytics) => analytics.recordLoad(
           phase: phase,
           elapsed: DateTime.now().difference(started),
@@ -425,9 +426,7 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
   }
 
   Future<void> _openPrivacySettings(BuildContext context) async {
-    final notice = await ref
-        .read(consentRepositoryProvider)
-        .readCachedNotice();
+    final notice = await ref.read(consentRepositoryProvider).readCachedNotice();
     if (!context.mounted) return;
 
     if (notice == null) {
@@ -470,6 +469,13 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
   }) {
     return Scaffold(
       appBar: AppBar(
+        // Decorative: the title beside it already says "Piso CAMP", and the
+        // bar carries three actions, so the mark goes in `leading` rather
+        // than widening the title into them.
+        leading: const Padding(
+          padding: EdgeInsets.all(8),
+          child: BspLogo(size: 32),
+        ),
         title: const Text('Piso CAMP'),
         actions: <Widget>[
           IconButton(
@@ -484,7 +490,9 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
             // GM-4: hidden entirely when the flag is off, so a switched-off
             // feature is not a door that opens onto an apology.
             tooltip: 'Leaderboard',
-            onPressed: leaderboardEnabled ? () => _openLeaderboard(context) : null,
+            onPressed: leaderboardEnabled
+                ? () => _openLeaderboard(context)
+                : null,
           ),
           IconButton(
             icon: const Icon(Icons.privacy_tip_outlined),
@@ -533,60 +541,90 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
           }
           return SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.only(bottom: AppSpacing.s24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (offline)
-                    Semantics(
-                      label: 'Offline',
-                      child: Chip(
-                        avatar: const Icon(Icons.cloud_off_outlined),
-                        label: const Text('Offline'),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pageGutter,
+                        AppSpacing.s8,
+                        AppSpacing.pageGutter,
+                        0,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Semantics(
+                          label: 'Offline',
+                          child: Chip(
+                            avatar: const Icon(Icons.cloud_off_outlined),
+                            label: const Text('Offline'),
+                          ),
+                        ),
                       ),
                     ),
-                  Text(
-                    result.home.title,
-                    style: Theme.of(context).textTheme.headlineMedium,
+                  // Eyebrow, then the title at display weight. The direction
+                  // leads with one large figure and a quiet label above it;
+                  // here the module name is that figure.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pageGutter,
+                      AppSpacing.s24,
+                      AppSpacing.pageGutter,
+                      0,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Bangko Sentral ng Pilipinas',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                        const SizedBox(height: AppSpacing.s4),
+                        Text(
+                          result.home.title,
+                          style: Theme.of(context).textTheme.displaySmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -1,
+                              ),
+                        ),
+                        const SizedBox(height: AppSpacing.s8),
+                        Text(
+                          result.home.introduction,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(result.home.introduction),
-                  const SizedBox(height: 20),
-                  for (final card in result.home.cards) ...[
-                    AppCard(
-                      child: ListTile(
-                        title: Text(card.title),
-                        subtitle: Text(card.description),
-                        minTileHeight: 64,
-                        trailing: _currencyRoute(card.title) == null
-                            ? null
-                            : const Icon(Icons.chevron_right),
-                        onTap: switch (_currencyRoute(card.title)) {
-                          final route? => () => context.push(route),
-                          null => null,
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  AppCard(
-                    child: ListTile(
-                      leading: const Icon(Icons.center_focus_strong_outlined),
-                      title: const Text('Identify a banknote'),
-                      // Says what it does and what it does not, before anybody
-                      // opens it: somebody worried about a note is exactly the
-                      // person who must not read this as a genuineness check.
-                      subtitle: const Text(
-                        'Read a denomination with the camera. This does not '
-                        'verify authenticity.',
-                      ),
-                      minTileHeight: 64,
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () =>
-                          context.push(AppRoutes.pisoCampRecognition),
-                    ),
+                  const SizedBox(height: AppSpacing.s24),
+                  HeroPanel(
+                    label: 'Philippine currency',
+                    headline: 'Know your notes and coins',
+                    footnote: offline
+                        ? 'Saved to this device · available offline'
+                        : 'Designs, security features and history',
+                    trailing: const BspLogo(size: 34),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.s20),
+                  // The account decision sits directly under the panel, not
+                  // beneath the content.
+                  //
+                  // It only renders on a first entry, and for that visitor it
+                  // is the choice the screen exists to offer — putting the
+                  // catalogue in front of it makes the primary decision the
+                  // thing you scroll past.
                   if (!authenticated &&
                       !authLoading &&
                       result.accountPromptEnabled)
@@ -609,6 +647,90 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
                         );
                       },
                     ),
+                  // The tools, given labels and real touch targets.
+                  //
+                  // These are the module's utilities, which were reachable
+                  // only as unlabelled icon buttons crowded into the app bar.
+                  // They are deliberately NOT the currency destinations: those
+                  // are the packaged content below, and listing them in both
+                  // places would put the same link on the screen twice.
+                  ActionTileRow(
+                    actions: <ActionTileData>[
+                      ActionTileData(
+                        icon: Icons.center_focus_strong_outlined,
+                        label: 'Identify',
+                        onTap: () =>
+                            context.push(AppRoutes.pisoCampRecognition),
+                      ),
+                      ActionTileData(
+                        icon: Icons.insights_outlined,
+                        label: 'Progress',
+                        enabled: authenticated,
+                        onTap: authenticated
+                            ? () => _openProgress(context)
+                            : null,
+                      ),
+                      ActionTileData(
+                        icon: Icons.leaderboard_outlined,
+                        label: 'Leaderboard',
+                        enabled: leaderboardEnabled,
+                        onTap: leaderboardEnabled
+                            ? () => _openLeaderboard(context)
+                            : null,
+                      ),
+                      ActionTileData(
+                        icon: Icons.privacy_tip_outlined,
+                        label: 'Privacy',
+                        onTap: () => _openPrivacySettings(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.s24),
+                  const _SectionHeading('Explore'),
+                  InsetListCard(
+                    children: <Widget>[
+                      for (final card in result.home.cards)
+                        InsetListRow(
+                          title: card.title,
+                          subtitle: card.description,
+                          leading: RowBadge(
+                            child: Icon(
+                              _currencyRoute(card.title) ==
+                                      AppRoutes.pisoCampCoins
+                                  ? Icons.monetization_on_outlined
+                                  : Icons.account_balance_wallet_outlined,
+                            ),
+                          ),
+                          trailing: _currencyRoute(card.title) == null
+                              ? null
+                              : const Icon(Icons.chevron_right, size: 20),
+                          onTap: switch (_currencyRoute(card.title)) {
+                            final route? => () => context.push(route),
+                            null => null,
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.s12),
+                  // The disclaimer the Identify tile cannot carry.
+                  //
+                  // A tile has room for one word, and "Identify" alone reads
+                  // as a genuineness check to exactly the person who must not
+                  // read it that way. The limitation therefore sits in the
+                  // open on the page rather than behind the tap.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.pageGutter,
+                    ),
+                    child: Text(
+                      'Identify reads a denomination with the camera. It does '
+                      'not verify authenticity.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s12),
                   if (authenticated && profileStatus.hasError)
                     AppCard(
                       child: ListTile(
@@ -657,5 +779,41 @@ class _PisoCampHomeScreenState extends ConsumerState<PisoCampHomeScreen> {
       'coins' => AppRoutes.pisoCampCoins,
       _ => null,
     };
+  }
+}
+
+/// Section label above a grouped list.
+///
+/// Sits on the page gutter while the card below it insets further, which is
+/// what makes the card read as a plane under the text rather than beside it.
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pageGutter,
+        0,
+        AppSpacing.pageGutter,
+        AppSpacing.s8,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

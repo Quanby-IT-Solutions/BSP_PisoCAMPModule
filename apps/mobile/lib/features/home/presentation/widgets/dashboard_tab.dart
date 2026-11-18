@@ -46,7 +46,7 @@ class DashboardTab extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Welcome to Turbo Template',
+                      'Welcome to Piso CAMP',
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: theme.colorScheme.onSurface.withOpacity(0.6),
                         height: 1.47,

@@ -7,7 +7,6 @@ import 'package:mobile/core/widgets/tour_item.dart';
 import 'package:mobile/features/home/presentation/providers/tour_provider.dart';
 import 'package:mobile/features/home/presentation/widgets/dashboard_tab.dart';
 import 'package:mobile/features/profile/presentation/screens/profile_screen.dart';
-import 'package:mobile/features/todos/presentation/screens/todos_screen.dart';
 import 'package:mobile/features/home/presentation/widgets/settings_tab.dart';
 import 'package:mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:mobile/services/storage/tour_storage_service.dart';
@@ -25,7 +24,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _tabController = PersistentTabController(initialIndex: 0);
 
   /// Number of tabs in the bottom nav. Keep in sync with [_buildBody].
-  static const _tabCount = 4;
+  static const _tabCount = 3;
 
   @override
   void dispose() {
@@ -112,15 +111,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
         PersistentTabConfig(
-          screen: const TodosScreen(),
-          item: ItemConfig(
-            icon: const Icon(Icons.checklist_outlined),
-            title: 'Todos',
-            activeForegroundColor: theme.colorScheme.primary,
-            inactiveForegroundColor: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        PersistentTabConfig(
           screen: const ProfileScreen(),
           item: ItemConfig(
             icon: const Icon(Icons.person_outlined),
@@ -143,7 +133,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         tabIndex: null,
         order: 999,
         title: 'Navigation',
-        description: 'Switch between Home, Todos, and Settings tabs',
+        description: 'Switch between Home, Profile and Settings tabs',
         child: Style1BottomNavBar(
           navBarConfig: navBarConfig,
           navBarDecoration: NavBarDecoration(

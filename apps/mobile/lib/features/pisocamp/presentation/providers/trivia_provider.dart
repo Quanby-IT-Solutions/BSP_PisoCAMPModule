@@ -95,8 +95,7 @@ final class _LazyResponseStore implements TriviaResponseStore {
   Future<List<TriviaResponseRecord>> readAll() => _store.readAll();
 
   @override
-  Future<void> record(TriviaResponseRecord response) =>
-      _store.record(response);
+  Future<void> record(TriviaResponseRecord response) => _store.record(response);
 
   @override
   Future<List<TriviaResponseRecord>> readPending({int limit = 100}) =>

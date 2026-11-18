@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_styles.dart';
+import 'package:mobile/shared/widgets/inset_list_card.dart';
 import 'package:mobile/features/pisocamp/data/leaderboard_repository.dart';
 
 /// GM-4's board.
@@ -106,7 +108,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     return Column(
       children: <Widget>[
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.cardGutter),
           child: SegmentedButton<LeaderboardPeriod>(
             segments: <ButtonSegment<LeaderboardPeriod>>[
               for (final period in LeaderboardPeriod.values)
@@ -124,7 +126,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ),
         if (_problem != null)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.pageGutter,
+            ),
             child: Text(
               _problem!,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -133,33 +137,51 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         if (_loading) const LinearProgressIndicator(),
         if (_board?.you != null)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Card(
-              child: ListTile(
-                // Their own row first, even when they are not in the top: a
-                // board that only shows the leaders tells everybody else
-                // nothing about themselves.
-                title: Text('You are ranked ${_board!.you!.rank}'),
-                subtitle: Text(
-                  '${_board!.you!.score} points'
-                  '${_movement(_board!.you!.rankMovement)}',
+            padding: const EdgeInsets.only(bottom: AppSpacing.s16),
+            child: InsetListCard(
+              children: <Widget>[
+                InsetListRow(
+                  // Their own standing first, even when they are not in the
+                  // top: a board that only shows the leaders tells everybody
+                  // else nothing about themselves.
+                  leading: RowBadge(
+                    color: Theme.of(context).colorScheme.primary,
+                    child: const Icon(Icons.person),
+                  ),
+                  title: 'You are ranked ${_board!.you!.rank}',
+                  subtitle:
+                      '${_board!.you!.score} points'
+                      '${_movement(_board!.you!.rankMovement)}',
                 ),
-              ),
+              ],
             ),
           ),
+        // The standings are one board, so they are one plane with seams
+        // between the places rather than a stack of loose rows on the page.
         Expanded(
-          child: ListView.builder(
-            itemCount: _board?.top.length ?? 0,
-            itemBuilder: (context, index) {
-              final standing = _board!.top[index];
-              return ListTile(
-                leading: Text('${standing.rank}'),
-                title: Text(standing.alias),
-                trailing: Text(
-                  '${standing.score}${_movement(standing.rankMovement)}',
-                ),
-              );
-            },
+          child: _BoardCard(
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: _board?.top.length ?? 0,
+              separatorBuilder: (context, index) => Divider(
+                height: AppDividers.hairline,
+                thickness: AppDividers.hairline,
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+              itemBuilder: (context, index) {
+                final standing = _board!.top[index];
+                return InsetListRow(
+                  leading: RowBadge(child: Text('${standing.rank}')),
+                  title: standing.alias,
+                  trailing: Text(
+                    '${standing.score}${_movement(standing.rankMovement)}',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -170,5 +192,35 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   String _movement(int? movement) {
     if (movement == null || movement == 0) return '';
     return movement > 0 ? ' · up $movement' : ' · down ${-movement}';
+  }
+}
+
+/// The plane the standings sit on.
+///
+/// [InsetListCard] builds its rows into a `Column`, which cannot carry a list
+/// of unknown length. This is the same surface, corners and shadow wrapped
+/// around something that scrolls.
+class _BoardCard extends StatelessWidget {
+  const _BoardCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.cardGutter,
+        0,
+        AppSpacing.cardGutter,
+        AppSpacing.cardGutter,
+      ),
+      decoration: BoxDecoration(
+        color: AppSurfaces.raised(colors),
+        borderRadius: AppRadii.cardRadius,
+        boxShadow: AppShadows.card(colors),
+      ),
+      child: ClipRRect(borderRadius: AppRadii.cardRadius, child: child),
+    );
   }
 }

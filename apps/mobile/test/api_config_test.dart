@@ -29,8 +29,8 @@ void main() {
         ApiConstants.signUp,
         ApiConstants.signOut,
         ApiConstants.getSession,
-        ApiConstants.todos,
-        ApiConstants.todoById(1),
+        ApiConstants.pisoCampConfig,
+        ApiConstants.pisoCampProfile,
       ]) {
         expect(url, startsWith(ApiConstants.versionedUrl));
       }

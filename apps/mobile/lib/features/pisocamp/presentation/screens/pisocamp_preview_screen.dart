@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_styles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/features/pisocamp/data/preview_build.dart';
 import 'package:mobile/features/pisocamp/data/preview_repository.dart';
@@ -92,7 +93,12 @@ class _PisoCampPreviewScreenState extends ConsumerState<PisoCampPreviewScreen> {
       appBar: AppBar(title: const Text('Content preview')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pageGutter,
+            AppSpacing.s12,
+            AppSpacing.pageGutter,
+            AppSpacing.s32,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -106,7 +112,8 @@ class _PisoCampPreviewScreenState extends ConsumerState<PisoCampPreviewScreen> {
                 enableSuggestions: false,
                 decoration: InputDecoration(
                   labelText: 'Preview code',
-                  helperText: 'Scan the code in the admin console, then paste it here.',
+                  helperText:
+                      'Scan the code in the admin console, then paste it here.',
                   errorText: _codeError,
                   border: const OutlineInputBorder(),
                 ),
@@ -122,7 +129,9 @@ class _PisoCampPreviewScreenState extends ConsumerState<PisoCampPreviewScreen> {
               ),
               const SizedBox(height: 24),
               if (document == null || token == null)
-                const Text('Enter a preview code to render an unpublished version.')
+                const Text(
+                  'Enter a preview code to render an unpublished version.',
+                )
               else
                 FutureBuilder<PisoCampPreviewDocument>(
                   future: document,
@@ -162,7 +171,7 @@ class _PreviewNotice extends StatelessWidget {
       container: true,
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.s16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -196,7 +205,8 @@ class _PreviewUnavailable extends StatelessWidget {
         'This preview code has expired or was withdrawn. Generate a new one.',
       'preview_asset_mismatch' =>
         'A preview file did not match its checksum and was not shown.',
-      _ => 'The preview could not be loaded. Check the code and your connection.',
+      _ =>
+        'The preview could not be loaded. Check the code and your connection.',
     };
     return Semantics(
       liveRegion: true,
@@ -233,7 +243,10 @@ class _PreviewBody extends StatelessWidget {
           const SizedBox(height: 4),
           Text('Version ${document.versionNo} · ${document.status}'),
           const SizedBox(height: 8),
-          Text(document.summary, style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            document.summary,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 16),
           for (final asset in images) ...[
             _PreviewImage(
@@ -257,7 +270,7 @@ class _PreviewBody extends StatelessWidget {
             for (final link in document.relatedLinks)
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.s16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

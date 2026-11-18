@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_styles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/app_router.dart';
@@ -279,7 +280,10 @@ class _RecognitionScannerScreenState
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.pageGutter,
+            vertical: AppSpacing.s16,
+          ),
           child: switch (_stage) {
             RecognitionStage.explaining => _Explanation(onContinue: _begin),
             RecognitionStage.preparing => const _Busy(

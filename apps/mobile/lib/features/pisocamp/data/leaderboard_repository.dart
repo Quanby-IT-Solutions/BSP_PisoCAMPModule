@@ -83,7 +83,7 @@ class LeaderboardRepository {
   Future<Leaderboard> fetch(LeaderboardPeriod period) async {
     try {
       final response = await _dio.get<Object?>(
-        '${ApiConstants.baseUrl}/pisocamp/leaderboard',
+        '${ApiConstants.versionedUrl}/pisocamp/leaderboard',
         queryParameters: <String, Object?>{'period': period.wireValue},
       );
       return _parse(period, response.data);

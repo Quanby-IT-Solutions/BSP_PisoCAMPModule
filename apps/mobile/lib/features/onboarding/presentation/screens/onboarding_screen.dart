@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:introduction_screen/introduction_screen.dart';
 import 'package:mobile/features/onboarding/presentation/providers/onboarding_provider.dart';
+import 'package:mobile/shared/widgets/bsp_logo.dart';
 
 class OnboardingScreen extends ConsumerWidget {
   const OnboardingScreen({super.key});
@@ -19,28 +20,32 @@ class OnboardingScreen extends ConsumerWidget {
           theme: theme,
           icon: CupertinoIcons.rocket_fill,
           gradientColors: [colorScheme.primary, colorScheme.tertiary],
-          title: 'Welcome to Turbo',
+          artwork: const BspLogo(
+            size: 180,
+            semanticLabel: 'Bangko Sentral ng Pilipinas',
+          ),
+          title: 'Welcome to Piso CAMP',
           body:
-              'Your all-in-one productivity companion.\n'
-              'Manage tasks, stay organized, and get things done.',
+              'Get to know Philippine banknotes and coins —\n'
+              'their designs, features and history.',
         ),
         _buildPage(
           theme: theme,
           icon: CupertinoIcons.checkmark_seal_fill,
           gradientColors: [colorScheme.tertiary, colorScheme.secondary],
-          title: 'Stay Organized',
+          title: 'Explore Notes and Coins',
           body:
-              'Create, track, and complete todos across\n'
-              'all your devices — seamlessly synced.',
+              'Browse each denomination in detail, and keep\n'
+              'reading even when you are offline.',
         ),
         _buildPage(
           theme: theme,
           icon: CupertinoIcons.person_2_fill,
           gradientColors: [colorScheme.secondary, colorScheme.primary],
-          title: 'Secure & Personal',
+          title: 'An Account Is Optional',
           body:
-              'Sign in to keep your data safe and access\n'
-              'it anywhere, anytime.',
+              'Continue as a guest, or create an account\n'
+              'to keep your progress across devices.',
         ),
       ],
       showSkipButton: true,
@@ -70,10 +75,14 @@ class OnboardingScreen extends ConsumerWidget {
           color: colorScheme.primary,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: const Text(
+        child: Text(
           'Start',
+          // Not a hardcoded white: this label sits on `colorScheme.primary`,
+          // so its contrast is only guaranteed if it tracks that colour's
+          // on-colour. A literal white survives any palette change and
+          // silently fails against a light primary.
           style: TextStyle(
-            color: Colors.white,
+            color: colorScheme.onPrimary,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
           ),
@@ -111,6 +120,11 @@ class OnboardingScreen extends ConsumerWidget {
     required List<Color> gradientColors,
     required String title,
     required String body,
+    // The BSP seal is already a navy medallion inside a gold rim. Nesting it
+    // in the primary-coloured circle the icon pages use buries it in a second
+    // ring of almost the same colour, so a page supplying [artwork] replaces
+    // the whole three-circle motif rather than sitting inside it.
+    Widget? artwork,
   }) {
     return PageViewModel(
       titleWidget: Padding(
@@ -146,39 +160,42 @@ class OnboardingScreen extends ConsumerWidget {
             // carousel gives this widget, overflowing by a few pixels.
             // Letting the spacer absorb the shortfall keeps the art intact.
             const Flexible(child: SizedBox(height: 64)),
-            Container(
-              width: 180,
-              height: 180,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHigh.withOpacity(0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        icon,
-                        size: 32,
-                        color: theme.colorScheme.onPrimary,
+            if (artwork != null)
+              SizedBox(width: 180, height: 180, child: Center(child: artwork))
+            else
+              Container(
+                width: 180,
+                height: 180,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHigh.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          icon,
+                          size: 32,
+                          color: theme.colorScheme.onPrimary,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

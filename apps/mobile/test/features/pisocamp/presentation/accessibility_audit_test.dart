@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/network/connectivity_provider.dart';
+import 'package:mobile/core/theme/flex_theme_config.dart';
 import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/data/bundle_store.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
@@ -139,7 +140,16 @@ void main() {
         tactileAnalyticsProvider.overrideWithValue(_SilentTactileAnalytics()),
         tiltAnalyticsProvider.overrideWithValue(_SilentTiltAnalytics()),
       ],
-      child: MaterialApp(home: screen),
+      // The real app theme, not Flutter's default M3 one. This wrapper used to
+      // pass a bare `MaterialApp`, which meant the contrast guideline below
+      // measured a palette the app never ships — the audit could pass while
+      // the shipped colours failed. F6 is only meaningful if it audits what
+      // users actually see.
+      child: MaterialApp(
+        theme: FlexThemeConfig.light(FlexThemeConfig.defaultColorScheme),
+        darkTheme: FlexThemeConfig.dark(FlexThemeConfig.defaultColorScheme),
+        home: screen,
+      ),
     );
   }
 

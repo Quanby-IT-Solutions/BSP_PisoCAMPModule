@@ -111,3 +111,33 @@ tasks.whenTaskAdded {
 flutter {
     source = "../.."
 }
+
+// 16 KB page-size hardening. `libdatastore_shared_counter.so` in
+// androidx.datastore 1.2.0 — pulled in transitively by shared_preferences —
+// ships a GNU_RELRO segment whose end is not a multiple of 16 KB. On a 16 KB
+// page device the dynamic linker cannot then apply RELRO protection at page
+// granularity, so the whole app is dropped into page-size compatibility mode
+// and Android warns about it on every debug launch. 1.2.1 rebuilt the library
+// with an aligned RELRO end and is otherwise a patch release.
+//
+// A constraint rather than a `force`: it raises the floor and lets a future
+// shared_preferences pull something newer, instead of pinning the version
+// here forever and silently downgrading whatever arrives later.
+dependencies {
+    constraints {
+        implementation("androidx.datastore:datastore-core-android:1.2.1") {
+            because("1.2.0 ships a .so whose RELRO segment is not 16 KB aligned")
+        }
+    }
+}
+
+// ARCore, declared directly rather than leaned on transitively.
+//
+// `flutter_sceneview` pulls ARCore in through `io.github.sceneview:arsceneview`,
+// but as an `implementation` dependency — which keeps it off this module's
+// compile classpath. MainActivity calls `ArCoreApk.checkAvailability` itself,
+// because the plugin exposes no capability query and AR-001 needs the three
+// unavailable cases told apart. That call needs the API declared here.
+dependencies {
+    implementation("com.google.ar:core:1.48.0")
+}

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_styles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/features/pisocamp/data/analytics_event.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
@@ -176,7 +177,12 @@ class _TiltBody extends StatelessWidget {
     final theme = Theme.of(context);
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.pageGutter,
+          AppSpacing.s12,
+          AppSpacing.pageGutter,
+          AppSpacing.s32,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -188,7 +194,7 @@ class _TiltBody extends StatelessWidget {
             Card(
               color: theme.colorScheme.secondaryContainer,
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.s16),
                 child: Text(
                   'This is an educational simulation. The effect and the '
                   'illustration are neutral teaching aids and do not reproduce '
@@ -238,7 +244,10 @@ class _TiltUnavailable extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pageGutter,
+          vertical: AppSpacing.s16,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
+
 /// Why an AR session cannot run on this device.
 enum ArUnavailableReason {
   /// The build ships no AR runtime, so nothing could start it.
@@ -54,8 +56,20 @@ final class UnavailableArCapabilityProbe implements ArCapabilityProbe {
 /// started; `dispose` must release the camera and the renderer. The screen
 /// calls `dispose` on exit and on every rebuild that ends a session, which is
 /// what keeps ten open-and-close cycles from accumulating anything.
+///
+/// [view] is the camera surface the runtime draws into. It exists because a
+/// Flutter AR runtime renders through a platform view in the widget tree, not
+/// into a window it owns: there is no session to be ready *until* something
+/// has mounted that view. The screen therefore mounts it as soon as the
+/// session exists and only then awaits [ready] — awaiting first would wait on
+/// a view that was never built. A runtime that needs no surface returns an
+/// empty box, which is what the fakes in tests do.
 abstract interface class ArSession {
   Future<void> get ready;
+
+  /// The camera surface, mounted by the screen behind its own controls.
+  Widget get view;
+
   Future<void> dispose();
 }
 

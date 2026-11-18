@@ -11,7 +11,8 @@ import 'package:mobile/features/pisocamp/presentation/providers/pisocamp_provide
 /// Opening the snapshot eagerly would mean touching storage for a feature
 /// nobody has asked for yet; a bundle that cannot be opened at all is the same
 /// thing to this screen as one that carries no model.
-final class ActiveBundleRecognitionModelSource implements RecognitionModelSource {
+final class ActiveBundleRecognitionModelSource
+    implements RecognitionModelSource {
   const ActiveBundleRecognitionModelSource(this._openSnapshot);
 
   final Future<ActiveCurrencyCatalog> Function() _openSnapshot;

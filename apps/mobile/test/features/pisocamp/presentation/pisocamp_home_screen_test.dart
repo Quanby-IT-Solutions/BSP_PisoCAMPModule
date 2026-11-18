@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/app_router.dart';
+import 'package:mobile/shared/widgets/inset_list_card.dart';
 import 'package:mobile/core/network/connectivity_provider.dart';
 import 'package:mobile/features/auth/data/auth_repository.dart';
 import 'package:mobile/features/auth/data/models/session_model.dart';
@@ -731,6 +732,10 @@ void main() {
     expect(find.text('Retry'), findsOneWidget);
     expect(profiles.profileGets, 1);
 
+    // The home page scrolls, so reach the control before tapping it rather
+    // than relying on it happening to fall inside the test viewport.
+    await tester.ensureVisible(find.text('Retry'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
 
@@ -1175,17 +1180,14 @@ void main() {
     await tester.pumpWidget(subject(offline: false));
     await tester.pumpAndSettle();
 
+    // Found by the row's own type rather than by ListTile: what this test
+    // guarantees is that the card is a 48dp button that navigates, not which
+    // widget happens to render it.
     final banknotes = find.byWidgetPredicate(
-      (widget) =>
-          widget is ListTile &&
-          widget.title is Text &&
-          (widget.title! as Text).data == 'Banknotes',
+      (widget) => widget is InsetListRow && widget.title == 'Banknotes',
     );
     final coins = find.byWidgetPredicate(
-      (widget) =>
-          widget is ListTile &&
-          widget.title is Text &&
-          (widget.title! as Text).data == 'Coins',
+      (widget) => widget is InsetListRow && widget.title == 'Coins',
     );
     expect(tester.getSize(banknotes).height, greaterThanOrEqualTo(48));
     expect(tester.getSize(coins).height, greaterThanOrEqualTo(48));
@@ -1234,28 +1236,24 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is ListTile &&
-            widget.title is Text &&
-            (widget.title! as Text).data == 'Banknotes',
-      ),
+    final banknotesRow = find.byWidgetPredicate(
+      (widget) => widget is InsetListRow && widget.title == 'Banknotes',
     );
+    await tester.ensureVisible(banknotesRow);
+    await tester.pumpAndSettle();
+    await tester.tap(banknotesRow);
     await tester.pumpAndSettle();
     expect(router.state.uri.path, AppRoutes.pisoCampBanknotes);
     expect(find.text('Banknote list route'), findsOneWidget);
 
     router.go(AppRoutes.pisoCamp);
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is ListTile &&
-            widget.title is Text &&
-            (widget.title! as Text).data == 'Coins',
-      ),
+    final coinsRow = find.byWidgetPredicate(
+      (widget) => widget is InsetListRow && widget.title == 'Coins',
     );
+    await tester.ensureVisible(coinsRow);
+    await tester.pumpAndSettle();
+    await tester.tap(coinsRow);
     await tester.pumpAndSettle();
     expect(router.state.uri.path, AppRoutes.pisoCampCoins);
     expect(find.text('Coin list route'), findsOneWidget);

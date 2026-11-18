@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/app_router.dart';
+import 'package:mobile/core/theme/app_styles.dart';
+import 'package:mobile/shared/widgets/inset_list_card.dart';
 import 'package:mobile/core/network/connectivity_provider.dart';
 import 'package:mobile/features/pisocamp/data/bundle_sync_controller.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
@@ -77,45 +79,64 @@ class _CurrencyListScreenState extends ConsumerState<CurrencyListScreen> {
               key: PageStorageKey<String>(
                 'currency-${widget.kind.pathSegment}-${catalog.snapshot.version}',
               ),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              padding: const EdgeInsets.only(top: 12, bottom: 32),
               children: [
-                _SyncStatus(
-                  connected: connected,
-                  state: sync.asData?.value,
-                  onRetry: () => _sync(BundleSyncTrigger.manual),
-                ),
-                const SizedBox(height: 16),
-                for (final group in groups) ...[
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      group.name,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.cardGutter,
                   ),
-                  const SizedBox(height: 8),
-                  for (final document in group.documents)
-                    Card(
-                      clipBehavior: Clip.antiAlias,
-                      child: ListTile(
-                        minTileHeight: 64,
-                        title: Text(document.title),
-                        subtitle: Text(
-                          _subtitle(catalog, document),
-                          maxLines: 4,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => context.push(
-                          AppRoutes.currencyDetail(
-                            kind: widget.kind.pathSegment,
-                            logicalId: document.logicalId,
-                          ),
-                          extra: catalog,
-                        ),
+                  child: _SyncStatus(
+                    connected: connected,
+                    state: sync.asData?.value,
+                    onRetry: () => _sync(BundleSyncTrigger.manual),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.s24),
+                // A series is one grouped plane rather than a run of separate
+                // cards: the denominations belong to the series, and stacking
+                // them as individual objects loses that relationship.
+                for (final group in groups) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pageGutter,
+                      0,
+                      AppSpacing.pageGutter,
+                      AppSpacing.s8,
+                    ),
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        group.name,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                     ),
-                  const SizedBox(height: 20),
+                  ),
+                  InsetListCard(
+                    children: <Widget>[
+                      for (final document in group.documents)
+                        InsetListRow(
+                          title: document.title,
+                          subtitle: _subtitle(catalog, document),
+                          leading: RowBadge(
+                            child: Icon(
+                              widget.kind == CurrencyRouteKind.coins
+                                  ? Icons.monetization_on_outlined
+                                  : Icons.account_balance_wallet_outlined,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.chevron_right, size: 20),
+                          onTap: () => context.push(
+                            AppRoutes.currencyDetail(
+                              kind: widget.kind.pathSegment,
+                              logicalId: document.logicalId,
+                            ),
+                            extra: catalog,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.s24),
                 ],
               ],
             ),
@@ -245,13 +266,24 @@ class _SyncStatus extends StatelessWidget {
   }
 
   String _message() {
-    if (connected == false || state?.phase == BundleSyncPhase.paused) {
+    // Only the transport being down is "offline".
+    //
+    // A paused sync used to be reported as offline too, which told anyone on a
+    // working connection something plainly untrue about their own device. The
+    // pause means the update service could not be reached — a 503 from the
+    // bundle endpoint pauses exactly like a dead network does — and the honest
+    // difference is that the connection is fine and the update is not
+    // available. Saying "offline" sends somebody to check their wifi over a
+    // problem that is not theirs.
+    if (connected == false) {
       return 'Offline — showing saved content';
     }
     return switch (state?.phase) {
       BundleSyncPhase.checking => 'Checking for updates',
       BundleSyncPhase.downloading =>
         'Downloading update — showing saved content',
+      BundleSyncPhase.paused =>
+        'Update unavailable right now — showing saved content',
       BundleSyncPhase.failed =>
         'Saved content remains available. Connect to the internet and Retry to update.',
       BundleSyncPhase.active => 'Saved content is up to date',
@@ -260,14 +292,15 @@ class _SyncStatus extends StatelessWidget {
   }
 
   IconData _icon() {
-    if (connected == false || state?.phase == BundleSyncPhase.paused) {
-      return Icons.cloud_off_outlined;
-    }
+    if (connected == false) return Icons.cloud_off_outlined;
     return switch (state?.phase) {
       BundleSyncPhase.failed => Icons.error_outline,
       BundleSyncPhase.active => Icons.check_circle_outline,
       BundleSyncPhase.checking ||
       BundleSyncPhase.downloading => Icons.sync_outlined,
+      // Not a cloud with a line through it: nothing is wrong with the
+      // connection, only with the update.
+      BundleSyncPhase.paused => Icons.sync_problem_outlined,
       _ => Icons.offline_pin_outlined,
     };
   }

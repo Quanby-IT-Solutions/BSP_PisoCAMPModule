@@ -71,7 +71,7 @@ class PushRepository {
   Future<PushSubscriptionStatus> status() async {
     try {
       final response = await _dio
-          .get<Object?>('${ApiConstants.baseUrl}/pisocamp/me/push')
+          .get<Object?>('${ApiConstants.versionedUrl}/pisocamp/me/push')
           .timeout(const Duration(seconds: 10));
       return PushSubscriptionStatus.fromJson(response.data);
     } on Object {
@@ -90,7 +90,7 @@ class PushRepository {
     try {
       final response = await _dio
           .post<Object?>(
-            '${ApiConstants.baseUrl}/pisocamp/me/push',
+            '${ApiConstants.versionedUrl}/pisocamp/me/push',
             data: <String, Object?>{
               'deviceToken': token.trim(),
               'platform': platform,
@@ -108,7 +108,7 @@ class PushRepository {
   Future<PushSubscriptionStatus> unsubscribe() async {
     try {
       final response = await _dio
-          .delete<Object?>('${ApiConstants.baseUrl}/pisocamp/me/push')
+          .delete<Object?>('${ApiConstants.versionedUrl}/pisocamp/me/push')
           .timeout(const Duration(seconds: 10));
       return PushSubscriptionStatus.fromJson(response.data);
     } on Object {
@@ -124,7 +124,7 @@ class PushRepository {
     try {
       await _dio
           .post<Object?>(
-            '${ApiConstants.baseUrl}/pisocamp/me/push/receipt',
+            '${ApiConstants.versionedUrl}/pisocamp/me/push/receipt',
             data: <String, Object?>{
               'notificationId': notificationId,
               'event': event,

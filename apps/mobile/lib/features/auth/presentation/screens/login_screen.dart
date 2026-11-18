@@ -8,6 +8,7 @@ import 'package:mobile/core/navigation/app_router.dart';
 import 'package:mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:mobile/shared/widgets/app_text_field.dart';
 import 'package:mobile/shared/widgets/app_button.dart';
+import 'package:mobile/shared/widgets/bsp_logo.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -99,10 +100,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.rocket_launch_rounded,
-                    size: 64,
-                    color: theme.colorScheme.primary,
+                  const Center(
+                    child: BspLogo(
+                      size: 88,
+                      semanticLabel: 'Bangko Sentral ng Pilipinas',
+                    ),
                   ),
                   const SizedBox(height: 32),
                   Text(

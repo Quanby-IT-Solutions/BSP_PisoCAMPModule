@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_styles.dart';
 import 'package:mobile/features/pisocamp/data/currency_content_document.dart';
 import 'package:mobile/features/pisocamp/presentation/providers/currency_catalog_provider.dart';
 
@@ -246,7 +247,7 @@ class _HotspotCaption extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.s16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

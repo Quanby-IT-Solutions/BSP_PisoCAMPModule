@@ -39,6 +39,11 @@ class _FakeSession implements ArSession {
   @override
   Future<void> get ready async => log.add('ready');
 
+  /// A fake runtime draws nothing. The screen still mounts this, which is what
+  /// proves the surface goes into the tree before `ready` is awaited.
+  @override
+  Widget get view => const SizedBox.expand(key: Key('fake-ar-view'));
+
   @override
   Future<void> dispose() async {
     disposals += 1;

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_styles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/app_router.dart';
@@ -117,12 +118,22 @@ class _ArExperienceScreenState extends ConsumerState<ArExperienceScreen> {
     try {
       // The OS prompt happens inside start(), after the explanation above.
       final session = await widget.sessions.start(logicalId: widget.logicalId);
-      await session.ready;
       if (!mounted) {
         await session.dispose();
         return;
       }
-      _session = session;
+      // Mounted before it is awaited, and deliberately so: an AR runtime that
+      // renders through a platform view has nothing to become ready *until*
+      // that view is in the tree. Awaiting first would wait forever on a
+      // surface nobody built. The stage stays on `loading`, so what this shows
+      // is the camera coming up under the spinner rather than a blank panel.
+      setState(() => _session = session);
+      await session.ready;
+      if (!mounted) {
+        await session.dispose();
+        _session = null;
+        return;
+      }
       _startedAt = _now;
       _analytics = _readAnalytics(
         ArEndIntent(logicalId: widget.logicalId, durationMs: 0),
@@ -251,25 +262,44 @@ class _ArExperienceScreenState extends ConsumerState<ArExperienceScreen> {
           ],
         ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: switch (_stage) {
-            ArExperienceStage.explaining => _Explanation(onContinue: _begin),
-            ArExperienceStage.loading => const _Loading(),
-            ArExperienceStage.running => _Running(
-              onExit: _exit,
-              onReplayNarration: _replayNarration,
-              transcript: widget.narrationTranscript,
-              captionsOn: _captionsOn,
+      // Black while a camera surface is mounted: the default page colour would
+      // sit on top of the very view this screen exists to show.
+      backgroundColor: _session == null ? null : Colors.black,
+      body: Stack(
+        children: <Widget>[
+          if (_session case final session?)
+            Positioned.fill(child: session.view),
+          // A scrim, only over the camera. Text that is legible on the page is
+          // not legible on an arbitrary room, and the contrast the audit
+          // measures has to hold against whatever the lens happens to see.
+          if (_session != null)
+            const Positioned.fill(child: ColoredBox(color: Color(0x99000000))),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.pageGutter,
+                vertical: AppSpacing.s16,
+              ),
+              child: switch (_stage) {
+                ArExperienceStage.explaining => _Explanation(
+                  onContinue: _begin,
+                ),
+                ArExperienceStage.loading => const _Loading(),
+                ArExperienceStage.running => _Running(
+                  onExit: _exit,
+                  onReplayNarration: _replayNarration,
+                  transcript: widget.narrationTranscript,
+                  captionsOn: _captionsOn,
+                ),
+                ArExperienceStage.unavailable => _Unavailable(
+                  reason: _reason ?? ArUnavailableReason.deviceUnsupported,
+                  onOpenViewer: _openThreeDimensionalViewer,
+                  onExit: _exit,
+                ),
+              },
             ),
-            ArExperienceStage.unavailable => _Unavailable(
-              reason: _reason ?? ArUnavailableReason.deviceUnsupported,
-              onOpenViewer: _openThreeDimensionalViewer,
-              onExit: _exit,
-            ),
-          },
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -364,10 +394,10 @@ class _Running extends StatelessWidget {
           Semantics(
             label: 'Narration transcript',
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpacing.s12),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+                color: AppSurfaces.raised(Theme.of(context).colorScheme),
+                borderRadius: AppRadii.badgeRadius,
               ),
               child: Text(transcript!),
             ),

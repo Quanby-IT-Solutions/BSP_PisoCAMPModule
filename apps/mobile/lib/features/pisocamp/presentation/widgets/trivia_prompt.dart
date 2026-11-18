@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_styles.dart';
 import 'package:mobile/features/pisocamp/data/trivia_question_document.dart';
 import 'package:mobile/features/pisocamp/presentation/utils/reduced_motion.dart';
 
@@ -99,7 +100,7 @@ class _TriviaPromptState extends State<TriviaPrompt> {
     final question = widget.question;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.s16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

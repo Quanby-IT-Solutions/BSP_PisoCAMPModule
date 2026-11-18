@@ -92,7 +92,7 @@ class ProgressRepository {
 
     try {
       final response = await _dio
-          .get<Object?>('${ApiConstants.baseUrl}/pisocamp/me/progress')
+          .get<Object?>('${ApiConstants.versionedUrl}/pisocamp/me/progress')
           .timeout(const Duration(seconds: 10));
       final progress = PisoCampProgress.fromJson(response.data);
       await preferences.setString(_cacheKey, jsonEncode(progress.toJson()));

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_styles.dart';
 import 'package:mobile/features/pisocamp/data/ar_downloads.dart';
 
 /// AR-005. Downloading AR experiences so they work with no connection.
@@ -76,7 +77,10 @@ class _ArDownloadsScreenState extends State<ArDownloadsScreen> {
       appBar: AppBar(title: const Text('Augmented reality downloads')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.pageGutter,
+            vertical: AppSpacing.s16,
+          ),
           children: <Widget>[
             const Text(
               'Downloaded experiences open with no connection at all, including '
@@ -111,7 +115,8 @@ class _ArDownloadsScreenState extends State<ArDownloadsScreen> {
               _ExperienceRow(
                 item: item,
                 busy: _busy,
-                onDownload: () => _run(() => widget.manager.download(item.logicalId)),
+                onDownload: () =>
+                    _run(() => widget.manager.download(item.logicalId)),
               ),
               const Divider(),
             ],
@@ -153,7 +158,8 @@ class _ExperienceRow extends StatelessWidget {
           Text(item.title, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 4),
           Text(_status),
-          if (item.status != ArDownloadStatus.ready && progress != null) ...<Widget>[
+          if (item.status != ArDownloadStatus.ready &&
+              progress != null) ...<Widget>[
             const SizedBox(height: 8),
             LinearProgressIndicator(value: progress),
           ],
